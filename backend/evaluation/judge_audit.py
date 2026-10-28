@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from pathlib import Path
@@ -39,6 +40,47 @@ if str(_BACKEND_DIR) not in sys.path:
 from evaluation.lint_agent_tasks import load_tasks
 
 
+def _task_level_row(verdict: dict, judgment: dict, task: dict) -> dict | None:
+    """负样本与澄清题没有答案要点，judge 的判定落在 forbidden_hit / clarify_verdict 上。
+
+    这两项恰恰是最容易出错的地方（2026-10-28 实测：FIN-15 因为答案提到"2025 年 Q1 是
+    X"被判 forbidden_hit，FIN-19/20 明明没追问却被判 clarify ok）。只标要点的话，
+    这类分歧永远进不了审计表，所以补一行任务级：judge_pass = judge 认为这条合格吗。
+    """
+    forbidden_hit = judgment.get("forbidden_hit")
+    clarify = str(judgment.get("clarify_verdict") or "na")
+
+    if task.get("should_abstain"):
+        aspect = "forbidden_hit"
+        judge_pass = not bool(forbidden_hit)
+        detail = f"负样本：judge 认为{'命中禁止内容' if forbidden_hit else '未命中'}｜{judgment.get('forbidden_reason') or ''}"
+    elif str(task.get("clarify_mode") or "none") != "none":
+        aspect = "clarify_verdict"
+        if clarify not in ("ok", "bad"):
+            return None
+        judge_pass = clarify == "ok"
+        detail = f"澄清题（mode={task.get('clarify_mode')}）：judge 判 {clarify}｜{judgment.get('clarify_reason') or ''}"
+    else:
+        return None
+
+    return {
+        "task_id": verdict.get("task_id"),
+        "run_index": verdict.get("run_index"),
+        "dimension": verdict.get("dimension") or task.get("dimension"),
+        "point_index": -1,
+        "point_text": f"（任务级·{aspect}）{detail}"[:400],
+        "judge_pass": judge_pass,
+        "judge_cited": None,
+        "judge_supports": None,
+        "judge_reason": detail[:200],
+        "answer_excerpt": str(verdict.get("answer") or "").replace("\n", " ")[:400],
+        "forbidden_hit": forbidden_hit,
+        "grounded": judgment.get("grounded"),
+        "human_pass": None,
+        "note": "",
+    }
+
+
 def build_rows(report: dict, tasks_by_id: dict[str, dict], limit: int = 0) -> list[dict]:
     rows: list[dict] = []
     for verdict in report.get("verdicts") or []:
@@ -47,6 +89,9 @@ def build_rows(report: dict, tasks_by_id: dict[str, dict], limit: int = 0) -> li
             continue
         task = tasks_by_id.get(str(verdict.get("task_id"))) or {}
         points = task.get("answer_points") or []
+        task_row = _task_level_row(verdict, judgment, task)
+        if task_row:
+            rows.append(task_row)
         for point in judgment.get("points") or []:
             index = int(point.get("index") or 0)
             text = ""
@@ -63,6 +108,8 @@ def build_rows(report: dict, tasks_by_id: dict[str, dict], limit: int = 0) -> li
                     "judge_cited": bool(point.get("cited")),
                     "judge_supports": bool(point.get("citation_supports")),
                     "judge_reason": point.get("reason") or "",
+                    # 标注时最需要的是"答案到底怎么写的"，不然还得回报告里翻
+                    "answer_excerpt": str(verdict.get("answer") or "").replace("\n", " ")[:400],
                     "forbidden_hit": judgment.get("forbidden_hit"),
                     "grounded": judgment.get("grounded"),
                     "human_pass": None,
@@ -84,23 +131,42 @@ def _parse_label(value: object) -> bool | None:
     return None
 
 
-def compare(path: Path) -> int:
+def _read_rows(path: Path) -> tuple[list[dict], int]:
+    """读标注表。CSV 给人在 Excel 里填，JSONL 给脚本吃，两种都收。"""
     rows: list[dict] = []
+    if path.suffix.lower() == ".csv":
+        with open(path, "r", encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                rows.append(dict(row))
+        return rows, 0
+
     with open(path, "r", encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, 1):
             text = line.strip()
             if not text or text.startswith("#"):
                 continue
             try:
-                row = json.loads(text)
+                rows.append(json.loads(text))
             except json.JSONDecodeError as exc:
                 print(f"{path}:{line_no} JSON 解析失败: {exc}", file=sys.stderr)
-                return 2
-            label = _parse_label(row.get("human_pass"))
-            if label is None:
-                continue
-            row["_label"] = label
-            rows.append(row)
+                return [], 2
+    return rows, 0
+
+
+def compare(path: Path) -> int:
+    raw_rows, failed = _read_rows(path)
+    if failed:
+        return failed
+
+    rows: list[dict] = []
+    for row in raw_rows:
+        label = _parse_label(row.get("human_pass"))
+        if label is None:
+            continue
+        row["_label"] = label
+        # CSV 里 bool 会变成字符串 "True"/"False"，统一解析一次
+        row["judge_pass"] = _parse_label(row.get("judge_pass"))
+        rows.append(row)
 
     if not rows:
         print("没有可用的标注行（human_pass 填 true/false 才算）", file=sys.stderr)
@@ -148,9 +214,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="judge 准确率审计")
     parser.add_argument("--report", default="", help="score_agent_runs 产出的报告 JSON")
     parser.add_argument("--tasks", default="", help="任务 JSONL（用来回填要点原文）")
-    parser.add_argument("--out", default="", help="标注表输出路径（JSONL）")
+    parser.add_argument("--out", default="", help="标注表输出路径")
     parser.add_argument("--limit", type=int, default=0, help="只抽前 N 个要点")
-    parser.add_argument("--compare", default="", help="对已标注的 JSONL 做比对")
+    parser.add_argument(
+        "--format",
+        choices=("csv", "jsonl"),
+        default="csv",
+        help="csv 给人在 Excel 里填（默认）；jsonl 给脚本吃",
+    )
+    parser.add_argument("--compare", default="", help="对已标注的 CSV / JSONL 做比对")
     args = parser.parse_args()
 
     if args.compare:
@@ -182,14 +254,30 @@ def main() -> int:
         print("报告里没有可审计的要点（没跑 judge？）", file=sys.stderr)
         return 2
 
-    out_path = Path(args.out) if args.out else (report_path.with_suffix(".audit.jsonl"))
+    suffix = ".csv" if args.format == "csv" else ".jsonl"
+    out_path = Path(args.out) if args.out else report_path.with_suffix(f".audit{suffix}")
     if not out_path.is_absolute():
         out_path = _BACKEND_DIR / out_path
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as handle:
-        handle.write("# human_pass 填 true / false / skip；note 写判断依据\n")
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    if args.format == "csv":
+        columns = (
+            "task_id", "point_index", "judge_pass", "human_pass", "note",
+            "dimension", "run_index", "point_text", "judge_reason", "answer_excerpt",
+            "judge_cited", "judge_supports", "forbidden_hit", "grounded",
+        )
+        # utf-8-sig：Excel 直接双击打开不乱码（纯 utf-8 会被当成本地编码）
+        with open(out_path, "w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=columns, extrasaction="ignore")
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({key: row.get(key) for key in columns})
+    else:
+        with open(out_path, "w", encoding="utf-8") as handle:
+            handle.write("# human_pass 填 true / false / skip；note 写判断依据\n")
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
     print(f"标注表 {len(rows)} 行：{out_path}")
     print("填完 human_pass 后跑：python -m evaluation.judge_audit --compare " + str(out_path))
     return 0
