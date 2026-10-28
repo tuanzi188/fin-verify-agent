@@ -1,0 +1,437 @@
+{
+  "metric": "majority",
+  "metric_definition": "任务级 pass@1 ≥ 0.5（多数运行通过）",
+  "tasks_compared": 30,
+  "only_in_baseline": [],
+  "only_in_improved": [],
+  "baseline": {
+    "pass_at_1": 0.8,
+    "pass_pow_k": 0.7,
+    "complete_tasks": 30,
+    "tasks": 30,
+    "k": 3
+  },
+  "improved": {
+    "pass_at_1": 0.9555555555555556,
+    "pass_pow_k": 0.9333333333333333,
+    "complete_tasks": 30,
+    "tasks": 30,
+    "k": 3
+  },
+  "by_dimension": {
+    "检索与引用": {
+      "tasks": 6,
+      "baseline_pass_at_1": 0.9444444444444445,
+      "improved_pass_at_1": 1.0,
+      "delta": 0.05555555555555547,
+      "baseline_task_interval": {
+        "pass": 6,
+        "total": 6,
+        "interval": [
+          0.6096657120978346,
+          1.0
+        ]
+      },
+      "improved_task_interval": {
+        "pass": 6,
+        "total": 6,
+        "interval": [
+          0.6096657120978346,
+          1.0
+        ]
+      },
+      "delta_exceeds_ci_width": false
+    },
+    "多步拆解": {
+      "tasks": 6,
+      "baseline_pass_at_1": 0.8888888888888888,
+      "improved_pass_at_1": 1.0,
+      "delta": 0.11111111111111116,
+      "baseline_task_interval": {
+        "pass": 5,
+        "total": 6,
+        "interval": [
+          0.43649717781352987,
+          0.9699466302516935
+        ]
+      },
+      "improved_task_interval": {
+        "pass": 6,
+        "total": 6,
+        "interval": [
+          0.6096657120978346,
+          1.0
+        ]
+      },
+      "delta_exceeds_ci_width": false
+    },
+    "拒答与边界": {
+      "tasks": 6,
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 0.9444444444444445,
+      "delta": -0.05555555555555547,
+      "baseline_task_interval": {
+        "pass": 6,
+        "total": 6,
+        "interval": [
+          0.6096657120978346,
+          1.0
+        ]
+      },
+      "improved_task_interval": {
+        "pass": 6,
+        "total": 6,
+        "interval": [
+          0.6096657120978346,
+          1.0
+        ]
+      },
+      "delta_exceeds_ci_width": false
+    },
+    "澄清与追问": {
+      "tasks": 6,
+      "baseline_pass_at_1": 0.9444444444444445,
+      "improved_pass_at_1": 1.0,
+      "delta": 0.05555555555555547,
+      "baseline_task_interval": {
+        "pass": 6,
+        "total": 6,
+        "interval": [
+          0.6096657120978346,
+          1.0
+        ]
+      },
+      "improved_task_interval": {
+        "pass": 6,
+        "total": 6,
+        "interval": [
+          0.6096657120978346,
+          1.0
+        ]
+      },
+      "delta_exceeds_ci_width": false
+    },
+    "恢复与纠错": {
+      "tasks": 6,
+      "baseline_pass_at_1": 0.2222222222222222,
+      "improved_pass_at_1": 0.8333333333333334,
+      "delta": 0.6111111111111112,
+      "baseline_task_interval": {
+        "pass": 1,
+        "total": 6,
+        "interval": [
+          0.030053369748306635,
+          0.5635028221864702
+        ]
+      },
+      "improved_task_interval": {
+        "pass": 5,
+        "total": 6,
+        "interval": [
+          0.43649717781352987,
+          0.9699466302516935
+        ]
+      },
+      "delta_exceeds_ci_width": true
+    }
+  },
+  "mcnemar": {
+    "fixed": 5,
+    "broke": 0,
+    "discordant_pairs": 5,
+    "p_value": 0.0625,
+    "significant": false
+  },
+  "cost": {
+    "baseline": {
+      "runs": 90,
+      "tokens_per_run": 2378.2,
+      "median_latency_ms": 6053,
+      "max_latency_ms": 13342,
+      "avg_steps": 1.67
+    },
+    "improved": {
+      "runs": 90,
+      "tokens_per_run": 5650.1,
+      "median_latency_ms": 10809,
+      "max_latency_ms": 25384,
+      "avg_steps": 2.71
+    },
+    "tokens_per_run_delta": 1.376,
+    "latency_median_delta": 0.786
+  },
+  "verdict": "不可分辨（未达到显著差异）",
+  "table": [
+    {
+      "task_id": "C1",
+      "dimension": "澄清与追问",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "C2",
+      "dimension": "澄清与追问",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "C3",
+      "dimension": "澄清与追问",
+      "baseline_pass_at_1": 0.6666666666666666,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "C4",
+      "dimension": "澄清与追问",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "C5",
+      "dimension": "澄清与追问",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "C6",
+      "dimension": "澄清与追问",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "M1",
+      "dimension": "多步拆解",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "M2",
+      "dimension": "多步拆解",
+      "baseline_pass_at_1": 0.3333333333333333,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "fixed"
+    },
+    {
+      "task_id": "M3",
+      "dimension": "多步拆解",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "M4",
+      "dimension": "多步拆解",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "M5",
+      "dimension": "多步拆解",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "M6",
+      "dimension": "多步拆解",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "N1",
+      "dimension": "拒答与边界",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "N2",
+      "dimension": "拒答与边界",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "N3",
+      "dimension": "拒答与边界",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 0.6666666666666666,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 0.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "N4",
+      "dimension": "拒答与边界",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "N5",
+      "dimension": "拒答与边界",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "N6",
+      "dimension": "拒答与边界",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "R1",
+      "dimension": "检索与引用",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "R2",
+      "dimension": "检索与引用",
+      "baseline_pass_at_1": 0.6666666666666666,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "R3",
+      "dimension": "检索与引用",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "R4",
+      "dimension": "检索与引用",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "R5",
+      "dimension": "检索与引用",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "R6",
+      "dimension": "检索与引用",
+      "baseline_pass_at_1": 1.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 1.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "V1",
+      "dimension": "恢复与纠错",
+      "baseline_pass_at_1": 0.3333333333333333,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "fixed"
+    },
+    {
+      "task_id": "V2",
+      "dimension": "恢复与纠错",
+      "baseline_pass_at_1": 0.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "fixed"
+    },
+    {
+      "task_id": "V3",
+      "dimension": "恢复与纠错",
+      "baseline_pass_at_1": 0.3333333333333333,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "fixed"
+    },
+    {
+      "task_id": "V4",
+      "dimension": "恢复与纠错",
+      "baseline_pass_at_1": 0.6666666666666666,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "same"
+    },
+    {
+      "task_id": "V5",
+      "dimension": "恢复与纠错",
+      "baseline_pass_at_1": 0.0,
+      "improved_pass_at_1": 1.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 1.0,
+      "transition": "fixed"
+    },
+    {
+      "task_id": "V6",
+      "dimension": "恢复与纠错",
+      "baseline_pass_at_1": 0.0,
+      "improved_pass_at_1": 0.0,
+      "baseline_pass_pow_k": 0.0,
+      "improved_pass_pow_k": 0.0,
+      "transition": "same"
+    }
+  ],
+  "note": "分维度只报 delta，不报 p 值：每维 6 条，分维显著性不可判定。"
+}

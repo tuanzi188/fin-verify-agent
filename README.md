@@ -32,6 +32,7 @@ KnowledgeMind 当前定位为可扩展的 RAG 智能知识库应用原型，主�
 | **多模型支持** | DeepSeek / 阿里云百炼，按配置切换 |
 | **置信度评估** | 自动评估回答可信度，透明展示知识来源 |
 | **引用追溯** | 每条回答精确标注引用片段，支持原文查看 |
+| **Agent 深度模式** | `mode=agent`：多轮工具循环、空/错自动重试、终轮覆盖自检；支持 baseline / improved 双变体与五维能力评测 |
 | **Docker Compose 开发部署** | 提供前端、后端和 Redis 的容器化启动配置；该链路未在本机验证，使用前请先跑通一次上传 |
 
 ---
@@ -205,6 +206,8 @@ KnowledgeMind/
 ├── backend/                 # FastAPI 后端
 │   ├── app/
 │   │   ├── api/             # API 路由
+│   │   ├── agent/           # Agent runner（baseline / improved）与提示词
+│   │   ├── tools/           # Agent 只读工具层（检索 / 回查 / 故障注入）
 │   │   ├── core/            # 认证、安全
 │   │   ├── models/          # 数据模型
 │   │   ├── services/        # 核心服务
@@ -215,8 +218,10 @@ KnowledgeMind/
 │   │   │   ├── model_provider.py    # 模型提供商
 │   │   │   └── ...
 │   │   └── config.py        # 配置管理
+│   ├── evaluation/          # Agent 评测：任务集、判分、pass^k、双变体对比
 │   ├── requirements.txt
 │   └── Dockerfile
+├── docs/                    # 评测设计与证据（AGENT_EVAL_PROJECT_SPEC.md）
 ├── docker-compose.yml
 ├── README.md
 └── .gitignore
@@ -230,8 +235,8 @@ KnowledgeMind/
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/v1/chat` | POST | 同步对话 |
-| `/api/v1/chat/stream` | POST | 流式对话 (SSE) |
+| `/api/v1/chat` | POST | 同步对话；`mode=agent` 走 Agent 深度模式 |
+| `/api/v1/chat/stream` | POST | 流式对话 (SSE)；Agent 模式暂不支持 |
 | `/api/v1/search` | POST | 语义搜索 |
 | `/api/v1/upload` | POST | 上传文档 |
 | `/api/v1/documents` | GET | 文档列表 |
@@ -259,6 +264,44 @@ python -m app.mcp.demo_client                              # 客户端示例：�
 默认读取真实向量库；设置 `MCP_DEMO=1` 时改用评测语料，便于零依赖演示。
 
 > MCP 协议本身没有内建鉴权：stdio 模式靠进程隔离，http 模式默认只绑定 `127.0.0.1`；如需跨机使用，必须放在带 token 校验的网关之后。
+
+## Agent 模式与能力评测
+
+`POST /api/v1/chat` 支持 `mode=agent`（前端「深度检索」开关）。Agent 有两套实现，共用同一套证据纪律（只用检索结果、必须引用、不许编数字）：
+
+| 变体 | 机制 | 用途 |
+|---|---|---|
+| `baseline` | 最多一轮工具调用；不重试、不纠错、不自检 | 对照组，测量“单轮决策上限” |
+| `improved` | 多轮工具循环 + 空/错自动重试（query 改写）+ 终轮覆盖自检 | 线上默认；证明评测能驱动改进 |
+
+评测口径：30 条任务 × 五维（检索与引用 / 多步拆解 / 拒答与边界 / 澄清与追问 / 恢复与纠错），每任务 3 次；确定性检查 + LLM judge；报告给 `pass@1`（任务均值）、`pass^3`（三次全过）与逐任务表；显著性只做整卷 30 条配对 McNemar，分维度只报 delta。
+
+```bash
+# 1) 跑原始结果（约 30–45 分钟含判分；--skip-index 复用已有演示语料）
+cd backend
+python -m evaluation.run_agent_eval --variant improved --runs 3 --skip-index \
+  --out ../docs/evidence/agent_improved_runs3_20261027.json
+# 2) 判分（含 LLM judge）
+python -m evaluation.score_agent_runs --runs ../docs/evidence/agent_improved_runs3_20261027.json \
+  --out ../docs/evidence/agent_improved_report3_20261027.json --concurrency 3
+# 3) 双变体对比
+python -m evaluation.compare_agent_reports \
+  --baseline ../docs/evidence/agent_baseline_report3_20261027.json \
+  --improved ../docs/evidence/agent_improved_report3_20261027.json
+```
+
+2026-10-27 实测（30 条 × 3 次 × 2 变体 = 180 次运行）：
+
+| 指标 | baseline | improved |
+|---|---|---|
+| pass@1（任务均值） | 80.0% | 95.6% |
+| pass^3 | 70.0% | 93.3% |
+| 恢复与纠错 | 22.2% | 83.3%（delta 61.1 ≥ 该维 CI 宽度 53.3） |
+| 拒答与边界 | 100% | 94.4%（N3 有 1 次把“没有扣款条款”答成确定结论） |
+| token / 次运行 | 2,378 | 5,650（+137.6%） |
+| 中位延迟 | 6.05 s | 10.81 s（+78.6%） |
+
+整卷配对 McNemar：修好 5 / 弄坏 0，**p=0.0625（未达 0.05）**。准确表述应是“恢复维度有可分辨改进，整卷显著性因只有 5 个不一致对而不成立”，不能写成“全卷显著提升”。完整数据见 `docs/evidence/agent_compare3_20261027.json` 与 `docs/AGENT_EVAL_PROJECT_SPEC.md` §10.4。
 
 ## License
 

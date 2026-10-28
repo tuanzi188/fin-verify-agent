@@ -86,6 +86,11 @@ coverage/
 eval_report.json
 eval_abstention.json
 eval_abstention.csv
+# 能力评测三件套：原始运行、判分报告、badcase。都可以重新生成，不入库；
+# 入库的是任务集、语料与判分代码（数字要能重跑出来，不是贴进去的）。
+eval_agent_runs.json
+eval_agent_report.json
+eval_agent_badcases.jsonl
 *.pkl
 token.json
 .preview/

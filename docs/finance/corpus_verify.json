@@ -1,0 +1,282 @@
+{
+  "tolerance_pct": 0.02,
+  "passed": 6,
+  "required": 6,
+  "total": 7,
+  "documents": [
+    {
+      "doc_id": "cninfo-000333-2025-annual",
+      "title": "美的集团2025年年度报告",
+      "doc_type": "annual_report",
+      "result": "pass",
+      "checks": {
+        "table_found": true,
+        "values_readable": true,
+        "reported_ratio": {
+          "column": "本年比上年增减",
+          "value": 12.11
+        },
+        "ratio_matches": true,
+        "page_present": true
+      },
+      "table": {
+        "table_id": "cninfo-000333-2025-annual#t0006",
+        "page": 9,
+        "page_end": 9,
+        "caption": "",
+        "unit": "千元",
+        "columns": [
+          "项目",
+          "2025 年",
+          "2024 年",
+          "本年比上年增减",
+          "2023 年"
+        ],
+        "current_column": "2025 年",
+        "prior_column": "2024 年",
+        "current": 456451731.0,
+        "prior": 407149600.0
+      },
+      "calc": {
+        "formula": "(cur - prior) / prior * 100",
+        "inputs": {
+          "cur": "456451731.0",
+          "prior": "407149600.0"
+        },
+        "result": "12.10909478972839467360400207"
+      },
+      "delta": 0.0009
+    },
+    {
+      "doc_id": "cninfo-000333-2024-annual",
+      "title": "美的集团2024年年度报告",
+      "doc_type": "annual_report",
+      "result": "pass",
+      "checks": {
+        "table_found": true,
+        "values_readable": true,
+        "reported_ratio": {
+          "column": "本年比上年增减",
+          "value": 9.44
+        },
+        "ratio_matches": true,
+        "page_present": true
+      },
+      "table": {
+        "table_id": "cninfo-000333-2024-annual#t0006",
+        "page": 9,
+        "page_end": 9,
+        "caption": "",
+        "unit": "千元",
+        "columns": [
+          "项目",
+          "2024 年",
+          "2023 年",
+          "本年比上年增减",
+          "col5",
+          "2022 年"
+        ],
+        "current_column": "2024 年",
+        "prior_column": "2023 年",
+        "current": 407149600.0,
+        "prior": 372037280.0
+      },
+      "calc": {
+        "formula": "(cur - prior) / prior * 100",
+        "inputs": {
+          "cur": "407149600.0",
+          "prior": "372037280.0"
+        },
+        "result": "9.437849884291165659527453808"
+      },
+      "delta": 0.0022
+    },
+    {
+      "doc_id": "cninfo-002594-2025-annual",
+      "title": "比亚迪2025年年度报告",
+      "doc_type": "annual_report",
+      "result": "pass",
+      "checks": {
+        "table_found": true,
+        "values_readable": true,
+        "reported_ratio": {
+          "column": "本年比上年增减",
+          "value": 3.46
+        },
+        "ratio_matches": true,
+        "page_present": true
+      },
+      "table": {
+        "table_id": "cninfo-002594-2025-annual#t0007",
+        "page": 11,
+        "page_end": 11,
+        "caption": "",
+        "unit": "元",
+        "columns": [
+          "项目",
+          "2025 年",
+          "col3",
+          "2024 年",
+          "col5",
+          "本年比上年增减",
+          "col7",
+          "2023 年",
+          "col9"
+        ],
+        "current_column": "2025 年",
+        "prior_column": "2024 年",
+        "current": 803964958000.0,
+        "prior": 777102455000.0
+      },
+      "calc": {
+        "formula": "(cur - prior) / prior * 100",
+        "inputs": {
+          "cur": "803964958000.0",
+          "prior": "777102455000.0"
+        },
+        "result": "3.456751786995705733550925405"
+      },
+      "delta": 0.0032
+    },
+    {
+      "doc_id": "cninfo-002594-2024-annual",
+      "title": "比亚迪2024年年度报告",
+      "doc_type": "annual_report",
+      "result": "pass",
+      "checks": {
+        "table_found": true,
+        "values_readable": true,
+        "reported_ratio": {
+          "column": "本年比上年增减",
+          "value": 29.02
+        },
+        "ratio_matches": true,
+        "page_present": true
+      },
+      "table": {
+        "table_id": "cninfo-002594-2024-annual#t0007",
+        "page": 10,
+        "page_end": 10,
+        "caption": "",
+        "unit": "元",
+        "columns": [
+          "项目",
+          "2024 年",
+          "2023 年",
+          "本年比上年增减",
+          "2022 年"
+        ],
+        "current_column": "2024 年",
+        "prior_column": "2023 年",
+        "current": 777102455000.0,
+        "prior": 602315354000.0
+      },
+      "calc": {
+        "formula": "(cur - prior) / prior * 100",
+        "inputs": {
+          "cur": "777102455000.0",
+          "prior": "602315354000.0"
+        },
+        "result": "29.01920062957584840183237301"
+      },
+      "delta": 0.0008
+    },
+    {
+      "doc_id": "cninfo-600519-2025-annual",
+      "title": "贵州茅台2025年年度报告",
+      "doc_type": "annual_report",
+      "result": "pass",
+      "checks": {
+        "table_found": true,
+        "values_readable": true,
+        "reported_ratio": {
+          "column": "本期比 上年同 期增减 (%)",
+          "value": -1.21
+        },
+        "ratio_matches": true,
+        "page_present": true
+      },
+      "table": {
+        "table_id": "cninfo-600519-2025-annual#t0008",
+        "page": 6,
+        "page_end": 6,
+        "caption": "(一)主要会计数据",
+        "unit": "",
+        "columns": [
+          "主要会计数据",
+          "2025年",
+          "2024年",
+          "本期比 上年同 期增减 (%)",
+          "2023年"
+        ],
+        "current_column": "2025年",
+        "prior_column": "2024年",
+        "current": 168838102514.79,
+        "prior": 170899152276.34
+      },
+      "calc": {
+        "formula": "(cur - prior) / prior * 100",
+        "inputs": {
+          "cur": "168838102514.79",
+          "prior": "170899152276.34"
+        },
+        "result": "-1.2060035021223100757312174"
+      },
+      "delta": 0.004
+    },
+    {
+      "doc_id": "cninfo-600519-2024-annual",
+      "title": "贵州茅台2024年年度报告",
+      "doc_type": "annual_report",
+      "result": "pass",
+      "checks": {
+        "table_found": true,
+        "values_readable": true,
+        "reported_ratio": {
+          "column": "本期比 上年同 期增减 (%)",
+          "value": 15.71
+        },
+        "ratio_matches": true,
+        "page_present": true
+      },
+      "table": {
+        "table_id": "cninfo-600519-2024-annual#t0008",
+        "page": 5,
+        "page_end": 5,
+        "caption": "(一)主要会计数据",
+        "unit": "",
+        "columns": [
+          "主要会计数据",
+          "2024年",
+          "2023年",
+          "本期比 上年同 期增减 (%)",
+          "2022年"
+        ],
+        "current_column": "2024年",
+        "prior_column": "2023年",
+        "current": 170899152276.34,
+        "prior": 147693604994.14
+      },
+      "calc": {
+        "formula": "(cur - prior) / prior * 100",
+        "inputs": {
+          "cur": "170899152276.34",
+          "prior": "147693604994.14"
+        },
+        "result": "15.71195129479080718889266824"
+      },
+      "delta": 0.002
+    },
+    {
+      "doc_id": "cninfo-002531-2025-prospectus",
+      "title": "天顺风能2025年度向特定对象发行A股股票募集说明书（注册稿）",
+      "doc_type": "prospectus",
+      "result": "n/a",
+      "checks": {
+        "reason": "非年报，跳过同表跳两年验收",
+        "sections": 241,
+        "tables": 35
+      }
+    }
+  ]
+}

@@ -1,0 +1,509 @@
+{
+  "generated_at": "2026-10-27T20:10:06",
+  "purpose": "澄清判据修正 + C3 有代价改造 + judge 重试之后的两批独立运行一致性；用于 §8.12",
+  "variant": "baseline",
+  "model": "cn:deepseek-v4.1-flash",
+  "agent_run_config": {
+    "reasoning_mode": "flash",
+    "temperature": 0.1,
+    "final_max_tokens": 2048,
+    "default_max_steps": 3,
+    "max_steps_source": "task.max_steps（缺省时用 default_max_steps）"
+  },
+  "batch_a": {
+    "runs_sha256_16": "dc0c86e6b724b52b",
+    "tasks_sha256_16": "7291fec76a2b1881",
+    "corpus_hash": "a082520d27b8a85f9a88fdda487a487e09ea61756c7f47d9f24fca5c002d561b",
+    "dimensions": {
+      "检索与引用": "6/6 (100.0%) [61.0%, 100.0%]",
+      "多步拆解": "6/6 (100.0%) [61.0%, 100.0%]",
+      "拒答与边界": "6/6 (100.0%) [61.0%, 100.0%]",
+      "澄清与追问": "5/6 (83.3%) [43.6%, 97.0%]",
+      "恢复与纠错": "1/6 (16.7%) [3.0%, 56.4%]"
+    },
+    "judge_errors": 0,
+    "git": {
+      "commit": "50b53f26b866e25c049d0babedb3c8fb9162ca99",
+      "dirty": true
+    }
+  },
+  "batch_b": {
+    "runs_sha256_16": "6b4d51d4a9445ffe",
+    "tasks_sha256_16": "7291fec76a2b1881",
+    "corpus_hash": "a082520d27b8a85f9a88fdda487a487e09ea61756c7f47d9f24fca5c002d561b",
+    "dimensions": {
+      "检索与引用": "5/6 (83.3%) [43.6%, 97.0%]",
+      "多步拆解": "5/6 (83.3%) [43.6%, 97.0%]",
+      "拒答与边界": "6/6 (100.0%) [61.0%, 100.0%]",
+      "澄清与追问": "6/6 (100.0%) [61.0%, 100.0%]",
+      "恢复与纠错": "2/6 (33.3%) [9.7%, 70.0%]"
+    },
+    "judge_errors": 0,
+    "note": "原始 runs 与报告未入库（.gitignore）；sha256 前缀用于确认两批用的是同一份任务集与语料"
+  },
+  "summary": {
+    "tasks": 30,
+    "dimension_flips": 4,
+    "flips_involving_judge_na": 0,
+    "flips_from_judged_verdict_change": 4,
+    "answers_identical": 0,
+    "flip_task_ids": [
+      "C2",
+      "M2",
+      "R2",
+      "V4"
+    ]
+  },
+  "rows": [
+    {
+      "task_id": "C1",
+      "dimension": "澄清与追问",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "6307423c62a8"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "40efba1b05f9"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "C2",
+      "dimension": "澄清与追问",
+      "batch_a": {
+        "outcome": "fail",
+        "answer_sha12": "faae737c71d5"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "7062e2a54c55"
+      },
+      "dimension_flip": true,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "C3",
+      "dimension": "澄清与追问",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "e4c2d0a78599"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "726a105f9695"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "C4",
+      "dimension": "澄清与追问",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "7c5d04a409eb"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "c914572920fa"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "C5",
+      "dimension": "澄清与追问",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "e94beb698ff0"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "6db32059ef30"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "C6",
+      "dimension": "澄清与追问",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "13a5350e514a"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "80c543e3dd61"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "M1",
+      "dimension": "多步拆解",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "991f534d6e47"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "d76ec810b94d"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "M2",
+      "dimension": "多步拆解",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "e0561627fde0"
+      },
+      "batch_b": {
+        "outcome": "fail",
+        "answer_sha12": "8a7483431b0f"
+      },
+      "dimension_flip": true,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "M3",
+      "dimension": "多步拆解",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "2c9d21f0c4f7"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "4d92365b0195"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "M4",
+      "dimension": "多步拆解",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "41c0a37bb181"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "aeb6dd1dee66"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "M5",
+      "dimension": "多步拆解",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "c2425c1b8d62"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "45fa71b82300"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "M6",
+      "dimension": "多步拆解",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "4a88541f06da"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "1308175a3c8f"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "N1",
+      "dimension": "拒答与边界",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "9c4102271d73"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "b1a0c7d423ad"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "N2",
+      "dimension": "拒答与边界",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "f27b60c3977a"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "9b93f52eece1"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "N3",
+      "dimension": "拒答与边界",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "9660ecbfcfac"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "8e1a71b3696e"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "N4",
+      "dimension": "拒答与边界",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "f2c01aea4d3e"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "035d1e8600b9"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "N5",
+      "dimension": "拒答与边界",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "f8ce16aee3ed"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "b1d72bbd4caa"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "N6",
+      "dimension": "拒答与边界",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "f2024ca67528"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "59b8649b7c23"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "R1",
+      "dimension": "检索与引用",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "dfb7a7bc2c51"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "cff3e44ab6d2"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "R2",
+      "dimension": "检索与引用",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "85b2d0661ffe"
+      },
+      "batch_b": {
+        "outcome": "fail",
+        "answer_sha12": "e434a0431021"
+      },
+      "dimension_flip": true,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "R3",
+      "dimension": "检索与引用",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "3a7fc7fcdf2f"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "5d6b26a810e5"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "R4",
+      "dimension": "检索与引用",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "abed54c4e3af"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "19ae92c3a9f9"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "R5",
+      "dimension": "检索与引用",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "6fa3ea1bb5d3"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "98be3b98dc99"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "R6",
+      "dimension": "检索与引用",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "acaaaa57bf1c"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "cf33fd08d7e5"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "V1",
+      "dimension": "恢复与纠错",
+      "batch_a": {
+        "outcome": "fail",
+        "answer_sha12": "a90bfdb05bc2"
+      },
+      "batch_b": {
+        "outcome": "fail",
+        "answer_sha12": "7158715905f9"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "V2",
+      "dimension": "恢复与纠错",
+      "batch_a": {
+        "outcome": "fail",
+        "answer_sha12": "ad0a25d726cf"
+      },
+      "batch_b": {
+        "outcome": "fail",
+        "answer_sha12": "f25a4b6550bf"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "V3",
+      "dimension": "恢复与纠错",
+      "batch_a": {
+        "outcome": "pass",
+        "answer_sha12": "bacc800a1af4"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "3caaf12fdd6d"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "V4",
+      "dimension": "恢复与纠错",
+      "batch_a": {
+        "outcome": "fail",
+        "answer_sha12": "bac50e1247f8"
+      },
+      "batch_b": {
+        "outcome": "pass",
+        "answer_sha12": "ef617fc8a512"
+      },
+      "dimension_flip": true,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "V5",
+      "dimension": "恢复与纠错",
+      "batch_a": {
+        "outcome": "fail",
+        "answer_sha12": "b822abfd201a"
+      },
+      "batch_b": {
+        "outcome": "fail",
+        "answer_sha12": "1ced02882a31"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    },
+    {
+      "task_id": "V6",
+      "dimension": "恢复与纠错",
+      "batch_a": {
+        "outcome": "fail",
+        "answer_sha12": "a7786bfe5404"
+      },
+      "batch_b": {
+        "outcome": "fail",
+        "answer_sha12": "0d59b39dfe7c"
+      },
+      "dimension_flip": false,
+      "same_answer": false,
+      "judge_na_involved": false
+    }
+  ]
+}
