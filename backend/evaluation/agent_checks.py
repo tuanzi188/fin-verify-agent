@@ -55,6 +55,22 @@ def evidence_chunk_ids(result: dict) -> list[str]:
     return seen
 
 
+def base_chunk_id(chunk_id: str) -> str:
+    """把"定位锚点"折回它所属的块。
+
+    金融工具里 `get_cell` 的锚点是 `<doc>#<table>#<row>#<column>`：
+    它比表更精确，但**任务卡声明的是表**。不折回就会把"读了表里的正确单元格"
+    判成"没命中/没引用"——2026-10-28 摸底 24 条里，这一条造成了 7 条假失败。
+
+    折叠规则只看段数：`a#b#c#d` → `a#b`；段数 <3 的原样返回（制度库的 `d2_ch1` 不受影响）。
+    """
+    text = str(chunk_id or "")
+    parts = text.split("#")
+    if len(parts) >= 3:
+        return "#".join(parts[:2])
+    return text
+
+
 # ---------------------------------------------------------------------------
 # 工具约束
 # ---------------------------------------------------------------------------
@@ -138,9 +154,32 @@ def check_retrieval_hit(task: dict, result: dict) -> dict:
     if not relevant:
         return _check(None, "任务没有 relevant_chunk_ids（负样本）", expected=[])
 
-    retrieved = set(evidence_chunk_ids(result))
-    hits = [chunk_id for chunk_id in relevant if chunk_id in retrieved]
-    misses = [chunk_id for chunk_id in relevant if chunk_id not in retrieved]
+    retrieved = {base_chunk_id(chunk_id) for chunk_id in evidence_chunk_ids(result)}
+
+    # 按**要点**判，不按"列表里的每个 id"判：一个事实在年报里往往有 2–3 张表
+    # 都能证明（主要会计数据表 / 营业收入构成表 / 附注），任务卡把可接受的都列进
+    # `chunk_ids`。要求"全中"等于要求把每张表都读一遍——2026-10-28 实测会把
+    # 读了其中一张的正确运行判成漏召回。正确口径：每个要点至少要有一处证据被读到。
+    points = task.get("answer_points") or []
+    point_details: list[dict] = []
+    for index, point in enumerate(points):
+        expected = list((point or {}).get("chunk_ids") or [])
+        hit = [chunk_id for chunk_id in expected if base_chunk_id(chunk_id) in retrieved]
+        point_details.append({"index": index, "expected": expected, "hit": hit, "ok": bool(hit)})
+
+    if point_details:
+        missed = [detail["index"] for detail in point_details if not detail["ok"]]
+        hits = [chunk_id for detail in point_details for chunk_id in detail["hit"]]
+        return _check(
+            not missed,
+            f"要点证据命中 {len(point_details) - len(missed)}/{len(point_details)}"
+            + (f"，缺要点 {missed}" if missed else ""),
+            points=point_details,
+            hits=hits,
+        )
+
+    hits = [chunk_id for chunk_id in relevant if base_chunk_id(chunk_id) in retrieved]
+    misses = [chunk_id for chunk_id in relevant if base_chunk_id(chunk_id) not in retrieved]
     return _check(
         not misses,
         f"命中 {len(hits)}/{len(relevant)}" + (f"，缺 {', '.join(misses)}" if misses else ""),
@@ -192,11 +231,12 @@ def check_citations(task: dict, result: dict) -> dict[str, dict]:
     cited_chunk_ids = {
         str(citation.get("chunk_id") or "") for citation in citations if citation.get("chunk_id")
     }
+    cited_base_ids = {base_chunk_id(chunk_id) for chunk_id in cited_chunk_ids}
     points = task.get("answer_points") or []
     point_details: list[dict] = []
     for index, point in enumerate(points):
         expected = list((point or {}).get("chunk_ids") or [])
-        cited = [chunk_id for chunk_id in expected if chunk_id in cited_chunk_ids]
+        cited = [chunk_id for chunk_id in expected if base_chunk_id(chunk_id) in cited_base_ids]
         point_details.append(
             {"index": index, "expected": expected, "cited": cited, "ok": bool(cited)}
         )
@@ -214,7 +254,8 @@ def check_citations(task: dict, result: dict) -> dict[str, dict]:
         checks["answer_points_cited"] = _check(None, "任务没有答案要点")
 
     # 引用的 chunk 必须是 Agent 真见过的：否则就是凭空造出处。
-    unknown = sorted(cited_chunk_ids - set(evidence))
+    seen_base_ids = {base_chunk_id(chunk_id) for chunk_id in evidence}
+    unknown = sorted(cited_base_ids - seen_base_ids)
     checks["citation_scope"] = _check(
         not unknown if cited_chunk_ids else None,
         f"引用了未检索到的 chunk: {unknown}" if unknown else "引用全部来自检索结果",
@@ -267,14 +308,23 @@ def check_status(task: dict, result: dict) -> dict[str, dict]:
     if isinstance(max_steps, int) and steps > max_steps:
         budget_ok = False
         reasons.append(f"步数 {steps} > max_steps {max_steps}")
-    if "max_steps_exceeded" in note:
-        budget_ok = False
-        reasons.append("trace 标记 max_steps_exceeded")
     checks["step_budget"] = _check(
         budget_ok,
         "; ".join(reasons) if reasons else f"步数 {steps}",
         steps=steps,
         max_steps=max_steps,
+    )
+
+    # 预算被用尽（模型还想继续、但轮次/步数没了）是"该调预算"的信号，**不是答案错**。
+    # 2026-10-28 摸底踩过：24 条里 3 条步数 10 < max_steps 16，却被这条 note 判成失败——
+    # 真实原因是 runner 把 max_steps 静默夹到 10。收口与超限必须分开记。
+    truncated = any(
+        flag in note for flag in ("budget_truncated", "max_steps_exceeded")
+    )
+    checks["budget_truncated"] = _check(
+        None,
+        "工具预算用尽（模型还想继续），需要时调大预算" if truncated else "预算内收口",
+        truncated=truncated,
     )
 
     return checks

@@ -24,6 +24,7 @@ judge 不可用时（网络、额度、解析失败）返回 `ok=False`，调用
 "正序 pass 率 vs 倒序 pass 率"的差值里看出来。真正确认要看 `judge_audit`。
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -104,6 +105,22 @@ def _truncate(text: str, limit: int = _MAX_CHUNK_CHARS) -> str:
     return text[:limit] + "…"
 
 
+def _resolve_chunk(chunks: dict[str, dict], chunk_id: str) -> dict:
+    """取原文；取不到时把定位锚点折回它所属的块。
+
+    金融的 `get_cell` 引用是 `<doc>#<table>#<row>#<column>`，语料索引里只有
+    `<doc>#<table>`。不折回，judge 拿到的就是空原文，等于让它凭感觉判引用。
+    规则与 `agent_checks.base_chunk_id` 一致：段数 ≥3 就取前两段。
+    """
+    hit = chunks.get(chunk_id)
+    if hit:
+        return hit
+    parts = str(chunk_id or "").split("#")
+    if len(parts) >= 3:
+        return chunks.get("#".join(parts[:2])) or {}
+    return {}
+
+
 def _collect_chunk_ids(task: dict, result: dict) -> list[str]:
     """judge 需要看哪些原文：答案引用到的 + 要点要求的。"""
     ids: list[str] = []
@@ -132,10 +149,14 @@ def _reverse_for(task: dict, result: dict, repeat_index: int) -> bool:
 def build_prompt(task: dict, result: dict, chunks: dict[str, dict], *, reverse: bool = False) -> str:
     chunk_ids = _collect_chunk_ids(task, result)
     if chunk_ids:
-        evidence_lines = [
-            f"[chunk_id={chunk_id}] {_truncate((chunks.get(chunk_id) or {}).get('content', ''))}"
-            for chunk_id in chunk_ids
-        ]
+        evidence_lines = []
+        for chunk_id in chunk_ids:
+            chunk = _resolve_chunk(chunks, chunk_id)
+            source = chunk.get("chunk_id") or ""
+            suffix = f"（原文取自所属块 {source}）" if source and source != chunk_id else ""
+            evidence_lines.append(
+                f"[chunk_id={chunk_id}] {_truncate(chunk.get('content', ''))}{suffix}"
+            )
         if reverse:
             evidence_lines.reverse()
         evidence_block = "\n".join(evidence_lines)
@@ -322,6 +343,32 @@ def _merge_judgments(judgments: list[dict]) -> tuple[dict, Optional[float]]:
 JUDGE_MAX_TOKENS = 4096
 # 解析失败再试一次：多一次调用远比把这条记成 NA 便宜，NA 会直接减少分母。
 JUDGE_PARSE_ATTEMPTS = 2
+# 网关抖动要不要等：2026-10-28 一批 24 条判分，前 2 条成功后网关返回
+# `no_healthy_account` 503，熔断器随即打开 30s，后面 22 条全部秒失败记成 NA。
+# 熔断窗口是固定的 30s，等一等就能过——**不重试等于把"网关忙"记成"判不了"**。
+# 两次等待合计 60s，超过就老实记 NA（不能无限等，会把一次判分拖成小时级）。
+JUDGE_RETRY_WAITS = (20.0, 40.0)
+
+
+async def _call_with_backoff(prompt: str) -> tuple[str, Optional[str], dict]:
+    """调一次 judge，网关抖动时按 JUDGE_RETRY_WAITS 等一等再试。
+
+    只在"调用本身失败"时等；返回了内容就走原来的解析/重试逻辑，两件事不混。
+    最后一次仍失败就抛出去，由调用方记成 NA——不把"网关忙"伪装成"判错"。
+    """
+    waits = (0.0,) + tuple(JUDGE_RETRY_WAITS)
+    last_error: Optional[Exception] = None
+    for index, wait in enumerate(waits):
+        if wait:
+            logger.warning("judge call failed, retry in %.0fs (%d/%d)", wait, index, len(waits) - 1)
+            await asyncio.sleep(wait)
+        try:
+            return await model_provider.simple_query(
+                prompt, JUDGE_SYSTEM, max_tokens=JUDGE_MAX_TOKENS
+            )
+        except Exception as exc:  # noqa: BLE001 - 分类交给上层，这里只负责重试
+            last_error = exc
+    raise last_error if last_error else RuntimeError("judge 调用未产生结果")
 
 
 async def judge_task(
@@ -351,9 +398,7 @@ async def judge_task(
                     "不要任何解释、不要代码块围栏。"
                 )
             try:
-                content, _, usage = await model_provider.simple_query(
-                    attempt_prompt, JUDGE_SYSTEM, max_tokens=JUDGE_MAX_TOKENS
-                )
+                content, _, usage = await _call_with_backoff(attempt_prompt)
             except Exception as exc:  # noqa: BLE001 - judge 失败要落成 NA，不能污染分数
                 errors.append(f"judge 调用失败: {type(exc).__name__}: {exc}")
                 break

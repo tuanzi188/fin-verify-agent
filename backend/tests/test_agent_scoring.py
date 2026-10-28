@@ -269,10 +269,32 @@ def test_order_violation():
 # ---------------------------------------------------------------------------
 
 
-def test_retrieval_hit_counts_missing_chunks():
-    check = check_retrieval_hit(make_task(relevant_chunk_ids=["d6_ch3", "d6_ch1"]), make_result())
+def test_retrieval_hit_is_per_point_not_per_chunk():
+    """一个事实常有 2–3 张表都能证明：读到任意一张就算命中，缺的是"要点"不是"清单项"。
+
+    2026-10-28 实测：按"每个 id 都要读到"判，会把读了营业收入构成表的正确运行
+    判成漏召回；按要点判才对得上"证据够不够"这个本意。
+    """
+    task = make_task(
+        answer_points=[
+            {"text": "营收", "chunk_ids": ["d6_ch3", "d6_ch9"]},
+            {"text": "净利", "chunk_ids": ["d6_ch7"]},
+        ],
+        relevant_chunk_ids=["d6_ch3", "d6_ch9", "d6_ch7"],
+    )
+    check = check_retrieval_hit(task, make_result())  # 本次只见过 d6_ch3
     assert check["ok"] is False
-    assert check["misses"] == ["d6_ch1"]
+    assert [detail["index"] for detail in check["points"] if not detail["ok"]] == [1]
+    assert "缺要点 [1]" in check["detail"]
+
+    covered = check_retrieval_hit(
+        make_task(
+            answer_points=[{"text": "营收", "chunk_ids": ["d6_ch3", "d6_ch9"]}],
+            relevant_chunk_ids=["d6_ch3", "d6_ch9"],
+        ),
+        make_result(),
+    )
+    assert covered["ok"] is True
 
 
 def test_retrieval_hit_is_na_for_mock_tasks():
@@ -361,9 +383,33 @@ def test_negative_task_that_answers_is_failure():
     assert checks["abstain_status"]["ok"] is False
 
 
-def test_step_budget_exceeded_via_trace_note():
-    checks = check_status(make_task(max_steps=3), make_result(trace=[make_step(), make_final(note="max_steps_exceeded")]))
+def test_budget_truncation_is_not_a_failure():
+    """预算被用尽只是信号，不是失败。
+
+    2026-10-28 教训：runner 把 max_steps 静默夹到 10，24 条金融题里 3 条步数 10 < 卡片写 16，
+    却被 note 判成 step_budget 失败——把"该调预算"读成了"答案错"。
+    """
+    checks = check_status(
+        make_task(max_steps=3),
+        make_result(trace=[make_step(), make_final(note="budget_truncated")]),
+    )
+    assert checks["step_budget"]["ok"] is True
+    assert checks["budget_truncated"]["truncated"] is True
+    # 兼容旧 runs 里还在用老 note 名字的记录
+    old = check_status(
+        make_task(max_steps=3),
+        make_result(trace=[make_step(), make_final(note="max_steps_exceeded")]),
+    )
+    assert old["step_budget"]["ok"] is True
+    assert old["budget_truncated"]["truncated"] is True
+
+
+def test_step_budget_fails_only_when_steps_exceed_max():
+    result = make_result(trace=[make_step(), make_final()])
+    result["usage"]["steps"] = 5
+    checks = check_status(make_task(max_steps=3), result)
     assert checks["step_budget"]["ok"] is False
+    assert "max_steps" in checks["step_budget"]["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -981,3 +1027,84 @@ def test_judge_alternates_order_across_repeats_and_is_deterministic(monkeypatch)
     assert sorted(first["orders"]) == ["forward", "reversed"]
     # 确定性：同一份输入重判得到同一套顺序，评测才可复现
     assert first["orders"] == second["orders"]
+
+
+# ---------------------------------------------------------------------------
+# 定位锚点 → 所属块：get_cell 的 <doc>#<table>#<row>#<col> 必须算命中那张表
+# ---------------------------------------------------------------------------
+
+def test_cell_anchor_satisfies_table_expectation():
+    from evaluation.agent_checks import base_chunk_id, check_citations, check_retrieval_hit
+
+    table = "doc-1#t0006"
+    anchor = "doc-1#t0006#4#2025 年"
+    task = make_task(answer_points=[{"text": "x", "chunk_ids": [table]}], relevant_chunk_ids=[table])
+    result = make_result(
+        citations=[{"marker": 1, "chunk_id": anchor}],
+        trace=[make_step(tool="get_cell", result_ids=[anchor]), make_final()],
+    )
+
+    assert base_chunk_id(anchor) == table
+    assert check_retrieval_hit(task, result)["ok"] is True
+    checks = check_citations(task, result)
+    assert checks["answer_points_cited"]["ok"] is True
+    assert checks["citation_scope"]["ok"] is True
+
+
+def test_cell_anchor_from_unretrieved_table_is_still_dangling():
+    from evaluation.agent_checks import check_citations
+
+    task = make_task(answer_points=[{"text": "x", "chunk_ids": ["doc-1#t0006"]}])
+    result = make_result(
+        citations=[{"marker": 1, "chunk_id": "doc-1#t9999#0#2025 年"}],
+        trace=[make_step(tool="get_cell", result_ids=["doc-1#t0006#4#2025 年"]), make_final()],
+    )
+    checks = check_citations(task, result)
+    assert checks["citation_scope"]["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# 网关抖动：熔断窗口等一等就能过，不能把"网关忙"记成"判不了"
+# ---------------------------------------------------------------------------
+
+def test_judge_retries_through_circuit_breaker(monkeypatch):
+    import asyncio
+    from evaluation import agent_judge
+
+    calls = {"n": 0}
+
+    async def flaky(query, system_prompt=None, max_tokens=None):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("CircuitBreakerOpenError: [deepseek_api] 熔断器中")
+        return _judgment_json(), None, {"finish_reason": "stop"}
+
+    monkeypatch.setattr("app.services.model_provider.simple_query", flaky)
+    # 真等 20s+40s 没意义，把等待清零，只验证"会重试、最终拿到结果"
+    monkeypatch.setattr(agent_judge, "JUDGE_RETRY_WAITS", (0.0, 0.0))
+
+    task = {"id": "T5", "answer_points": [{"text": "x"}]}
+    result = asyncio.run(agent_judge.judge_task(task, {"answer": "答"}, {}))
+    assert result["ok"] is True
+    assert calls["n"] == 3
+
+
+def test_judge_gives_up_after_retries(monkeypatch):
+    import asyncio
+    from evaluation import agent_judge
+
+    calls = {"n": 0}
+
+    async def always_down(query, system_prompt=None, max_tokens=None):
+        calls["n"] += 1
+        raise RuntimeError("UpstreamAPIError: no_healthy_account")
+
+    monkeypatch.setattr("app.services.model_provider.simple_query", always_down)
+    monkeypatch.setattr(agent_judge, "JUDGE_RETRY_WAITS", (0.0, 0.0))
+
+    task = {"id": "T6", "answer_points": [{"text": "x"}]}
+    result = asyncio.run(agent_judge.judge_task(task, {"answer": "答"}, {}))
+    assert result["ok"] is False and result["judgment"] is None
+    assert "no_healthy_account" in (result["error"] or "")
+    # 1 次原始 + 2 次重试；不能无限等
+    assert calls["n"] == 3

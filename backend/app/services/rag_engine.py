@@ -39,7 +39,8 @@ _ACL_OVERFETCH_MULTIPLIER = 5
 
 _CITATION_PATTERN = re.compile(r'\[引用:\s*(.+?),\s*(.+?)\]')
 _CITE_INDEX_PATTERN = re.compile(r'\[引用:\s*(\d+(?:\s*[,，、]\s*\d+)*)\]')
-_CANNOT_ANSWER_KEYWORDS = ["无法确定", "无法回答", "无法提供", "资料不足", "没有相关信息", "不清楚", "不知道", "抱歉"]
+_CANNOT_ANSWER_KEYWORDS = ["无法确定", "无法回答", "无法提供",
+                          "无法据此", "没有任何一份", "均未提供", "资料不足", "没有相关信息", "不清楚", "不知道", "抱歉"]
 _GENERIC_ANSWER_PATTERNS = ["我是KnowledgeMind企业知识库AI助手", "请问有什么可以帮助你的", "请提供具体问题", "请提供更多信息"]
 
 
