@@ -252,7 +252,8 @@ async def test_budget_exceeded_is_attributable(monkeypatch):
     result = await run({"id": "T06", "question": "住宿和报销分别是什么？", "max_steps": 1})
 
     assert result["usage"]["steps"] == 1
-    assert "max_steps_exceeded" in result["trace"][-1]["note"]
+    # 预算收口要记进 trace（能归因），但名字不能叫 exceeded——它不是失败
+    assert "budget_truncated" in result["trace"][-1]["note"]
     assert validate_result(result) == []
 
 
@@ -515,3 +516,117 @@ def test_runner_does_not_import_evaluation():
     source = inspect.getsource(runner)
     assert "from evaluation" not in source
     assert "import evaluation" not in source
+
+
+# ---------------------------------------------------------------------------
+# 派生数值闸门：答案里出现"证据里没有的比率"且没算过 → 退回补一次 calculate
+# ---------------------------------------------------------------------------
+
+def test_needs_calc_repair_only_for_numbers_missing_from_evidence():
+    evidence = [{"content": "营业收入（千元） 1,234 占比 3.90%"}]
+    # 原文里写着的比率 = 照抄，不是手算
+    assert runner.needs_calc_repair("占比 3.90% [1]", evidence, []) is False
+    # 原文里没有 + 一次没算过 → 要补
+    assert runner.needs_calc_repair("第四季度占全年约 35.37%", evidence, []) is True
+    # 算过了就不再追问
+    assert runner.needs_calc_repair("占比 35.37%", evidence, [{"formula": "a/b"}]) is False
+    # 没有比率就不用算
+    assert runner.needs_calc_repair("营业收入 1,234 千元", evidence, []) is False
+
+
+class _CalcToolset:
+    """最小金融形状工具集：只提供 calculate，并像 FinanceToolset 一样记 calcs。"""
+
+    name = "fake-finance"
+    search_tool = "search_kb"
+    max_tool_rounds = 3
+
+    def __init__(self):
+        self.calcs: list[dict] = []
+        self.calls = 0
+
+    def specs(self):
+        return [{"type": "function", "function": {"name": "calculate", "parameters": {}}}]
+
+    def system_prompt(self, variant):
+        return "system"
+
+    async def call(self, name, arguments):
+        from app.tools.toolset import ToolOutcome
+
+        self.calls += 1
+        if name == "calculate":
+            data = {"formula": "a / b * 100", "inputs": {"a": 1, "b": 3}, "result": "35.37"}
+            self.calcs.append(dict(data))
+            return ToolOutcome(tool=name, ok=True, data=data)
+        return ToolOutcome(tool=name, ok=True, data=[])
+
+    def to_evidence(self, name, data):
+        return []
+
+
+async def test_calc_repaired_once_when_answer_computes_without_calculate(monkeypatch):
+    toolset = _CalcToolset()
+    _patch_improved_llm(
+        monkeypatch,
+        rounds=[
+            # 第一轮：直接给答案，比率是它自己算的，没有 calculate
+            ("第四季度占全年约 35.37%。", []),
+            # 被闸门退回后：调 calculate
+            ("", [{"id": "c1", "name": "calculate",
+                   "arguments": {"expression": "a / b * 100", "inputs": {"a": 1, "b": 3}}}]),
+            # 补算完给最终答案
+            ("占比 35.37%（a / b * 100）[1]。", []),
+        ],
+        coverage_reply='{"covered": true, "missing": [], "next_query": ""}',
+        final_reply="占比 35.37% [1]。",
+    )
+
+    result = await run(_TASK, variant="improved", toolset=toolset)
+
+    assert "calc_repair" in result["trace"][-1]["note"]
+    assert len(toolset.calcs) == 1
+    assert any(step["tool"] == "calculate" for step in result["trace"])
+    # 只补一次：补完不再追问
+    assert result["trace"][-1]["note"].count("calc_repair") == 1
+
+
+async def test_no_calc_repair_when_answer_has_no_derived_numbers(monkeypatch):
+    toolset = _CalcToolset()
+    _patch_improved_llm(
+        monkeypatch,
+        rounds=[("营业收入为 1,234 千元 [1]。", [])],
+        coverage_reply='{"covered": true, "missing": [], "next_query": ""}',
+        final_reply="营业收入为 1,234 千元 [1]。",
+    )
+
+    result = await run(_TASK, variant="improved", toolset=toolset)
+
+    assert toolset.calcs == []
+    assert "calc_repair" not in result["trace"][-1]["note"]
+
+
+async def test_post_loop_calc_repair_when_rounds_are_exhausted(monkeypatch):
+    """回合用完才出答案也要补算：FIN-08/09 就是走这条路，不是走回合内的答案分支。"""
+    toolset = _CalcToolset()
+    _patch_dispatch(monkeypatch, [_evidence_item()])
+    _patch_improved_llm(
+        monkeypatch,
+        rounds=[
+            ("", [_search_call("c1", "净利率")]),
+            ("", [_search_call("c2", "营业收入")]),
+            ("", [_search_call("c3", "净利润")]),
+            # 第 4 次是补算那一步
+            ("", [{"id": "c9", "name": "calculate",
+                   "arguments": {"expression": "a / b * 100", "inputs": {"a": 1, "b": 3}}}]),
+        ],
+        coverage_reply='{"covered": true, "missing": [], "next_query": ""}',
+        final_reply="归母净利率约 4.06%，环比下降 1.12 个百分点。",
+    )
+
+    # _TASK 的 max_steps 是 3，三轮搜索就用完了；补算需要预算，所以这里放宽到 6
+    result = await run({**_TASK, "max_steps": 6}, variant="improved", toolset=toolset)
+
+    assert "calc_repair" in result["trace"][-1]["note"]
+    assert len(toolset.calcs) == 1
+    assert any(step["tool"] == "calculate" for step in result["trace"])

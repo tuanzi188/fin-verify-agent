@@ -23,7 +23,7 @@ import re
 import time
 from typing import Any, Optional
 
-from app.agent.prompts import COVERAGE_CHECK_TEMPLATE, ROUND_EVIDENCE_TEMPLATE
+from app.agent.prompts import CALC_REPAIR_HINT, COVERAGE_CHECK_TEMPLATE, ROUND_EVIDENCE_TEMPLATE
 from app.services import model_provider
 from app.tools.contract import ABSTAIN_KEYWORDS
 from app.tools.mock import Toolbox
@@ -32,6 +32,11 @@ from app.tools.toolset import ToolOutcome
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_STEPS = 3
+# 任务卡可以要求更多步，但一律夹到这个上限。
+# 原来是 10，2026-10-28 金融摸底暴露两个问题：①夹断是静默的，任务卡写 16 实际只有 10；
+# ②步数撞上限会被记成 `max_steps_exceeded`，让检查把"预算不够"判成"答案错"。
+# 24 条里 9 条卡在 10 步（平均 9.5），说明 10 是真正的瓶颈，不是模型懒得查。
+MAX_STEPS_CEILING = 20
 # 1024 在实测里不够：模型偶尔把预算全花在生成前的推理上，content 回来是空的。
 # 提到 2048 并把 finish_reason 记进 trace，真撞上限时能一眼看出来。
 FINAL_MAX_TOKENS = 2048
@@ -134,8 +139,47 @@ def _normalize_max_steps(raw: Any) -> int:
         value = int(raw)
     except (TypeError, ValueError):
         return DEFAULT_MAX_STEPS
-    return max(1, min(value, 10))
+    return max(1, min(value, MAX_STEPS_CEILING))
 
+
+# 比率 / 占比 / 百分点 / 倍数：答案里一旦出现，就必须要么来自原文、要么来自 calculate
+_RATIO_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:%|％|个百分点|倍)")
+
+
+def needs_calc_repair(answer: str, evidence: list[dict], calcs: list[dict]) -> bool:
+    """答案里有"证据原文里没有的比率"，而本轮一次 calculate 都没调 → 需要补做。
+
+    为什么不能只看有没有 `%`：年报本来就写着"同比 12.11%""占比 3.90%"，
+    照抄不是手算。只有"答案里的比率在证据原文里找不到"才说明这个数是模型自己算的。
+    `calcs` 非空就不再追问——闸门只管"一次都没算过"，不管算得对不对（那是判分的事）。
+    """
+    if calcs or not answer:
+        return False
+    haystack = " ".join(str(item.get("content") or "") for item in evidence)
+    haystack = haystack.replace(" ", "").replace(",", "")
+    for match in _RATIO_PATTERN.finditer(answer):
+        literal = match.group(0).replace(" ", "").replace(",", "")
+        if literal in haystack:
+            continue
+        return True
+    return False
+
+
+def _format_calcs(calcs: list[dict]) -> str:
+    """把 calculate 记录渲染成给模型看的几行。
+
+    必须显式喂回去：终稿是用 `chat()` 生成的，**请求里没有工具定义**，
+    模型既看不到 calculate 的结果、也会误以为没有这个工具
+    （实测 FIN-09 重写后仍写着"我这一轮没有可调用的 calculate 工具"）。
+    """
+    lines = []
+    for item in calcs or []:
+        lines.append(
+            f"- formula: {item.get('formula')}｜inputs: "
+            f"{json.dumps(item.get('inputs') or {}, ensure_ascii=False)}｜"
+            f"result: {item.get('result')}"
+        )
+    return "\n".join(lines) or "（没有计算记录）"
 
 def _accumulate_tokens(usage: dict, call_usage: Optional[dict]) -> tuple[int, int]:
     tokens_in = int((call_usage or {}).get("prompt_tokens") or 0)
@@ -512,6 +556,7 @@ async def _run_improved(
     auto_retries = 0
     self_checks = 0
     budget_exceeded = False
+    calc_repaired = False
     failed = False
     answer = ""
     final_meta: dict = {}
@@ -528,8 +573,8 @@ async def _run_improved(
     try:
         while rounds < max_rounds:
             # 预算用完就收口，不再发起一轮"注定要被拒"的工具调用：
-            # 步数用尽 ≠ 超限，不能把一句 max_steps_exceeded 记进 trace
-            # 让确定性检查把它当失败（2026-10-27 实测把 16 条拒答题误判成 0 分）。
+            # 收口本身不是失败，只记 `budget_truncated` 这个信号
+            # （2026-10-28 起 step_budget 只在 steps > max_steps 时判失败）。
             if executed >= max_steps:
                 break
             rounds += 1
@@ -545,7 +590,23 @@ async def _run_improved(
             final_meta = round_usage or {}
 
             if not tool_calls:
-                answer = (text or "").strip()
+                text = (text or "").strip()
+                # 派生数值必须留下 calculate 记录。提示词已经写了两遍"比率一律 calculate"，
+                # 2026-10-28 实测仍有 2/24 条在正文里手算（数值还对），所以这里加一道确定性闸门：
+                # 答案里出现"证据原文里没有的比率"且本轮没有任何 calc → 退回让它补做一次。
+                # 只对声明了 `calcs` 的工具集生效：制度库那套没有 calculate，硬追问会问出空转。
+                calcs = getattr(toolbox, "calcs", None)
+                if (
+                    not calc_repaired
+                    and calcs is not None
+                    and needs_calc_repair(text, evidence, calcs)
+                ):
+                    calc_repaired = True
+                    notes.append("calc_repair")
+                    messages.append({"role": "assistant", "content": text})
+                    messages.append({"role": "user", "content": CALC_REPAIR_HINT})
+                    continue
+                answer = text
                 break
 
             if executed >= max_steps:
@@ -635,6 +696,61 @@ async def _run_improved(
             final_meta = final_usage or {}
             answer = (text or "").strip()
 
+        # 派生数值复核：答案已经产生了，但里面的比率是手算的（证据原文里没有、calcs 为空）。
+        # 放在覆盖自检之前——先保证"数是怎么来的"对，再谈"子问题全不全"。
+        # 只补算一次；只接受 calculate 这一步，别的工具调用忽略（避免借机把预算花在检索上）。
+        calcs = getattr(toolbox, "calcs", None)
+        if (
+            answer
+            and calcs is not None
+            and not calc_repaired
+            and executed < max_steps
+            and needs_calc_repair(answer, evidence, calcs)
+        ):
+            calc_repaired = True
+            notes.append("calc_repair")
+            messages.append({"role": "assistant", "content": answer})
+            messages.append({"role": "user", "content": CALC_REPAIR_HINT})
+            llm_started_at = time.perf_counter()
+            text, repair_calls, _, repair_usage = await model_provider.chat_with_tools(
+                messages,
+                toolbox.specs(),
+                reasoning_mode="flash",
+                temperature=TOOL_TEMPERATURE,
+            )
+            _accumulate_tokens(usage, repair_usage)
+            for call in repair_calls or []:
+                if executed >= max_steps:
+                    break
+                if str(call.get("name") or "") != "calculate":
+                    continue
+                executed += 1
+                step = await _execute_tool_call(
+                    toolbox, call, executed, evidence, seen_chunk_ids,
+                    locators, seen_locator_ids, policy="calc_repair",
+                )
+                trace.append(step)
+            messages.append({
+                "role": "user",
+                "content": (
+                    toolbox.final_template.format(evidence=_format_evidence(evidence))
+                    + "\n\n补算说明：上一版草稿里的比率是手算的，现已用 calculate 复核，结果如下：\n"
+                    + _format_calcs(calcs)
+                    + "\n\n请按上面的公式与结果重写最终回答，不要再用草稿里的数字。"
+                ),
+            })
+            llm_started_at = time.perf_counter()
+            text, _, final_usage = await model_provider.chat(
+                messages,
+                reasoning_mode="flash",
+                temperature=TOOL_TEMPERATURE,
+                max_tokens=FINAL_MAX_TOKENS,
+            )
+            final_latency_ms = _elapsed_ms(llm_started_at)
+            final_tokens_in, final_tokens_out = _accumulate_tokens(usage, final_usage)
+            final_meta = final_usage or {}
+            answer = (text or "").strip()
+
         # 覆盖自检：只在"有证据、有草稿、还有步数预算"时做一次。
         # 澄清任务（clarify_mode=ask）直接跳过——该问的时候不该被自检逼成硬答。
         if answer and evidence and clarify_mode != "ask":
@@ -696,7 +812,7 @@ async def _run_improved(
         logger.exception("Improved agent run failed: task=%s", task_id)
 
     if budget_exceeded:
-        notes.append("max_steps_exceeded")
+        notes.append("budget_truncated")
     if not failed and not trace:
         notes.append("no_tool_call")
     if not failed and not answer:
@@ -706,9 +822,11 @@ async def _run_improved(
             notes.append("empty_final_answer:reasoning_only")
         else:
             notes.append("empty_final_answer")
-    if toolbox.planned_injections and toolbox.fired_injections < toolbox.planned_injections:
+    planned = getattr(toolbox, "planned_injections", 0)
+    fired = getattr(toolbox, "fired_injections", 0)
+    if planned and fired < planned:
         notes.append(
-            f"injection_not_triggered:{toolbox.fired_injections}/{toolbox.planned_injections}"
+            f"injection_not_triggered:{fired}/{planned}"
         )
 
     citations = _extract_citations(answer, evidence)
@@ -905,7 +1023,7 @@ async def run(
         logger.exception("Agent run failed: task=%s", task_id)
 
     if budget_exceeded:
-        notes.append("max_steps_exceeded")
+        notes.append("budget_truncated")
     if not failed and not trace:
         notes.append("no_tool_call")
     if not failed and not answer:
@@ -919,9 +1037,11 @@ async def run(
             notes.append("empty_final_answer")
     # 注入没打中（比如计划第 2 次调用故障，但这次只查了 1 次）：这一轮不能算恢复题的
     # 有效样本，必须显式标出来，否则恢复率会被"没触发"的运行稀释。
-    if toolbox.planned_injections and toolbox.fired_injections < toolbox.planned_injections:
+    planned = getattr(toolbox, "planned_injections", 0)
+    fired = getattr(toolbox, "fired_injections", 0)
+    if planned and fired < planned:
         notes.append(
-            f"injection_not_triggered:{toolbox.fired_injections}/{toolbox.planned_injections}"
+            f"injection_not_triggered:{fired}/{planned}"
         )
 
     citations = _extract_citations(answer, evidence)
