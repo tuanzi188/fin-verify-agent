@@ -40,7 +40,7 @@ from evaluation.agent_report import (
     hard_gates,
     render_console,
 )
-from evaluation.run_agent_eval import load_tasks
+from evaluation._runner_common import load_tasks
 
 DEFAULT_TASKS = "evaluation/agent_tasks.jsonl"
 

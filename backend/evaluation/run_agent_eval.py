@@ -8,6 +8,9 @@
 P1 的职责只有三件：把任务跑出 result、按 `app/tools/contract.py` 校验 schema、
 把原始结果落盘。判分、聚合、剖面在 P3——现在出"分数"只会是假分数。
 
+读任务 / 跑批 / 汇总 / 打表 与 `run_finance_eval` 共用 `_runner_common`；
+本文件只剩"制度库这一域怎么跑一条"和"落盘要写哪些出处"。
+
 退出码：0 = 全部 schema 通过；1 = 有 result 不符合 schema，或任务文件读不了。
 """
 
@@ -15,7 +18,6 @@ import argparse
 import asyncio
 import json
 import shutil
-import statistics
 import sys
 import tempfile
 from datetime import datetime
@@ -34,8 +36,8 @@ from app.agent.runner import (
     run as run_agent,
 )
 from app.config import MODEL_CONFIG, MODEL_PROVIDER
-from app.tools.contract import validate_result
 from evaluation import run_eval as RE
+from evaluation._runner_common import load_tasks, print_table, run_batch, summarize
 from evaluation.agent_corpus import (
     AGENT_CORPUS,
     AGENT_CORPUS_VERSION,
@@ -47,95 +49,8 @@ from evaluation.agent_corpus import (
 DEFAULT_TASKS = "evaluation/agent_tasks.jsonl"
 
 
-def load_tasks(path: Path) -> list[dict]:
-    """读 JSONL。空行与 `#` 开头的注释行跳过。"""
-    tasks: list[dict] = []
-    with open(path, "r", encoding="utf-8") as handle:
-        for line_no, line in enumerate(handle, 1):
-            text = line.strip()
-            if not text or text.startswith("#"):
-                continue
-            try:
-                task = json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise SystemExit(f"{path}:{line_no} JSON 解析失败: {exc}") from exc
-            if not isinstance(task, dict):
-                raise SystemExit(f"{path}:{line_no} 必须是 JSON 对象")
-            tasks.append(task)
-    return tasks
-
-
-async def run_all(
-    tasks: list[dict],
-    variant: str,
-    runs: int,
-    delay_seconds: float = 0.0,
-    retry_errors: int = 0,
-) -> tuple[list[dict], dict]:
-    results: list[dict] = []
-    schema_problems: dict[str, list[str]] = {}
-    total = len(tasks) * runs
-    index = 0
-    for task in tasks:
-        for run_index in range(1, runs + 1):
-            index += 1
-            # 长跑必须可见：90 次运行中途卡住时，"没有输出"和"正在跑"要能分开。
-            print(
-                f"[{index}/{total}] {task.get('id')} run {run_index}/{runs}",
-                flush=True,
-            )
-            result = None
-            for attempt in range(retry_errors + 1):
-                result = await run_agent(task, variant=variant, run_index=run_index)
-                if result["status"] != "error" or attempt >= retry_errors:
-                    break
-                note = str((result.get("trace") or [{}])[-1].get("note") or "")[:120]
-                wait = 15 * (attempt + 1)
-                print(f"  error，{wait}s 后重试（{attempt + 1}/{retry_errors}）: {note}", flush=True)
-                await asyncio.sleep(wait)
-            problems = validate_result(result)
-            if problems:
-                schema_problems[f"{result['task_id']}#{run_index}"] = problems
-            results.append(result)
-            if delay_seconds > 0:
-                await asyncio.sleep(delay_seconds)
-    return results, schema_problems
-
-
-def summarize(results: list[dict], schema_problems: dict) -> dict:
-    status_counts: dict[str, int] = {}
-    for result in results:
-        status = str(result["status"])
-        status_counts[status] = status_counts.get(status, 0) + 1
-
-    latencies = [int(result["usage"]["latency_ms"]) for result in results]
-    steps = [int(result["usage"]["steps"]) for result in results]
-    untriggered = sum(
-        1 for result in results
-        if any("injection_not_triggered" in str(step.get("note") or "") for step in result["trace"])
-    )
-    return {
-        "total": len(results),
-        "status_counts": status_counts,
-        "median_latency_ms": int(statistics.median(latencies)) if latencies else 0,
-        "max_latency_ms": max(latencies) if latencies else 0,
-        "avg_steps": round(sum(steps) / len(steps), 2) if steps else 0,
-        "injection_untriggered_runs": untriggered,
-        "schema_problem_runs": len(schema_problems),
-    }
-
-
-def print_table(results: list[dict]) -> None:
-    header = f"{'task':<8}{'run':<5}{'status':<11}{'steps':<7}{'latency':<9}{'cites':<7}answer"
-    print(header)
-    print("-" * len(header))
-    for result in results:
-        preview = str(result["answer"]).replace("\n", " ")[:60]
-        print(
-            f"{result['task_id']:<8}{result['run_index']:<5}{result['status']:<11}"
-            f"{result['usage']['steps']:<7}{result['usage']['latency_ms']:<9}"
-            f"{len(result['citations']):<7}{preview}"
-        )
+async def _call(task: dict, variant: str, run_index: int) -> dict:
+    return await run_agent(task, variant=variant, run_index=run_index)
 
 
 def main() -> int:
@@ -173,10 +88,11 @@ def main() -> int:
 
     if args.skip_index:
         results, schema_problems = asyncio.run(
-            run_all(
+            run_batch(
                 tasks,
-                args.variant,
-                runs,
+                variant=args.variant,
+                runs=runs,
+                call=_call,
                 delay_seconds=max(0.0, args.delay),
                 retry_errors=max(0, args.retry_errors),
             )
@@ -189,10 +105,11 @@ def main() -> int:
 
         async def _run_with_index() -> tuple[list[dict], dict]:
             await RE._build_real_indexes(index_root, corpus=AGENT_CORPUS)
-            return await run_all(
+            return await run_batch(
                 tasks,
-                args.variant,
-                runs,
+                variant=args.variant,
+                runs=runs,
+                call=_call,
                 delay_seconds=max(0.0, args.delay),
                 retry_errors=max(0, args.retry_errors),
             )

@@ -27,7 +27,7 @@ if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
 from app.tools.contract import validate_result
-from evaluation.run_agent_eval import summarize
+from evaluation._runner_common import summarize
 
 
 def _key(result: dict) -> tuple[str, int]:
