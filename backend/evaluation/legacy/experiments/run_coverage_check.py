@@ -18,7 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_BACKEND_DIR = Path(__file__).resolve().parents[3]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 

@@ -6,8 +6,8 @@
   - 误拒率      = 正样本中「明明能答却拒答」的比例
 
 用法：
-    python -m evaluation.run_abstention_eval            # 全量 20 负 + 20 正
-    python -m evaluation.run_abstention_eval --limit 5  # 快速冒烟
+    python -m evaluation.legacy.run_abstention_eval            # 全量 20 负 + 20 正
+    python -m evaluation.legacy.run_abstention_eval --limit 5  # 快速冒烟
 
 输出：
     backend/eval_abstention.json    机器可读结果
@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-_BACKEND_DIR = Path(__file__).resolve().parents[1]
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
@@ -32,7 +32,7 @@ from app.services import rag_engine                                   # noqa: E4
 from app.services import conversation_memory                          # noqa: E402
 from app.services.deepseek import deepseek_client                     # noqa: E402
 from evaluation import run_eval as RE                                 # noqa: E402
-from evaluation.negative_samples import NEGATIVE_SAMPLES              # noqa: E402
+from evaluation.legacy.negative_samples import NEGATIVE_SAMPLES              # noqa: E402
 from evaluation.sample_data import QA_PAIRS                           # noqa: E402
 
 # 拒答关键词：与线上 rag_engine._CANNOT_ANSWER_KEYWORDS 同源，另补若干否定表述
