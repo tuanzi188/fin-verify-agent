@@ -11,21 +11,31 @@ import {
   RightOutlined,
 } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
-import { Citation } from '../api/client'
+import { DisplayCitation, AgentStatus, AgentTraceStep } from '../api/client'
+import AgentTracePanel from './AgentTracePanel'
 
 const { Text } = Typography
 
 interface MessageItemProps {
   role: 'user' | 'assistant'
   content: string
-  citations?: Citation[]
+  citations?: DisplayCitation[]
   confidence?: number
   model?: string
   mode?: string
   reasoning_content?: string
   isFallback?: boolean
-  onCitationClick?: (citation: Citation) => void
+  status?: AgentStatus
+  trace?: AgentTraceStep[]
+  onCitationClick?: (citation: DisplayCitation) => void
   onCopy?: (text: string) => void
+}
+
+const STATUS_META: Record<AgentStatus, { label: string; color: string }> = {
+  answered: { label: '已回答', color: 'green' },
+  abstained: { label: '资料不足', color: 'orange' },
+  clarified: { label: '需要澄清', color: 'blue' },
+  error: { label: '执行失败', color: 'red' },
 }
 
 const getConfidenceColor = (score: number): string => {
@@ -49,13 +59,19 @@ function formatCitationLinks(text: string): string {
     return `[^cite-${num}](#cite-${num})`
   })
 
+  // 3. Agent 直接输出 [1] / [2]：转成同样的胶囊链接。
+  //    排除 Markdown 链接写法 [1](url)，否则会把链接文字吞掉。
+  formatted = formatted.replace(/\[(\d{1,2})\](?!\()/g, (_, num) => {
+    return `[^cite-${num}](#cite-${num})`
+  })
+
   return formatted
 }
 
 /** 创新交互：行内引用胶囊与悬浮即时验真卡片 (In-text Citation Pill & Hover Preview) */
 const CitationPill: React.FC<{
   index: number
-  citation?: Citation
+  citation?: DisplayCitation
   onClick?: () => void
 }> = ({ index, citation, onClick }) => {
   if (!citation) {
@@ -82,7 +98,10 @@ const CitationPill: React.FC<{
     )
   }
 
-  const scorePercent = Math.min(100, Math.round(citation.score * 100))
+  const hasScore = typeof citation.score === 'number'
+  const scorePercent = hasScore
+    ? Math.min(100, Math.round((citation.score as number) * 100))
+    : null
 
   const popoverContent = (
     <div style={{ maxWidth: 300, padding: '4px 2px' }}>
@@ -94,12 +113,14 @@ const CitationPill: React.FC<{
             {citation.document_title}
           </Text>
         </Space>
-        <Tag
-          color={scorePercent >= 70 ? 'green' : 'orange'}
-          style={{ margin: 0, fontSize: 11, borderRadius: 4, flexShrink: 0 }}
-        >
-          匹配 {scorePercent}%
-        </Tag>
+        {scorePercent !== null && (
+          <Tag
+            color={scorePercent >= 70 ? 'green' : 'orange'}
+            style={{ margin: 0, fontSize: 11, borderRadius: 4, flexShrink: 0 }}
+          >
+            匹配 {scorePercent}%
+          </Tag>
+        )}
       </div>
 
       {/* 原段切片高光卡片 */}
@@ -358,6 +379,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
   mode,
   reasoning_content,
   isFallback,
+  status,
+  trace,
   onCitationClick,
   onCopy,
 }) => {
@@ -497,6 +520,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
               </div>
             )}
 
+            {!isUser && <AgentTracePanel trace={trace} />}
+
             {/* 底部信息条：模型、置信度、操作按钮 */}
             <div
               style={{
@@ -511,6 +536,11 @@ const MessageItem: React.FC<MessageItemProps> = ({
               }}
             >
               <Space size={6} wrap style={{ fontSize: 11 }}>
+                {status && (
+                  <Tag color={STATUS_META[status].color} style={{ fontSize: 11, margin: 0 }}>
+                    {STATUS_META[status].label}
+                  </Tag>
+                )}
                 {isFallback && <Tag color="orange" style={{ fontSize: 11, margin: 0 }}>兜底回答</Tag>}
                 {confidence !== undefined && (
                   <Tag color={getConfidenceColor(confidence)} style={{ fontSize: 11, margin: 0 }}>

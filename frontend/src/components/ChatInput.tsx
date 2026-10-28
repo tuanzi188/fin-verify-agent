@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react'
-import { Input, Button, Tooltip, Popover, Typography } from 'antd'
+import { Input, Button, Tooltip, Popover, Typography, Switch, Space } from 'antd'
 import {
   SendOutlined,
   StopOutlined,
   ClearOutlined,
   FileSearchOutlined,
   PlusCircleOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons'
 
 const { Text } = Typography
@@ -17,6 +18,8 @@ interface ChatInputProps {
   onClearContext?: () => void
   onNewConversation?: () => void
   onReferenceDocument?: () => void
+  agentMode?: boolean
+  onAgentModeChange?: (enabled: boolean) => void
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -26,6 +29,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onClearContext,
   onNewConversation,
   onReferenceDocument,
+  agentMode = false,
+  onAgentModeChange,
 }) => {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
@@ -110,6 +115,25 @@ const ChatInput: React.FC<ChatInputProps> = ({
               onClick={onReferenceDocument}
               style={{ color: 'var(--color-text-tertiary)' }}
             />
+          </Tooltip>
+          <Tooltip title="深度检索：单轮多步检索，回答后可在消息下方展开执行轨迹">
+            <Space size={4} style={{ marginLeft: 4, cursor: 'pointer' }}>
+              <Switch
+                size="small"
+                checked={agentMode}
+                onChange={(checked) => onAgentModeChange?.(checked)}
+                aria-label="深度检索"
+              />
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: agentMode ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                }}
+              >
+                <ExperimentOutlined style={{ marginRight: 3 }} />
+                深度
+              </Text>
+            </Space>
           </Tooltip>
           {value && (
             <Tooltip title="清空输入">

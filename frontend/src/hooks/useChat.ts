@@ -1,18 +1,32 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { message } from 'antd'
-import { sendChatStream, Citation, extractErrorMessage } from '../api/client'
+import {
+  sendChatStream,
+  sendChat,
+  DisplayCitation,
+  AgentStatus,
+  AgentTraceStep,
+  extractErrorMessage,
+} from '../api/client'
 
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  citations?: Citation[]
+  citations?: DisplayCitation[]
   confidence?: number
   model?: string
   mode?: string
   reasoning_content?: string
   isFallback?: boolean
+  // agent 模式专有：四态 + 执行轨迹。RAG 消息保持 undefined。
+  status?: AgentStatus
+  trace?: AgentTraceStep[]
   timestamp: number
+}
+
+export interface SendOptions {
+  mode?: 'rag' | 'agent'
 }
 
 export interface UseChatReturn {
@@ -22,7 +36,7 @@ export interface UseChatReturn {
   conversationId: string | undefined
   setConversationId: (id: string | undefined) => void
   setMessages: (messages: Message[]) => void
-  sendMessage: (query: string) => Promise<void>
+  sendMessage: (query: string, options?: SendOptions) => Promise<void>
   stopGeneration: () => void
   loadHistoryMessages: (turns: { query: string; answer: string; timestamp: number }[]) => void
   startNew: () => void
@@ -48,7 +62,7 @@ export function useChat(
     }
   }, [])
 
-  const sendMessage = useCallback(async (query: string) => {
+  const sendMessage = useCallback(async (query: string, options?: SendOptions) => {
     if (loading) return
 
     const userMsg: Message = {
@@ -58,6 +72,45 @@ export function useChat(
       timestamp: Date.now(),
     }
     setMessages(prev => [...prev, userMsg])
+
+    // agent 模式：非流式。复用 /chat 入口，鉴权/会话/审计与 RAG 一致。
+    if (options?.mode === 'agent') {
+      setLoading(true)
+      try {
+        const result = await sendChat(query, conversationId, 'agent')
+        const assistantMsg: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: result.answer || '（本轮没有返回内容）',
+          citations: result.citations || [],
+          model: result.model_used,
+          mode: result.reasoning_mode_used || 'agent',
+          status: (result.status || 'error') as AgentStatus,
+          trace: result.trace || [],
+          timestamp: Date.now(),
+        }
+        setMessages(prev => [...prev, assistantMsg])
+        setConversationId(result.conversation_id)
+        onConversationUpdate?.()
+      } catch (err) {
+        console.error('Agent 请求失败:', err)
+        const detail = extractErrorMessage(err, '请求失败，请检查网络连接或稍后重试')
+        const code = (err as any)?.response?.status
+        message.error(code ? `[${code}] ${detail}` : detail)
+        setMessages(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: `抱歉，深度检索执行失败：${detail}`,
+          status: 'error',
+          trace: [],
+          timestamp: Date.now(),
+        }])
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     setLoading(true)
     setStreamingContent('')
     streamingRef.current = ''

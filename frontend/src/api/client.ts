@@ -68,6 +68,50 @@ export type ConversationSummary = components['schemas']['ConversationSummary']
 export type ConversationDetail = components['schemas']['ConversationDetail']
 export type ConversationListResponse = components['schemas']['ConversationListResponse']
 
+/** Agent 模式的引用没有重排分：score 允许为空，不要编 0 让界面显示“匹配 0%”。 */
+export type DisplayCitation = Omit<Citation, 'score'> & { score?: number | null }
+
+export type AgentStatus = 'answered' | 'abstained' | 'clarified' | 'error'
+
+export interface AgentTraceStep {
+  step: number
+  tool: string
+  ok: boolean
+  result_count?: number
+  latency_ms?: number
+  injected?: string | null
+  error_kind?: string | null
+  args?: Record<string, unknown>
+  note?: string | null
+}
+
+export interface AgentChatResponse extends Omit<ChatResponse, 'citations'> {
+  citations: DisplayCitation[]
+  status?: AgentStatus | null
+  trace?: AgentTraceStep[] | null
+  variant?: string | null
+  duration_ms?: number | null
+}
+
+/**
+ * 非流式问答。mode=agent 时走工具循环（单轮、不可流式）。
+ * 复用 /chat 入口：鉴权、会话隔离、审计与 RAG 路径完全一致。
+ */
+export async function sendChat(
+  query: string,
+  conversationId?: string,
+  mode: 'rag' | 'agent' = 'rag',
+  maxSteps = 3,
+): Promise<AgentChatResponse> {
+  const response = await api.post<AgentChatResponse>('/chat', {
+    query,
+    conversation_id: conversationId,
+    mode,
+    max_steps: maxSteps,
+  })
+  return response.data
+}
+
 export interface DocumentInfo {
   document_id: string
   filename: string

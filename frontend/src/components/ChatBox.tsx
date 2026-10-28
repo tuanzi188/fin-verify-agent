@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { message, Spin, Typography } from 'antd'
 import ReactMarkdown from 'react-markdown'
-import { Citation, uploadDocument, getStats } from '../api/client'
+import { DisplayCitation, uploadDocument, getStats } from '../api/client'
 import { useChat } from '../hooks/useChat'
 import { useConversations } from '../hooks/useConversations'
 import MessageItem from './MessageItem'
@@ -22,12 +22,13 @@ interface ChatBoxProps {
 }
 
 const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
-  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null)
+  const [selectedCitation, setSelectedCitation] = useState<DisplayCitation | null>(null)
   const [stats, setStats] = useState<{ total_chunks: number } | null>(null)
   const [documentManagerOpen, setDocumentManagerOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
+  const [agentMode, setAgentMode] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const {
@@ -243,6 +244,8 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
               mode={msg.mode}
               reasoning_content={msg.reasoning_content}
               isFallback={msg.isFallback}
+              status={msg.status}
+              trace={msg.trace}
               onCitationClick={setSelectedCitation}
               onCopy={copyToClipboard}
             />
@@ -292,7 +295,9 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
                 transition: 'background var(--transition-normal)',
               }}>
                 <Spin size="small" />
-                <Text style={{ marginLeft: 8, color: 'var(--color-text-secondary)' }}>正在思考...</Text>
+                <Text style={{ marginLeft: 8, color: 'var(--color-text-secondary)' }}>
+                  {agentMode ? '正在多步检索...' : '正在思考...'}
+                </Text>
               </div>
             </div>
           )}
@@ -301,10 +306,12 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
 
         <ChatInput
           loading={loading}
-          onSend={sendMessage}
+          onSend={(text) => sendMessage(text, { mode: agentMode ? 'agent' : 'rag' })}
           onStop={stopGeneration}
           onNewConversation={handleNewConversation}
           onReferenceDocument={() => setDocumentManagerOpen(true)}
+          agentMode={agentMode}
+          onAgentModeChange={setAgentMode}
         />
       </div>
 

@@ -39,4 +39,18 @@ describe('ChatInput', () => {
     render(<ChatInput loading={false} onSend={vi.fn()} />)
     expect(screen.getByText(/Enter 发送/)).toBeTruthy()
   })
+
+  it('toggles agent mode through the switch', () => {
+    const onAgentModeChange = vi.fn()
+    render(
+      <ChatInput
+        loading={false}
+        onSend={vi.fn()}
+        agentMode={false}
+        onAgentModeChange={onAgentModeChange}
+      />
+    )
+    fireEvent.click(screen.getByLabelText('深度检索'))
+    expect(onAgentModeChange).toHaveBeenCalledWith(true)
+  })
 })

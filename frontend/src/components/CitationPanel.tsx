@@ -6,12 +6,12 @@ import {
   CopyOutlined,
   CheckOutlined,
 } from '@ant-design/icons'
-import { Citation } from '../api/client'
+import { DisplayCitation } from '../api/client'
 
 const { Text, Title, Paragraph } = Typography
 
 interface CitationPanelProps {
-  citation: Citation | null
+  citation: DisplayCitation | null
   onClose: () => void
 }
 
