@@ -88,15 +88,19 @@ async def search_kb(query: str, top_k: int = 5) -> list[dict]:
     """在企业知识库中检索相关段落。
 
     当用户询问公司制度、流程、规定、政策类问题时使用。
-    返回段落 id、所属文档、正文，以及两个分数字段：
+    返回段落 id、所属文档、正文，以及三个分数：
       - `score`：Cross-Encoder 重排分（无固定量纲，越高越相关，仅用于相对排序）
-      - `similarity`：召回阶段的分数（0-1）。低于 0.35 通常意味着资料不足，应如实说明。
+      - `similarity`：向量余弦相似度（通常 0-1）；该段落只被关键词路召回时为 null
+      - `rrf_score`：RRF 融合分（rrf_k=60，量级约 0.016），仅供调试，
+        不要用它判断资料是否充足
+    若返回空列表，或所有条目的 `similarity` 都低于 0.35，说明资料不足，应如实说明。
 
     Args:
         query: 用户问题原文，不要改写
-        top_k: 返回条数，1-10，默认 5
+        top_k: 返回条数，1-10，默认 5（越界夹断）
     """
     from app.services.reranker import reranker
+    from app.tools.retrieval import vector_similarity
 
     top_k = max(1, min(int(top_k or 5), 10))
     candidate_k = max(top_k * _CANDIDATE_MULTIPLIER, top_k)
@@ -115,6 +119,8 @@ async def search_kb(query: str, top_k: int = 5) -> list[dict]:
                 "document_id": corpus[i].get("doc_id", ""),
                 "content": corpus[i]["content"],
                 "rrf_score": float(sims[i]),
+                # demo 模式下相似度就是余弦，直接复用
+                "vector_similarity": float(sims[i]),
             }
             for i in order
         ]
@@ -131,6 +137,7 @@ async def search_kb(query: str, top_k: int = 5) -> list[dict]:
                 "document_id": (item.get("metadata") or {}).get("document_id", ""),
                 "content": item.get("content", ""),
                 "rrf_score": float(item.get("rrf_score", item.get("score", 0.0))),
+                "vector_similarity": vector_similarity(item),
             }
             for item in raw_results
         ]
@@ -146,7 +153,8 @@ async def search_kb(query: str, top_k: int = 5) -> list[dict]:
             "title": item.get("title", ""),
             "document_id": item.get("document_id", ""),
             "score": round(float(item.get("rerank_score", 0.0)), 4),
-            "similarity": round(float(item.get("rrf_score", 0.0)), 4),
+            "similarity": item.get("vector_similarity"),
+            "rrf_score": round(float(item.get("rrf_score", 0.0)), 6),
             "content": item["content"],
         }
         for item in ranked[:top_k]

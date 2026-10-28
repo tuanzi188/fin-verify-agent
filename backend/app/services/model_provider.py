@@ -24,6 +24,26 @@ async def chat(
     return await provider_instance.chat(messages, reasoning_mode, temperature, max_tokens)
 
 
+async def chat_with_tools(
+    messages: List[dict],
+    tools: List[dict],
+    tool_choice: Optional[str] = None,
+    reasoning_mode: str = "flash",
+    temperature: float = 0.1,
+    max_tokens: Optional[int] = None,
+) -> tuple[str, list[dict], Optional[str], dict]:
+    """工具调用入口。推理档不支持 tool calling，调用方应固定传 flash。"""
+    provider_instance = _resolve_provider()
+    return await provider_instance.chat_with_tools(
+        messages,
+        tools,
+        tool_choice=tool_choice,
+        reasoning_mode=reasoning_mode,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
 async def chat_stream(
     messages: List[dict],
     reasoning_mode: str = "flash",
@@ -43,10 +63,12 @@ async def chat_stream(
 
 
 async def simple_query(
-    query: str, system_prompt: Optional[str] = None
+    query: str, system_prompt: Optional[str] = None, max_tokens: Optional[int] = None
 ) -> tuple[str, Optional[str], dict]:
     provider_instance = _resolve_provider()
-    return await provider_instance.simple_query(query, system_prompt)
+    if max_tokens is None:
+        return await provider_instance.simple_query(query, system_prompt)
+    return await provider_instance.simple_query(query, system_prompt, max_tokens=max_tokens)
 
 
 async def fallback_query(

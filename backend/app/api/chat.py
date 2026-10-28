@@ -6,13 +6,14 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.models.chat import (
-    ChatRequest, ChatResponse, SearchRequest, SearchResponse,
+    ChatRequest, ChatResponse, ChatMode, SearchRequest, SearchResponse,
     ConversationListResponse, ConversationDetail, ConversationDeleteResponse
 )
 from app.core.user_context import extract_user_context
 from app.core.conversation_scope import ConversationNamespace
 from app.core.exceptions import UpstreamAPIError
 from app.services.rag_engine import rag_query, rag_query_stream
+from app.services.agent_entry import run_agent_query
 from app.services.hybrid_search import hybrid_retriever
 from app.services.model_provider import classify_intent as model_classify_intent, select_reasoning_mode as model_select_reasoning_mode
 from app.services.conversation_memory import conversation_memory
@@ -59,17 +60,26 @@ async def chat(request: Request, body: ChatRequest):
     start_time = asyncio.get_event_loop().time()
     status = AuditStatus.SUCCESS
     error_message = ""
+    response = None
 
     try:
-        response = await rag_query(
-            query=body.query,
-            conversation_id=scoped_conversation_id,
-            reasoning_mode=body.reasoning_mode.value if body.reasoning_mode else None,
-            top_k=body.top_k or 5,
-            temperature=body.temperature or 0.1,
-            use_fallback=body.use_fallback,
-            user_context=user_context,
-        )
+        if body.mode == ChatMode.agent:
+            response = await run_agent_query(
+                query=body.query,
+                conversation_id=scoped_conversation_id,
+                user_context=user_context,
+                max_steps=body.max_steps or 3,
+            )
+        else:
+            response = await rag_query(
+                query=body.query,
+                conversation_id=scoped_conversation_id,
+                reasoning_mode=body.reasoning_mode.value if body.reasoning_mode else None,
+                top_k=body.top_k or 5,
+                temperature=body.temperature or 0.1,
+                use_fallback=body.use_fallback,
+                user_context=user_context,
+            )
     except HTTPException as e:
         status = AuditStatus.DENIED if e.status_code == 403 else AuditStatus.FAILURE
         error_message = str(e.detail)
@@ -88,7 +98,11 @@ async def chat(request: Request, body: ChatRequest):
                 resource_id=conversation_id,
                 status=status,
                 duration_ms=duration_ms,
-                details={"query": body.query},
+                details={
+                    "query": body.query,
+                    "mode": body.mode.value,
+                    "agent_status": getattr(response, "status", None) if body.mode == ChatMode.agent else None,
+                },
                 error_message=error_message,
             )
         )
@@ -100,6 +114,12 @@ async def chat(request: Request, body: ChatRequest):
 @router.post("/chat/stream")
 async def chat_stream(request: Request, body: ChatRequest):
     user_context = extract_user_context(request)
+    if body.mode == ChatMode.agent:
+        # v1 的 Agent 是非流式：宁可明确拒绝，也不要让客户端以为自己在用 agent。
+        raise HTTPException(
+            status_code=400,
+            detail="agent 模式暂不支持流式，请使用 POST /api/v1/chat（mode=agent）",
+        )
     conversation_id = body.conversation_id or str(uuid.uuid4())
     stream_storage_id = ConversationNamespace(user_context).storage_id(conversation_id)
     start_time = asyncio.get_event_loop().time()

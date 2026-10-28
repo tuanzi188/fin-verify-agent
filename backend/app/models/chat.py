@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import uuid
@@ -8,6 +8,13 @@ class ReasoningMode(str, Enum):
     non_think = "non_think"
     think_high = "think_high"
     think_max = "think_max"
+
+
+class ChatMode(str, Enum):
+    """问答模式。默认 rag，保持现有行为不变。"""
+
+    rag = "rag"
+    agent = "agent"
 
 
 class ChunkingStrategy(str, Enum):
@@ -26,12 +33,18 @@ class DocumentChunk(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    # 禁止请求体夹带 mock/inject：故障注入只属于评测，不能从公网打开。
+    model_config = ConfigDict(extra="forbid")
+
     query: str = Field(..., min_length=1, max_length=10000, description="用户问题")
     conversation_id: Optional[str] = None
     reasoning_mode: Optional[ReasoningMode] = None
     top_k: Optional[int] = Field(default=5, ge=1, le=20)
     temperature: Optional[float] = Field(default=0.1, ge=0.0, le=2.0)
     use_fallback: Optional[bool] = None
+    # rag = 现有固定流水线；agent = 工具调用循环 + trace。默认 rag，老客户端无感。
+    mode: ChatMode = ChatMode.rag
+    max_steps: Optional[int] = Field(default=3, ge=1, le=5, description="agent 模式的最大工具步数")
 
 
 class Citation(BaseModel):
@@ -40,7 +53,20 @@ class Citation(BaseModel):
     page: Optional[int] = None
     paragraph: Optional[str] = None
     content: str
-    score: float
+    # agent 模式的引用没有重排分：允许 None，不要编一个 0 让前端显示"匹配 0%"。
+    score: Optional[float] = None
+
+
+class AgentTraceStep(BaseModel):
+    step: int
+    tool: str
+    ok: bool
+    result_count: int = 0
+    latency_ms: int = 0
+    injected: Optional[str] = None
+    error_kind: Optional[str] = None
+    args: Dict[str, Any] = Field(default_factory=dict)
+    note: Optional[str] = None
 
 
 class ChatSegment(BaseModel):
@@ -59,6 +85,11 @@ class ChatResponse(BaseModel):
     model_used: str = ""
     reasoning_mode_used: str = ""
     is_fallback: bool = False
+    # 以下字段只对 agent 模式有值；rag 模式保持 null，老前端不受影响。
+    status: Optional[str] = None
+    trace: Optional[List[AgentTraceStep]] = None
+    variant: Optional[str] = None
+    duration_ms: Optional[int] = None
 
 
 class DocumentUploadResponse(BaseModel):
