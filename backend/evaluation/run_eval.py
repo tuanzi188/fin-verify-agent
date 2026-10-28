@@ -80,11 +80,16 @@ def _fuse(vector_results, keyword_results, top_k, query_type="综合分析"):
 # --------------------------------------------------------------------------
 # 真实 pipeline 模式（三路检索 + RRF + 重排，全部走线上同一套组件）
 # --------------------------------------------------------------------------
-async def _build_real_indexes(tmp_root: Path):
+async def _build_real_indexes(tmp_root: Path, corpus: list[dict] | None = None):
     """把评测语料灌入真实的向量库 / BM25 / 图谱索引。
 
     存储全部指向临时目录，跑完即删，不污染 data/ 下的线上索引。
+
+    `corpus` 默认为检索回归夹具的 `CORPUS`（33 chunk）；能力评测传
+    `evaluation.agent_corpus.AGENT_CORPUS`（60 chunk）——两者不能混用，
+    否则 60 条 query 的基线指标会被新语料改变。
     """
+    corpus = corpus if corpus is not None else CORPUS
     VECTOR_STORE_CONFIG["persist_dir"] = str(tmp_root / "chroma_db")
     vector_store._initialized = False
     vector_store._collection = None
@@ -102,7 +107,7 @@ async def _build_real_indexes(tmp_root: Path):
                 "chunk_index": index,
             },
         )
-        for index, item in enumerate(CORPUS)
+        for index, item in enumerate(corpus)
     ]
     await vector_store.add_chunks(chunks)
 
@@ -116,11 +121,11 @@ async def _build_real_indexes(tmp_root: Path):
             "content": item["content"],
             "metadata": {"document_id": item["doc_id"], "title": item["title"]},
         }
-        for item in CORPUS
+        for item in corpus
     ])
 
     graph_searcher.reset_memory_index()
-    for item in CORPUS:
+    for item in corpus:
         entities = graph_searcher.extract_entities_from_text(item["content"])
         for entity in entities:
             graph_searcher.add_entity(entity["name"], [item["chunk_id"]], document_id=item["doc_id"])
