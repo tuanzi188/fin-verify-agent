@@ -4,8 +4,8 @@
 
 1. **只给一次机会**：检索一次、生成一次。它不能换关键词、不能重取、不能发现
    自己检索错了——这正是 Agent 花额外 token 想买的东西。
-2. **不给结构化工具**：没有 get_cell、没有 calculate、没有页码；证据单位是
-   512 字固定窗，表格在切片时已经被拍平。
+2. **不给结构化工具**：没有 get_cell、没有 calculate；证据单位由语料模块决定。
+   固定窗臂是 512 字连续文本，结构臂保留表格行组与页码，但两臂都只有一次机会。
 3. **同一个模型、同一份语料、同一批问题**：模型与温度从 `app.config` 走，
    与 Agent 臂同源；语料来自同一批 document.json。
 
@@ -49,16 +49,21 @@ def _render_evidence(hits: list[dict]) -> str:
 
 
 def _to_evidence(hits: list[dict]) -> list[dict]:
-    return [
-        {
+    evidence = []
+    for hit in hits:
+        item = {
             "chunk_id": str(hit.get("chunk_id") or ""),
             "title": str(hit.get("title") or ""),
             "content": str(hit.get("content") or ""),
-            "kind": "chunk",
+            "kind": str(hit.get("kind") or "chunk"),
             "page": hit.get("page"),
         }
-        for hit in hits
-    ]
+        for key in ("source_id", "source_ids", "source_spans", "table_id",
+                    "row_indices", "column_indices"):
+            if hit.get(key) is not None:
+                item[key] = hit[key]
+        evidence.append(item)
+    return evidence
 
 
 async def answer_once(
@@ -68,18 +73,24 @@ async def answer_once(
     top_k: int = TOP_K,
     model: Any = None,
     variant: str = "rag",
+    corpus: Any = None,
 ) -> dict:
-    """跑一条任务：检索 top-k → 一次生成 → 解析引用。"""
+    """跑一条任务：检索 top-k → 一次生成 → 解析引用。
+
+    `corpus` 只决定证据单元：默认是原固定窗基线；传结构感知语料模块时，
+    仍是同一条“一次检索、一次生成”路径，不给多轮工具或计算器。
+    """
     model = model or deepseek_client
+    corpus = corpus or rag_corpus
     started_at = time.perf_counter()
     task_id = str(task.get("id"))
     question = str(task.get("question") or "")
     notes: list[str] = []
 
-    hits = rag_corpus.search(
+    hits = corpus.search(
         question,
         top_k=top_k,
-        doc_codes=rag_corpus.docs_for_question(question),
+        doc_codes=corpus.docs_for_question(question),
     )
     retrieve_ms = int((time.perf_counter() - started_at) * 1000)
     evidence = _to_evidence(hits)

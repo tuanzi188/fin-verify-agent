@@ -3,6 +3,8 @@
 用法（在 backend 目录下）：
 
     python -m evaluation.run_rag_eval --tasks evaluation/finance_tasks_complex.jsonl
+    python -m evaluation.run_rag_eval --retrieval-mode structured \
+        --tasks evaluation/finance_tasks_complex.jsonl --out %TEMP%\\rag_structured.json
     python -m evaluation.run_rag_eval --limit 2 --out %TEMP%\\rag_smoke.json
 
 产出与 `run_finance_eval` 同 schema（`finance_agent_runs/v1`），所以两臂可以用
@@ -23,11 +25,17 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from app.config import MODEL_CONFIG, MODEL_PROVIDER
-from evaluation import rag_corpus
-from evaluation._runner_common import load_tasks, print_table, run_batch, sha256_file, summarize
-from evaluation.finance_corpus import corpus_hash, doc_inventory
-from evaluation.rag_baseline import TOP_K, answer_once
+from app.config import MODEL_CONFIG, MODEL_PROVIDER  # noqa: E402
+from evaluation import rag_corpus, structured_corpus  # noqa: E402
+from evaluation._runner_common import (  # noqa: E402
+    load_tasks,
+    print_table,
+    run_batch,
+    sha256_file,
+    summarize,
+)
+from evaluation.finance_corpus import corpus_hash, doc_inventory  # noqa: E402
+from evaluation.rag_baseline import TOP_K, answer_once  # noqa: E402
 
 DEFAULT_TASKS = "evaluation/finance_tasks_complex.jsonl"
 
@@ -40,6 +48,12 @@ def main() -> int:
     parser.add_argument("--delay", type=float, default=0.0)
     parser.add_argument("--retry-errors", type=int, default=1)
     parser.add_argument("--top-k", type=int, default=TOP_K)
+    parser.add_argument(
+        "--retrieval-mode",
+        choices=("fixed", "structured"),
+        default="fixed",
+        help="fixed=预注册的 512 字固定窗基线；structured=正文段落/表格行组第三臂",
+    )
     parser.add_argument("--out", default="", help="结果 JSON 路径；空 = 不落盘")
     args = parser.parse_args()
 
@@ -55,8 +69,17 @@ def main() -> int:
     if not tasks:
         raise SystemExit("筛完没有任务可跑")
 
+    corpus = rag_corpus if args.retrieval_mode == "fixed" else structured_corpus
+    arm_variant = "rag" if args.retrieval_mode == "fixed" else "rag_structured"
+
     async def _call(task: dict, variant: str, run_index: int) -> dict:
-        return await answer_once(task, run_index=run_index, top_k=args.top_k, variant=variant)
+        return await answer_once(
+            task,
+            run_index=run_index,
+            top_k=args.top_k,
+            variant=arm_variant,
+            corpus=corpus,
+        )
 
     started = time.perf_counter()
     results, schema_problems = asyncio.run(
@@ -82,23 +105,29 @@ def main() -> int:
     )
     tokens = sum(int(r["usage"]["tokens_in"]) + int(r["usage"]["tokens_out"]) for r in results)
     print(f"token 合计 {tokens:,}（{tokens // max(len(results), 1):,}/次）")
-    print(f"切片：{rag_corpus.stats()}")
+    print(f"切片：{corpus.stats()}")
 
     if args.out:
         payload = {
             "schema": "finance_agent_runs/v1",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "run_config": {
-                "variant": "rag",
+                "variant": arm_variant,
                 "arm": "rag",
+                "retrieval_mode": args.retrieval_mode,
                 "runs_per_task": max(1, args.runs),
                 "toolset": "chunks",
                 "top_k": args.top_k,
                 "chunk_size": rag_corpus.CHUNK_SIZE,
                 "chunk_overlap": rag_corpus.CHUNK_OVERLAP,
+                "corpus_version": (
+                    "finance-7docs-v1"
+                    if args.retrieval_mode == "fixed"
+                    else structured_corpus.CORPUS_VERSION
+                ),
+                "corpus_stats": corpus.stats(),
                 "model": (MODEL_CONFIG.get("flash") or {}).get("model"),
                 "model_provider": MODEL_PROVIDER,
-                "corpus_version": "finance-7docs-v1",
                 "tasks_file": str(tasks_path),
                 "tasks_sha256": sha256_file(tasks_path),
                 "corpus_hash": corpus_hash(),

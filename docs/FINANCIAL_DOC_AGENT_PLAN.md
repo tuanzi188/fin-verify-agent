@@ -829,12 +829,52 @@ python -m evaluation.compare_arms --agent-report %TEMP%\agent_cx_report.json --a
 真正修复来自 `cell_repair` 逼出的 `get_cell`——模型借这个动作读到了此前没打开的
 2025 年 `t0006`。12 题两臂复跑尚未做，成本增量未知。
 
+#### 12.4.13 分层切片与相关行读取（2026-10-29 落地，未跑模型）
+
+**架构已确定**：检索单元与读取单元分开；正文按段落、表格按行组、小块检索后按需扩展。
+具体参数仍是实验起点，不能当效果结论。
+
+| 改动 | 现状 | 边界 |
+|---|---|---|
+| 正文切片 | 章节内按句子装块，目标 400–800 字，只在边界重叠短句；不跨章节 | 章节本身很短时允许低于 400 字 |
+| 表格切片 | 连续 6 行为一组、组间重叠 1 行；宽表按首列 + 8 个数据列切列组 | 行组是机械分组，不猜业务语义；后续按召回调参 |
+| 证据元数据 | 每块带 doc_id、公司、报告期、章节路径/表名、页码、单位、脚注、原始行列号 | 脚注只在表级保存；单元格脚注仍需解析器补 |
+| Agent 读取 | 新增 `get_rows(table_id, rows, columns?)`：一次 1–20 行、最多 12 列；`get_cell → get_rows → get_table` 分层 | `get_table` 保留为全表浏览/兜底 |
+| 固定窗引用 | 每个窗口记录全部重叠来源 `source_spans`，锚点按任一来源核验；重叠不足 8 字不算命中 | 旧 run 文件没有 `source_spans`，历史读数无法追溯补录，只能重跑 |
+| 第三臂 | `structured_corpus.py`：结构感知但仍是一次检索、一次生成；保留公司+报告期 metadata 过滤 | 没有多轮、修复、calculate；不替换预注册固定窗基线 |
+
+**离线切片读数（不是模型效果）**
+
+- 固定窗：4,115 块；其中 **2,138 块覆盖至少两个来源**（51.96%），
+  证明“只取重叠最多的一个来源”会系统性漏记引用覆盖。
+- 结构切片：5,296 块 = 正文 2,363 + 表格行组 2,933；覆盖 7 份文档、1,114 张表。
+- 12 道复杂题、top-8、只看是否命中任务卡目标表：固定窗 **5/16**，
+  结构臂 **8/16**。这只是一次离线召回筛查，未调 judge、未跑答案、不能当质量提升。
+- 两臂的可检索块数和上下文形态不同，token 与答案质量必须用同一模型实跑后才可比较。
+
+**运行命令**
+
+```bash
+# 原固定窗基线（默认，不传 --retrieval-mode 也一样）
+python -m evaluation.run_rag_eval --retrieval-mode fixed \
+    --tasks evaluation/finance_tasks_complex.jsonl --runs 1 --out %TEMP%\rag_fixed.json
+
+# 结构感知第三臂
+python -m evaluation.run_rag_eval --retrieval-mode structured \
+    --tasks evaluation/finance_tasks_complex.jsonl --runs 1 --out %TEMP%\rag_structured.json
+```
+
+**验收顺序**：先 4 题探针确认 schema、token 与引用坐标，再跑 12 题；
+三方（Agent / 固定窗 RAG / 结构 RAG）统一用 `compare_arms` 的逐题配对口径。
+参数选择只改一个变量，记录证据召回、任务通过、页码/表格/单元格定位、输入 token；
+未过 20k 成本线不得写成项目结论。
+
 ### 12.5 下一步
 
 - 12 题两臂复跑（先跑 4 题探针）：验证 §12.4.12 的闸门效果。验收：硬门禁不劣于第一轮；
   单元格命中从 0/24 起量；负样本拒答不再夹带相邻期间数字；记录每题的补救轮与 token 增量
 - 主集跑满 30 条 × 3 次（pass^k 需要 k≥3），出第一份五维剖面
-- chunk RAG baseline（纯文本切块、无表结构、无 calc）→ 与结构化路由做成对 A/B（McNemar）
+- 固定窗 RAG / 结构感知 RAG / Agent 三方配对；结构臂参数按 §12.4.13 的单一变量实验校准
 - 60 query 工具层回归夹具（与 30 条能力剖面分开维护）
 - 手动 URL 导入（`app/sources/`）
 
@@ -846,7 +886,8 @@ python -m evaluation.compare_arms --agent-report %TEMP%\agent_cx_report.json --a
 - ✅ 语料 7 份解析 + 6/6 年报同比自洽验收（§12.2 / §12.3）
 - ✅ `toolset` 注入 + 三个真 bug 修复 + 检索 IDF 重写（§12.3）
 - ✅ Phase 3 任务集：主集 30 + 压力集 10 + 留出 6；lint 0 error（§12.4）
-- ⬜ 未实现：`app/sources/`（官方源）、chunk RAG baseline、60 query 回归夹具
+- ✅ chunk RAG 基线 + 结构感知第三臂 + `get_rows` + 多来源引用（§12.4.13）
+- ⬜ 未实现：`app/sources/`（官方源）、60 query 回归夹具
 
 ## 附录 A：官方来源发现流程
 
