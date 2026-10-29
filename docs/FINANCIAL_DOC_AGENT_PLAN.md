@@ -704,8 +704,135 @@ python -m evaluation.score_agent_runs --corpus finance --runs %TEMP%\fin_runs.js
 （3000 / 6000ms），金融一条题 15s，**必然红**。它们已标"未校准·不拦截"，
 下一步按 baseline 重设，不要当成产品不合格。
 
+#### 12.4.10 复杂题集：Agent vs 普通 RAG 的预注册（2026-10-28，跑前固定）
+
+要回答的问题只有一个：**Agent 多花的 token，是否买到了足够的查证质量提升？**
+
+**预注册纪律**（先写死，再跑；跑完不许改题改阈值）：
+
+| 项 | 固定值 |
+|---|---|
+| 题集 | `evaluation/finance_tasks_complex.jsonl`，12 题 = 4 桶 × 3（跨表 / 跨文档 / 计算 / 证据不足） |
+| 文件 sha256 | `32cc6ad8089400ad1a3317f1c4a675380ea2eecf26205f04b1c45b83a1ac94f7` |
+| 判据 1 | 复杂题通过率提升 **≥15 个百分点** |
+| 判据 2 | 每题增量 token **≤20,000**（Agent − RAG，不是 Agent 总量） |
+| 硬门禁 | 编造（`forbidden_hit` / `grounded=false`）、引用硬错误（标记无法解析 / 引到非证据 / 引用不支持要点）、运行崩溃 → 该题直接不通过，单独计数，不被平均分掩盖 |
+
+为什么不用主集 30 条：里面多步题只有 6 条，15 个百分点 = 0.9 题，分辨率不够。
+12 条上 15pp ≈ 1.8 题，仍然粗，所以结论同时报 Wilson 区间与逐题翻转。
+
+**两臂定义**（同一模型、同一语料、同一问题、逐题配对）：
+
+| | Agent 臂 | RAG 臂 |
+|---|---|---|
+| 切片 | 章节 + 整张表（结构单元，3956） | 512 字固定窗 + 20% 重叠（4115 段，表格拍平成文字） |
+| 工具 | `search_sections` / `read_section` / `get_table` / `get_cell` / `calculate` | 无（检索由流水线做，一次 `search_chunks`） |
+| 轮次 | 最多 5 轮工具 + 收口 + 补算 | 检索一次 → 生成一次 |
+| 检索 | IDF + 路径加权（表内单元格可精确取） | bge-small-zh 向量 + BM25，RRF 融合；按公司元数据过滤；top-8 |
+| 计算 | `calculate` 留痕、可复算 | 模型心算，不许写公式 |
+
+RAG 臂**不是稻草人**：向量 + 关键词混合、metadata 过滤、top-8 片段（≈2.5k token）
+都是正常配置；它真正缺的是"表格结构 + 多轮重取 + 可复算"。
+
+命令：
+
+```bash
+python -m evaluation.run_finance_eval --tasks evaluation/finance_tasks_complex.jsonl --variant improved --runs 1 --out %TEMP%\agent_cx.json
+python -m evaluation.run_rag_eval --tasks evaluation/finance_tasks_complex.jsonl --runs 1 --out %TEMP%\rag_cx.json
+python -m evaluation.score_agent_runs --corpus finance --tasks evaluation/finance_tasks_complex.jsonl --runs %TEMP%\agent_cx.json --out %TEMP%\agent_cx_report.json
+python -m evaluation.score_agent_runs --corpus finance --tasks evaluation/finance_tasks_complex.jsonl --runs %TEMP%\rag_cx.json --out %TEMP%\rag_cx_report.json
+python -m evaluation.compare_arms --agent-report %TEMP%\agent_cx_report.json --agent-runs %TEMP%\agent_cx.json \
+    --rag-report %TEMP%\rag_cx_report.json --rag-runs %TEMP%\rag_cx.json \
+    --tasks evaluation/finance_tasks_complex.jsonl --out %TEMP%\compare_cx.json
+```
+
+#### 12.4.11 第一轮配对结果（2026-10-28，k=1）
+
+⚠️ k=1、n=12：以下是**方向性读数**，不是能力结论。Wilson 区间宽 ±20pp 以上。
+
+| | Agent | RAG 基线 | 差 |
+|---|---|---|---|
+| 任务级通过（评分契约：要点 + 锚点 + 硬门禁） | 5/12 = 41.7% [19.3, 68.0] | 3/12 = 25.0% [8.9, 53.2] | **+16.7pp** |
+| 语义全对（只看 judge 要点，不看引用锚点） | 9/12 = 75.0% | 7/12 = 58.3% | **+16.7pp** |
+| 要点级正确率 | 38/43 = 88.4% | 27/43 = 62.8% | +25.6pp |
+| 引用精度（被引段落是否支撑要点） | 95.4% | 69.8% | +25.6pp |
+| 命中硬门禁的题 | 2 | 6 | −4 |
+| token/题 | 45,127 | 3,824 | **+41,303** |
+| 模型调用/题 | 7 | 1 | +6 |
+| 延迟中位 | 25.2s | 7.6s | +17.6s |
+| 每 1 万 token 答对 | 0.09 题 | **0.65 题** | −0.56 |
+
+分桶（语义全对口径；括号内为评分契约口径）：
+
+| 桶 | Agent | RAG | token 增量/题 |
+|---|---|---|---|
+| cross_table（3） | 2/3（2/3） | 2/3（2/3） | +42,443 |
+| cross_doc（3） | 1/3（0/3） | 0/3（0/3） | +31,841 |
+| calc（3） | 3/3（2/3） | 2/3（1/3） | +49,785 |
+| insufficient（3） | 3/3（3/3） | 3/3（2/3） | +41,144 |
+
+**按预注册判据：不划算。**
+- 质量臂：+16.7pp ≥ 15pp，**勉强达标**；但只靠 2 题翻转（RAG 赢 Agent 的 0 题），
+  精确 McNemar p=0.50，统计上分不出。
+- 成本臂：+41,303 token/题 > 20,000，**超支 2 倍**。每多答对 1 题花 247,820 token。
+
+**这轮暴露的四件事（比结论本身重要）：**
+
+1. **两种口径给出的差值完全一致（+16.7pp），但绝对值差很多**：评分契约（41.7% vs 25.0%）
+   把"引用锚点没落在真值表"也算失败，而 RAG 的证据单位是 512 字窗口，
+   经常引到"含同一数字的相邻章节"。锚点检查对 RAG 结构性偏严——**引用准确率要按语义判
+   （引用精度 95% vs 70%），不能只看锚点命中**。
+2. **Agent 的优势不在"多过几题"，在"少翻车"**：硬门禁 2 vs 6、引用精度 95% vs 70%、
+   要点级 88% vs 63%。任务级全对才算过把 6 要点题变成全或无：CX-01 五对一错
+   （9.08 vs 9.09 的舍入）整题判败。**下一步要么减要点数，要么引入要点级记分**。
+3. **翻转的两题都在"多文档 / 计算"**：CX-05（跨 2024/2025 两份年报比增速）与
+   CX-09（茅台两率差）。跨表三题两边打平——**"跨表"不是 Agent 的差异化场景，
+   至少这一版不是**。CX-04 反而是 Agent 的真失败：只找到 2025 年报就宣称 2024 数据不可得。
+4. **成本结构与预期相反**：45k/题里，重取表格与证据回填占大头，不是系统提示词。
+   要压到 20k 以内，得同时砍轮次（7→4）和表格重复读取，换个短 prompt 不够。
+
+**简单题对照（RAG 单跑 6 条 single_hop，另算）**：要点级 9/9 全对，
+但评分契约只过 3/6——失败全是"引用锚点不在真值表"，不是答案错。
+这条支持"简单题走 RAG"，但前提是把引用检查改成语义判，否则报表会把 RAG 的
+正确率压掉一半。
+
+#### 12.4.12 回答闸门（2026-10-29）
+
+第一轮复杂题暴露的四类行为问题，各加了一道**确定性闸门**。闸门不判答案对错，
+只判“这一步做了没有”；触发后最多追加一轮补救，补不回来就在 trace 里留痕。
+
+| 闸门 | 触发条件 | 动作 | trace 标记 |
+|---|---|---|---|
+| 期间不支持 | 问题点名晚于本地语料最新报告期的年份（2026 Q1） | 直接拒答，禁止给相邻期间数字 | `unsupported_period` |
+| 跨文档覆盖 | 问题点名 ≥2 家公司，或明确写了两份年报/两个年度，但证据缺文档 | 补检索/补读缺失文档 | `coverage_repair` / `coverage_unresolved` |
+| 拒答数值泄漏 | 结论是拒答（无法确定/未披露/不包含），正文却有金额或比率 | 只重写文字，删掉具体数值 | `abstain_rewrite` / `abstain_numeric_leak` |
+| 补算 | 答案里的比率在证据原文中找不到，且没有 `calculate` 记录 | 调 `calculate` 后重写 | `calc_repair` |
+| 单元格引用 | 答案引用了表级证据且有数值，但没引用任何 cell | 调 `get_cell` 后重写 | `cell_repair` / `cell_citation_missing` |
+
+**轮次语义修正**：`max_tool_rounds` 现在指“工具回合”，收口单独留一轮；
+最后一轮用 `tool_choice="none"` 强制出答案。闸门批下的补救轮重新允许工具，
+补救完再收口。回合用尽后 fallback 生成的答案，也会在循环外补跑一遍闸门。
+
+**检索预算**：`search_sections` 每条任务最多 5 次；覆盖修复时临时加 2 次。
+超预算返回 `unavailable`，逼模型去 `read_section / get_table / get_cell`。
+
+**2026-10-29 冒烟（2 题，各 1 次）**：
+
+- `CX-04`：answered，结论“一致”，4 条单元格引用（两份年报的 `t0006` 行/列都能对上），
+  13 步 / 40.5k token / 1 次 `cell_repair`。修复前是同题 5 轮工具后 fallback、
+  只读一份年报就判“无法确定”。
+- `FIN-15`：abstained，答案不含任何具体数值，8 步 / 21.1k token，
+  触发 `unsupported_period`。修复前会补一句 2025 Q1 的 127,838,538 千元。
+- 后端全量 **255 passed**。
+
+**边界**：覆盖闸门只到“文档级”，不保证读到文档里的正确表格；CX-04 的
+真正修复来自 `cell_repair` 逼出的 `get_cell`——模型借这个动作读到了此前没打开的
+2025 年 `t0006`。12 题两臂复跑尚未做，成本增量未知。
+
 ### 12.5 下一步
 
+- 12 题两臂复跑（先跑 4 题探针）：验证 §12.4.12 的闸门效果。验收：硬门禁不劣于第一轮；
+  单元格命中从 0/24 起量；负样本拒答不再夹带相邻期间数字；记录每题的补救轮与 token 增量
 - 主集跑满 30 条 × 3 次（pass^k 需要 k≥3），出第一份五维剖面
 - chunk RAG baseline（纯文本切块、无表结构、无 calc）→ 与结构化路由做成对 A/B（McNemar）
 - 60 query 工具层回归夹具（与 30 条能力剖面分开维护）
