@@ -12,8 +12,8 @@
 
 | 级别 | 命中条件 |
 |---|---|
-| 页码 | 被引用的 chunk 解析到的页码 == 证据表所在页 |
-| 表格 | 引用的 base id == 证据表 id |
+| 页码 | 被引用窗口覆盖的任一来源页码 == 证据表所在页（至少 8 字重叠） |
+| 表格 | 被引用窗口覆盖的任一来源 id == 证据表 id（至少 8 字重叠） |
 | 单元格 | 引用形如 `doc#table#row_index#column_name`，且行列与 evidence 一致 |
 
 RAG 臂的引用是 `doc#table#cNNNN`（512 字窗口），**单元格级天然为 0**——这正是
@@ -23,6 +23,11 @@ RAG 臂的引用是 `doc#table#cNNNN`（512 字窗口），**单元格级天然�
 from __future__ import annotations
 
 from app.finance.store import FinanceStore
+
+# 一个窗口扫过某来源 1–2 个字符，不足以支撑“引到了这张表/这一页”。
+# 多来源全部保留在 run 文件里，但锚点命中只认至少 8 个字符的重叠；
+# 8 字足以覆盖一个金额或指标名，又不会把窗口边界的标点算成证据。
+ANCHOR_MIN_SPAN_CHARS = 8
 
 
 def _base(chunk_id: str) -> str:
@@ -46,13 +51,46 @@ def _page_of(chunk_id: str, store: FinanceStore) -> int | None:
     return None
 
 
-def _cell_matches(chunk_id: str, evidence: dict, store: FinanceStore) -> bool:
-    parts = str(chunk_id or "").split("#")
-    # 只有 get_cell 的锚点才是四段且第三段是行号；RAG 的 `#cNNNN` 不算
-    if len(parts) != 4 or not parts[2].isdigit():
-        return False
+def _rows_cover_cell(chunk_id: str, evidence: dict, store: FinanceStore) -> bool:
+    """get_rows 的行组锚点是否覆盖目标单元格。
+
+    行组证据不是"某个单格"，但若它明确携带目标行号、目标列号、页码和单位，
+    审计上仍能定位到那一格；不能因为没用 get_cell 就记成 0。
+    """
     table_id = str(evidence.get("table_id") or "")
-    if _base(chunk_id) != table_id:
+    prefix = f"{table_id}#rows#"
+    chunk_id = str(chunk_id or "")
+    if not table_id or not chunk_id.startswith(prefix):
+        return False
+    rest = chunk_id[len(prefix):]
+    if "#cols#" not in rest:
+        return False
+    row_part, column_part = rest.split("#cols#", 1)
+    try:
+        row_indices = {int(value) for value in row_part.split(",") if value != ""}
+        column_indices = {int(value) for value in column_part.split(",") if value != ""}
+        table = store.get_table(table_id)
+        want_row = store._resolve_row(table.get("rows") or [], evidence.get("row"))
+        column = evidence.get("column")
+        if isinstance(column, int):
+            want_column = column
+        else:
+            want_column = store._resolve_column(table.get("columns") or [], column)
+    except Exception:  # noqa: BLE001
+        return False
+    return want_row in row_indices and want_column in column_indices
+
+
+def _cell_matches(chunk_id: str, evidence: dict, store: FinanceStore) -> bool:
+    # get_cell 的锚点：表 id 后接行号、列名两段（表 id 自身含 #，所以不是固定四段）。
+    if _rows_cover_cell(chunk_id, evidence, store):
+        return True
+    table_id = str(evidence.get("table_id") or "")
+    if not table_id or not str(chunk_id).startswith(f"{table_id}#"):
+        return False
+    suffix = str(chunk_id)[len(table_id) + 1:]
+    parts = suffix.split("#")
+    if len(parts) != 2 or not parts[0].isdigit() or parts[1] == "rows":
         return False
     table = store.get_table(table_id)
     try:
@@ -64,12 +102,54 @@ def _cell_matches(chunk_id: str, evidence: dict, store: FinanceStore) -> bool:
             want_column = str(column)
     except Exception:  # noqa: BLE001
         return False
-    return int(parts[2]) == want_row and _norm(parts[3]) == _norm(want_column)
+    return int(parts[0]) == want_row and _norm(parts[1]) == _norm(want_column)
+
+
+def _cited_sources(result: dict, citation_id: str, store: FinanceStore) -> list[dict]:
+    """一个引用锚点实际覆盖的来源；没有多条来源记录时退回单一锚点解析。
+
+    固定窗 chunk 现在带 `source_spans`，窗口跨章节/表格时全部保留。
+    Agent 的 section/table/cell 锚点没有该字段，仍按原方式解析。
+    """
+    evidence_by_id = {
+        str(item.get("chunk_id") or ""): item
+        for item in result.get("evidence") or []
+        if isinstance(item, dict)
+    }
+    item = evidence_by_id.get(citation_id) or {}
+    spans = item.get("source_spans")
+    if isinstance(spans, list) and spans:
+        return [
+            {
+                "source_id": str(span.get("source_id") or ""),
+                "page": span.get("page"),
+                "kind": span.get("kind") or "",
+                "chars": span.get("chars"),
+            }
+            for span in spans
+            if isinstance(span, dict)
+            and (
+                not isinstance(span.get("chars"), (int, float))
+                or int(span.get("chars") or 0) >= ANCHOR_MIN_SPAN_CHARS
+            )
+        ]
+    return [
+        {
+            "source_id": _base(citation_id),
+            "page": _page_of(citation_id, store),
+            "kind": "",
+        }
+    ]
 
 
 def anchor_report(task: dict, result: dict, store: FinanceStore) -> dict:
     """返回 {points, page_hits, table_hits, cell_hits, details}。"""
     citations = [str(item.get("chunk_id") or "") for item in result.get("citations") or []]
+    cited_sources = [
+        source
+        for citation_id in citations
+        for source in _cited_sources(result, citation_id, store)
+    ]
     points = 0
     page_hits = 0
     table_hits = 0
@@ -89,8 +169,13 @@ def anchor_report(task: dict, result: dict, store: FinanceStore) -> dict:
             table_page = int(store.get_table(table_id).get("page") or 0)
         except Exception:  # noqa: BLE001
             table_page = 0
-        page_hit = any(_page_of(cid, store) == table_page and table_page for cid in citations)
-        table_hit = any(_base(cid) == table_id for cid in citations)
+        page_hit = any(
+            table_page and int(source.get("page") or 0) == table_page
+            for source in cited_sources
+        )
+        table_hit = any(
+            str(source.get("source_id") or "") == table_id for source in cited_sources
+        )
         cell_hit = any(_cell_matches(cid, evidence, store) for cid in citations)
         page_hits += 1 if page_hit else 0
         table_hits += 1 if table_hit else 0
@@ -103,6 +188,7 @@ def anchor_report(task: dict, result: dict, store: FinanceStore) -> dict:
                 "page_hit": page_hit,
                 "table_hit": table_hit,
                 "cell_hit": cell_hit,
+                "source_count": len(cited_sources),
             }
         )
     return {

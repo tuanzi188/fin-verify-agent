@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import math
 from functools import lru_cache
-from pathlib import Path
 
 from app.services.chunker import FixedChunker
 from evaluation.finance_corpus import DOCUMENT_DIR
@@ -83,6 +82,37 @@ def _document_stream(document: dict) -> tuple[str, list[tuple[int, int, str, str
     return "".join(parts), spans
 
 
+def _source_spans(
+    spans: list[tuple[int, int, str, str, int | None]],
+    start: int,
+    end: int,
+) -> list[dict]:
+    """窗口覆盖的全部原文来源，按重叠字符数降序。
+
+    固定窗不保证只落在一个章节或一张表里。只记"重叠最多的那个 source_id"
+    会把窗口里真实包含的其它来源抹掉，引用定位因此系统性偏低——这是量具错误。
+    来源只用于归因与引用核验，不改检索正文，也不改 chunk_id 的兼容口径。
+    """
+    found = []
+    for item in spans:
+        left = max(start, item[0])
+        right = min(end, item[1])
+        if right <= left:
+            continue
+        found.append(
+            {
+                "source_id": item[3],
+                "kind": item[2],
+                "page": item[4],
+                "start": left,
+                "end": right,
+                "chars": right - left,
+            }
+        )
+    found.sort(key=lambda item: (-item["chars"], str(item["source_id"])))
+    return found
+
+
 def _overlap(spans: list[tuple[int, int, str, str, int | None]], start: int, end: int) -> tuple[str, str, int | None]:
     """取与窗口重叠最多的元素；同长度时**表格优先**。
 
@@ -91,18 +121,18 @@ def _overlap(spans: list[tuple[int, int, str, str, int | None]], start: int, end
     就会永远记成没命中——那是量具错误，不是基线能力差。这个偏好只影响归因，
     不影响检索本身（检索只看 content）。
     """
-    best: tuple[int, int, str, str, int | None] | None = None
-    for item in spans:
-        left = max(start, item[0])
-        right = min(end, item[1])
-        if right <= left:
-            continue
-        weight = right - left
-        if best is None or weight > best[0] or (weight == best[0] and item[2] == "table"):
-            best = (weight, 0, item[2], item[3], item[4])
-    if best is None:
+    sources = _source_spans(spans, start, end)
+    if not sources:
         return "section", "", None
-    return best[2], best[3], best[4]
+    # 表格优先只在最高权重相同时生效；source_spans 已按权重排序。
+    top_weight = sources[0]["chars"]
+    for item in sources:
+        if item["chars"] != top_weight:
+            break
+        if item["kind"] == "table":
+            return item["kind"], item["source_id"], item["page"]
+    first = sources[0]
+    return first["kind"], first["source_id"], first["page"]
 
 
 @lru_cache(maxsize=1)
@@ -124,11 +154,16 @@ def rag_chunks() -> list[dict]:
             if not text:
                 continue
             kind, source_id, page = _overlap(spans, start, start + chunker.chunk_size)
+            source_spans = _source_spans(spans, start, start + chunker.chunk_size)
             chunks.append(
                 {
                     "chunk_id": f"{source_id}#c{index:04d}",
                     "doc_id": doc_id,
                     "source_id": source_id,
+                    "source_ids": [
+                        item["source_id"] for item in source_spans if item["source_id"]
+                    ],
+                    "source_spans": source_spans,
                     "kind": kind,
                     "page": page,
                     "title": f"{company} {period} {doc_type}".strip(),
