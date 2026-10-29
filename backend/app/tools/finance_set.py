@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.agent.prompts import (
@@ -28,6 +29,21 @@ from app.tools.toolset import Injector, ToolOutcome, evidence_item
 MAX_SECTION_CHARS = 6000
 MAX_TABLE_CHARS = 3000
 MAX_CELL_CHARS = 400
+# 检索预算：超过这个次数后不再执行 search_sections，逼模型去读已定位的内容。
+# 2026-10-28 实测 CX-11 搜了 9 次、CX-12 搜了 7 次，token 全花在换关键词上。
+MAX_SEARCH_CALLS = 5
+
+# 覆盖检查用的词表。只做"问题点名了哪些公司/年度/文档"的粗判，
+# 不做语义理解；判断结果只用于"要不要补读"，不用于判分。
+_COMPANY_ALIASES = (
+    ("美的", "美的集团"),
+    ("比亚迪", "比亚迪"),
+    ("茅台", "贵州茅台"),
+    ("天顺", "天顺风能"),
+)
+_YEAR_PATTERN = re.compile(r"(20\d{2})\s*年")
+_DOC_WORD_PATTERN = re.compile(r"年报|年度报告|募集说明书|募集书|招股说明书")
+_DOC_TYPE_LABELS = {"annual_report": "年报", "prospectus": "募集说明书"}
 
 # 截断注入的长度。制度库用 12 字，因为那里一个 chunk 25–70 字；
 # 金融这里要短到"数字必坏"：`456,451,731` 是 11 个字符，12 字截断等于不截断。
@@ -98,6 +114,10 @@ class FinanceToolset:
         #: 每次 calculate 的 {formula, inputs, result}，供硬门禁与报告使用
         self.calcs: list[dict] = []
         self._injector = Injector(injections)
+        #: 每个工具本条的调用次数，用于检索预算
+        self._tool_calls: dict[str, int] = {}
+        #: search_sections 剩余预算；覆盖修复时由 runner 临时加
+        self._search_budget = MAX_SEARCH_CALLS
 
     # ------------------------------------------------------------------
     # 注入与复用
@@ -111,6 +131,8 @@ class FinanceToolset:
         """
         self.calcs = []
         self._injector = Injector(injections)
+        self._tool_calls = {}
+        self._search_budget = MAX_SEARCH_CALLS
 
     @property
     def planned_injections(self) -> int:
@@ -123,6 +145,109 @@ class FinanceToolset:
     @property
     def calls(self) -> int:
         return self._injector.calls
+
+    def grant_search_budget(self, extra: int = 2) -> None:
+        """覆盖修复时临时加检索预算：缺文档必须能搜到，不能被总预算卡死。"""
+        try:
+            self._search_budget += max(0, int(extra))
+        except (TypeError, ValueError):
+            self._search_budget += 2
+
+    # ------------------------------------------------------------------
+    # 覆盖检查（跨文档）
+    # ------------------------------------------------------------------
+
+    def coverage_gaps(self, question: str, evidence: list[dict]) -> list[str]:
+        """问题点名的文档里，证据中一份都没读到的，返回缺失清单。
+
+        只在两种情况下要求“多份文档”：
+        - 问题点名 ≥2 家公司（每家至少一份对应年度的文档）；
+        - 问题明确写到两份文档/两个年度（“2024 年年报和 2025 年年报”）。
+
+        单公司单年度的题不要求跨文档：否则“2025 年营收同比”会被误判成
+        “必须再读 2024 年报”，而同比数据本来就在 2025 年报的上期列里。
+        """
+        docs = self.toolbox.store.list_documents()
+        text = str(question or "")
+        if not text or not docs:
+            return []
+
+        companies: list[str] = []
+        for alias, full in _COMPANY_ALIASES:
+            if alias in text and full not in companies:
+                companies.append(full)
+        years = sorted(set(_YEAR_PATTERN.findall(text)))
+        doc_words = len(_DOC_WORD_PATTERN.findall(text))
+        explicit_multi_doc = doc_words >= 2 or ("两份" in text and bool(years))
+        multi_company = len(companies) >= 2
+
+        required: list[dict] = []
+        if multi_company:
+            for company in companies:
+                company_docs = [d for d in docs if d.get("company") == company]
+                target_years = years or sorted(
+                    {str(d.get("period")) for d in company_docs if d.get("period")},
+                    reverse=True,
+                )[:1]
+                for year in target_years:
+                    required.extend(
+                        d for d in company_docs if str(d.get("period")) == year
+                    )
+        elif explicit_multi_doc and years:
+            for year in years:
+                candidates = [
+                    d for d in docs
+                    if str(d.get("period")) == year
+                    and (not companies or d.get("company") in companies)
+                ]
+                if candidates:
+                    required.append(candidates[0])
+        elif explicit_multi_doc:
+            pool = [d for d in docs if not companies or d.get("company") in companies]
+            required = pool[:2]
+
+        evidence_doc_ids = {
+            str(item.get("doc_id"))
+            for item in evidence or []
+            if item.get("doc_id")
+        }
+        gaps: list[str] = []
+        seen: set[str] = set()
+        for doc in required:
+            doc_id = str(doc.get("doc_id") or "")
+            if not doc_id or doc_id in seen or doc_id in evidence_doc_ids:
+                continue
+            seen.add(doc_id)
+            label = _DOC_TYPE_LABELS.get(
+                str(doc.get("doc_type")), str(doc.get("doc_type") or "文档")
+            )
+            gaps.append(
+                f"{doc.get('company')} {doc.get('period')} 年{label}（{doc_id}）"
+            )
+        return gaps
+
+    def unsupported_periods(self, question: str) -> list[str]:
+        """问题要求晚于本地语料最新报告期的年份（如 2026 Q1）。
+
+        这类题的正确行为是拒答，不是拿 2025 年的数字顶上。
+        只判“未来年份”；更早的年份不判——2024 年报里可能带 2023 比较期，
+        拿年份差去判会把“比 2023 年增加多少”误伤成不可回答。
+        """
+        docs = self.toolbox.store.list_documents()
+        years = sorted({int(y) for y in _YEAR_PATTERN.findall(str(question or ""))})
+        available = [
+            int(str(d.get("period")))
+            for d in docs
+            if str(d.get("period") or "").isdigit()
+        ]
+        if not years or not available:
+            return []
+        latest = max(available)
+        return [
+            f"{year} 年（本地语料最新到 {latest} 年）"
+            for year in years
+            if year > latest
+        ]
 
     # ------------------------------------------------------------------
     # Toolset 契约
@@ -137,6 +262,22 @@ class FinanceToolset:
     async def call(self, name: str, arguments: dict) -> ToolOutcome:
         arguments = arguments or {}
         mode = self._injector.take()
+        self._tool_calls[name] = self._tool_calls.get(name, 0) + 1
+        # 检索预算：只拦 search_sections，读原文/取单元格/计算都不限次。
+        # 返回 ok=False 而不是空结果，是为了让 trace 能区分"预算用完"和"没搜到"。
+        if name == "search_sections":
+            if self._search_budget <= 0:
+                return ToolOutcome(
+                    tool=name,
+                    ok=False,
+                    error_kind="unavailable",
+                    error_detail=(
+                        "search_sections 的检索预算已用完；"
+                        "请改用 read_section / get_table / get_cell 读取已定位的内容，"
+                        "不要再用同义关键词检索"
+                    ),
+                )
+            self._search_budget -= 1
         if mode is not None:
             return await self._injected(name, arguments, mode)
 
