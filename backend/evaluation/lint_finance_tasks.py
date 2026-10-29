@@ -158,6 +158,9 @@ def _lint_calc(task: dict) -> tuple[list[str], list[str]]:
 def _lint_tier(tasks: list[dict], tier: str) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+    if tier == "complex":
+        # 复杂集的路数由 `_lint_complex` 单独管：它不设留出，也不套主集的维度配比
+        return errors, warnings
     if tier == "stress":
         for task in tasks:
             tag = task.get("id") or "?"
@@ -177,10 +180,42 @@ def _lint_tier(tasks: list[dict], tier: str) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+COMPLEX_TYPES = ("cross_table", "cross_doc", "calc", "insufficient")
+COMPLEX_MIN_TASKS = 12
+
+
+def _lint_complex(tasks: list[dict]) -> tuple[list[str], list[str]]:
+    """复杂集是「Agent 多花的钱值不值」的主判据，跑前必须固定且分桶可核。"""
+    errors: list[str] = []
+    warnings: list[str] = []
+    if len(tasks) < COMPLEX_MIN_TASKS:
+        errors.append(
+            f"复杂集只有 {len(tasks)} 条，少于 {COMPLEX_MIN_TASKS}：15 个百分点的分辨率会退化成一题"
+        )
+    for task in tasks:
+        tag = task.get("id") or "?"
+        kind = str(task.get("complex_type") or "")
+        if kind not in COMPLEX_TYPES:
+            errors.append(f"[{tag}] complex_type 非法: {kind!r}，只能是 {COMPLEX_TYPES}")
+        if task.get("holdout"):
+            errors.append(f"[{tag}] 复杂集不设留出：这一集本身就是固定判据")
+        if task.get("tool_constraints"):
+            errors.append(f"[{tag}] 复杂集不许写 tool_constraints：两臂工具不同，写工具名会让对照胜负由任务卡决定")
+    counts = {kind: 0 for kind in COMPLEX_TYPES}
+    for task in tasks:
+        kind = str(task.get("complex_type") or "")
+        if kind in counts:
+            counts[kind] += 1
+    for kind, count in counts.items():
+        if count == 0:
+            errors.append(f"复杂集缺少 {kind} 桶：四桶必须都有，否则回答不了'哪类问题 Agent 才值'")
+    return errors, warnings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="金融任务集 lint")
     parser.add_argument("--tasks", default=DEFAULT_PROFILE)
-    parser.add_argument("--tier", choices=("profile", "stress"), default="profile")
+    parser.add_argument("--tier", choices=("profile", "stress", "complex"), default="profile")
     parser.add_argument("--holdout-only", action="store_true", help="只看留出集")
     args = parser.parse_args()
 
@@ -206,6 +241,10 @@ def main() -> int:
     tier_errors, tier_warnings = _lint_tier(tasks, args.tier)
     errors.extend(tier_errors)
     warnings.extend(tier_warnings)
+    if args.tier == "complex":
+        complex_errors, complex_warnings = _lint_complex(tasks)
+        errors.extend(complex_errors)
+        warnings.extend(complex_warnings)
 
     dimension_counter: dict[str, int] = {}
     for task in tasks:

@@ -114,7 +114,7 @@ def main() -> int:
                 "variant": args.variant,
                 "runs_per_task": max(1, args.runs),
                 "toolset": toolset.name,
-                "model": MODEL_CONFIG.get("model"),
+                "model": (MODEL_CONFIG.get("flash") or {}).get("model"),
                 "model_provider": MODEL_PROVIDER,
                 "corpus_version": "finance-7docs-v1",
                 "tasks_file": str(tasks_path),
