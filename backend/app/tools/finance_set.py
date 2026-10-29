@@ -74,7 +74,7 @@ def _cut_payload(name: str, data: Any) -> Any:
         return [{**item, "snippet": _cut(item.get("snippet"))} for item in data]
     if name == "read_section" and isinstance(data, dict):
         return {**data, "text": _cut(data.get("text"))}
-    if name == "get_table" and isinstance(data, dict):
+    if name in ("get_table", "get_rows") and isinstance(data, dict):
         rows = data.get("rows") or []
         return {**data, "rows": rows[:1], "truncated": True}
     if name == "get_cell" and isinstance(data, dict):
@@ -96,6 +96,26 @@ def _render_table(table: dict) -> str:
         if sum(len(line) for line in lines) > MAX_TABLE_CHARS:
             lines.append("…[表格过长，已截断，按需用 get_cell 取具体单元格]")
             break
+    return "\n".join(lines)
+
+
+def _render_rows(rows: dict) -> str:
+    head = (
+        f"表 {rows.get('table_id')}｜{rows.get('caption') or '无标题'}"
+        f"｜PDF 第 {rows.get('page')} 页"
+    )
+    if rows.get("page_end") and rows.get("page_end") != rows.get("page"):
+        head += f"–{rows.get('page_end')}"
+    head += f"｜单位：{rows.get('unit') or '未标注'}（来源：{rows.get('unit_source') or '未标注'}）"
+    columns = [str(name) for name in rows.get("columns") or []]
+    lines = [head, "行号 | " + " | ".join(columns)]
+    for row in rows.get("rows") or []:
+        values = " | ".join(
+            "None" if value is None else str(value) for value in row.get("values") or []
+        )
+        lines.append(f"{row.get('row')} | {values}")
+    if rows.get("footnote"):
+        lines.append(f"脚注：{rows.get('footnote')}")
     return "\n".join(lines)
 
 
@@ -349,6 +369,14 @@ class FinanceToolset:
             return [str(data.get("section_id") or "")], 1
         if name == "get_table" and isinstance(data, dict):
             return [str(data.get("table_id") or "")], 1
+        if name == "get_rows" and isinstance(data, dict):
+            anchor = (
+                f"{data.get('table_id')}#rows#"
+                + ",".join(str(index) for index in data.get("row_indices") or [])
+                + "#cols#"
+                + ",".join(str(index) for index in data.get("column_indices") or [])
+            )
+            return [anchor], 1
         if name == "get_cell" and isinstance(data, dict):
             anchor = f"{data.get('table_id')}#{data.get('row')}#{data.get('column')}"
             return [anchor], 1
@@ -415,6 +443,36 @@ class FinanceToolset:
                     truncated=truncated,
                     table_caption=data.get("caption") or "",
                     unit=data.get("unit") or "",
+                    doc_id=data.get("doc_id"),
+                )
+            ]
+
+        if name == "get_rows" and isinstance(data, dict):
+            rendered = _render_rows(data)
+            content, truncated = _truncate(rendered, MAX_TABLE_CHARS + 200)
+            anchor = (
+                f"{data.get('table_id')}#rows#"
+                + ",".join(str(index) for index in data.get("row_indices") or [])
+                + "#cols#"
+                + ",".join(str(index) for index in data.get("column_indices") or [])
+            )
+            return [
+                evidence_item(
+                    chunk_id=anchor,
+                    title=f"{data.get('title') or ''}｜{data.get('table_caption') or '表格'}",
+                    content=content,
+                    kind="rows",
+                    page=data.get("page"),
+                    truncated=truncated,
+                    table_id=data.get("table_id"),
+                    table_caption=data.get("table_caption") or "",
+                    unit=data.get("unit") or "",
+                    row_indices=list(data.get("row_indices") or []),
+                    column_indices=list(data.get("column_indices") or []),
+                    row_name="、".join(
+                        str(row.get("row_name") or "")
+                        for row in data.get("rows") or []
+                    ),
                     doc_id=data.get("doc_id"),
                 )
             ]

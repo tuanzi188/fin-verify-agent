@@ -440,7 +440,19 @@ def _public_evidence(evidence: list[dict], limit: int = 400) -> list[dict]:
         }
         if isinstance(item.get("similarity"), (int, float)):
             row["similarity"] = item["similarity"]
-        for key in ("path", "table_id", "row_name", "column", "cell_text", "unit", "doc_id"):
+        for key in (
+            "path",
+            "table_id",
+            "table_caption",
+            "row_name",
+            "row_indices",
+            "column",
+            "column_indices",
+            "cell_text",
+            "unit",
+            "doc_id",
+            "source_spans",
+        ):
             if item.get(key) is not None:
                 row[key] = item[key]
         rows.append(row)

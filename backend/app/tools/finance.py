@@ -54,6 +54,14 @@ class FinanceToolbox:
     def get_cell(self, table_id: str, row: int | str, column: int | str) -> dict:
         return self.store.get_cell(table_id, row, column)
 
+    def get_rows(
+        self,
+        table_id: str,
+        rows: list[int | str],
+        columns: list[int | str] | None = None,
+    ) -> dict:
+        return self.store.get_rows(table_id, rows, columns)
+
     def search_sections(
         self,
         query: str,
@@ -87,6 +95,15 @@ class FinanceToolbox:
                     str(arguments.get("table_id") or ""),
                     arguments.get("row"),
                     arguments.get("column"),
+                )
+            elif name == "get_rows":
+                rows = arguments.get("rows")
+                if not isinstance(rows, list):
+                    raise CalculationError("rows 必须是数组")
+                data = self.get_rows(
+                    str(arguments.get("table_id") or ""),
+                    rows,
+                    arguments.get("columns"),
                 )
             elif name == "calculate":
                 data = self.calculate(
@@ -164,6 +181,39 @@ GET_TABLE_SPEC = {
     },
 }
 
+GET_ROWS_SPEC = {
+    "type": "function",
+    "function": {
+        "name": "get_rows",
+        "description": (
+            "按 table_id 读取指定的相关行，返回表名、列名、每行数值、行号、列号、单位、脚注和页码。"
+            "普通查数优先用它：比 get_cell 多给同组上下文，又比 get_table 少读无关行。"
+            "rows 必须显式列出首列行名或行号（1–20 行）；columns 可只选相关列，省略则读全部列。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "table_id": {"type": "string"},
+                "rows": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "items": {"type": ["integer", "string"]},
+                    "description": "相关行的行号或首列名称，如 [\"营业收入\", \"营业成本\", \"毛利率\"]",
+                },
+                "columns": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 12,
+                    "items": {"type": ["integer", "string"]},
+                    "description": "只读取哪些列；省略读全部列。宽表优先只选相关年份/指标列。",
+                },
+            },
+            "required": ["table_id", "rows"],
+        },
+    },
+}
+
 GET_CELL_SPEC = {
     "type": "function",
     "function": {
@@ -214,6 +264,7 @@ FINANCE_TOOL_SPECS = [
     SEARCH_SECTIONS_SPEC,
     READ_SECTION_SPEC,
     GET_TABLE_SPEC,
+    GET_ROWS_SPEC,
     GET_CELL_SPEC,
     CALCULATE_SPEC,
 ]

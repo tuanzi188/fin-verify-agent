@@ -116,6 +116,23 @@ def test_finance_toolset_cell_evidence_carries_page_and_unit(tmp_path):
     assert item["chunk_id"] == f"{TABLE_ID}#{cell['row']}#{cell['column']}"
 
 
+def test_finance_toolset_rows_evidence_keeps_row_and_column_coordinates(tmp_path):
+    write_store(tmp_path)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+    rows = toolset.toolbox.get_rows(
+        TABLE_ID, ["营业收入", "净利润"], ["2025 年", "2024 年"]
+    )
+    item = toolset.to_evidence("get_rows", rows)[0]
+    assert item["citable"] is True
+    assert item["kind"] == "rows"
+    assert item["table_id"] == TABLE_ID
+    assert item["row_indices"] == [0, 1]
+    assert item["column_indices"] == [1, 2]
+    assert item["page"] == 12
+    assert "1,234" in item["content"] and "万元" in item["content"]
+    assert item["chunk_id"] == f"{TABLE_ID}#rows#0,1#cols#1,2"
+
+
 def test_finance_toolset_truncates_long_section(tmp_path):
     write_store(tmp_path)
     toolset = FinanceToolset(FinanceStore(tmp_path))

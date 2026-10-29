@@ -134,6 +134,37 @@ def test_store_get_cell_by_name_and_index(tmp_path):
     assert by_index["value"] == "1.00"
 
 
+def test_store_get_rows_keeps_coordinates_and_selected_columns(tmp_path):
+    store = FinanceStore(write_demo_document(tmp_path))
+
+    result = store.get_rows("demo-t1", ["营业收入", "归母净利润"], ["项目", "2025"])
+
+    assert result["row_indices"] == [0, 1]
+    assert result["column_indices"] == [0, 1]
+    assert result["columns"] == ["项目", "2025"]
+    assert [row["row_name"] for row in result["rows"]] == ["营业收入", "归母净利润"]
+    assert result["rows"][0]["values"] == ["营业收入", "12.34"]
+    assert result["rows"][0]["cells"][1] == {
+        "column": "2025",
+        "column_index": 1,
+        "value": "12.34",
+    }
+    assert result["caption"] == "主要会计数据"
+    assert result["page"] == 42
+
+
+def test_store_get_rows_rejects_invalid_requests(tmp_path):
+    store = FinanceStore(write_demo_document(tmp_path))
+    with pytest.raises(FinanceStoreError):
+        store.get_rows("demo-t1", [])
+    with pytest.raises(FinanceStoreError):
+        store.get_rows("demo-t1", ["营业收入", "营业收入"])
+    with pytest.raises(FinanceStoreError):
+        store.get_rows("demo-t1", ["不存在的行"])
+    with pytest.raises(FinanceStoreError):
+        store.get_rows("demo-t1", ["营业收入"], [])
+
+
 def test_store_rejects_unknown_ids(tmp_path):
     store = FinanceStore(write_demo_document(tmp_path))
     with pytest.raises(FinanceStoreError):
@@ -164,6 +195,12 @@ async def test_toolbox_call_success_and_error(tmp_path):
     assert cell.ok is True
     assert cell.data["value"] == "1.00"
 
+    rows = await toolbox.call(
+        "get_rows", {"table_id": "demo-t1", "rows": ["营业收入"], "columns": ["2025"]}
+    )
+    assert rows.ok is True
+    assert rows.data["rows"][0]["cells"][0]["value"] == "12.34"
+
     calc = await toolbox.call(
         "calculate", {"expression": "a + b", "inputs": {"a": "1", "b": "2"}}
     )
@@ -182,4 +219,4 @@ async def test_toolbox_call_success_and_error(tmp_path):
 def test_finance_tool_specs_cover_required_tools():
     names = {spec["function"]["name"] for spec in FINANCE_TOOL_SPECS}
     assert {"list_documents", "search_sections", "read_section",
-            "get_table", "get_cell", "calculate"} <= names
+            "get_rows", "get_table", "get_cell", "calculate"} <= names

@@ -247,6 +247,92 @@ class FinanceStore:
             "row_values": rows[row_index],
         }
 
+    def get_rows(
+        self,
+        table_id: str,
+        rows: list[int | str],
+        columns: list[int | str] | None = None,
+    ) -> dict:
+        """读表格中的相关行，保留表名、单位、页码与原始行列坐标。
+
+        这是 `get_cell` 和 `get_table` 之间的粒度：普通查数只需要目标行及
+        同组行，不必把几百行的整张表塞进上下文。`rows` 必须显式给出，
+        工具层不替调用方猜“哪些行相关”。
+        """
+        table = self.get_table(table_id)
+        all_rows = table["rows"]
+        all_columns = table["columns"]
+        if not isinstance(rows, list) or not rows:
+            raise FinanceStoreError("rows 必须是非空数组")
+        if len(rows) > 20:
+            raise FinanceStoreError("rows 一次最多 20 行")
+
+        row_indices: list[int] = []
+        for row in rows:
+            index = self._resolve_row(all_rows, row)
+            if index >= len(all_rows):
+                raise FinanceStoreError(f"行越界: {row}")
+            if index in row_indices:
+                raise FinanceStoreError(f"重复行: {row}")
+            row_indices.append(index)
+
+        if columns is None:
+            column_indices = list(range(len(all_columns)))
+        else:
+            if not isinstance(columns, list) or not columns:
+                raise FinanceStoreError("columns 必须是非空数组或省略")
+            if len(columns) > 12:
+                raise FinanceStoreError("columns 一次最多 12 列")
+            column_indices = []
+            for column in columns:
+                index = self._resolve_column(all_columns, column)
+                if index >= len(all_columns):
+                    raise FinanceStoreError(f"列越界: {column}")
+                if index in column_indices:
+                    raise FinanceStoreError(f"重复列: {column}")
+                column_indices.append(index)
+
+        output_rows = []
+        for index in row_indices:
+            values = all_rows[index]
+            cells = [
+                {
+                    "column": all_columns[column_index],
+                    "column_index": column_index,
+                    "value": values[column_index] if column_index < len(values) else None,
+                }
+                for column_index in column_indices
+            ]
+            output_rows.append(
+                {
+                    "row": index,
+                    "row_name": str(values[0]) if values else "",
+                    "values": [
+                        values[column_index] if column_index < len(values) else None
+                        for column_index in column_indices
+                    ],
+                    "cells": cells,
+                }
+            )
+
+        return {
+            "doc_id": table["doc_id"],
+            "title": table["title"],
+            "table_id": table["table_id"],
+            "page": table["page"],
+            "page_end": table.get("page_end", table["page"]),
+            "caption": table["caption"],
+            "table_caption": table["caption"],
+            "unit": table.get("unit", ""),
+            "unit_source": table.get("unit_source", ""),
+            "footnote": table.get("footnote") or "",
+            "columns": [all_columns[index] for index in column_indices],
+            "column_indices": column_indices,
+            "rows": output_rows,
+            "row_indices": row_indices,
+            "total_rows": len(all_rows),
+        }
+
     @staticmethod
     def _resolve_row(rows: list[list[str]], row: int | str) -> int:
         if isinstance(row, bool):
