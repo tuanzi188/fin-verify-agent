@@ -15,7 +15,7 @@ import json
 
 from app.agent.runner import run
 from app.finance.store import FinanceStore
-from app.tools.finance_set import FinanceToolset
+from app.tools.finance_set import MAX_SEARCH_CALLS, FinanceToolset
 from evaluation.lint_finance_tasks import _lint_calc, _lint_evidence
 
 DOC_ID = "demo-2025-annual"
@@ -57,6 +57,35 @@ def write_store(root):
     path = root / DOC_ID / "document.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+
+
+def write_company(root, company: str, code: str, year: int) -> str:
+    """写一份最小年报：覆盖检查只需要 doc_id / company / period / doc_type。"""
+    doc_id = f"cninfo-{code}-{year}-annual"
+    document = {
+        "doc_id": doc_id,
+        "title": f"{company}{year}年年度报告",
+        "company": company,
+        "code": code,
+        "doc_type": "annual_report",
+        "period": str(year),
+        "unit": "万元",
+        "sections": [
+            {
+                "section_id": f"{doc_id}#s0001",
+                "path": ["第二节", "主要会计数据"],
+                "page_start": 1,
+                "page_end": 1,
+                "text": f"{year} 年营业收入 1,234 万元。",
+                "table_ids": [],
+            }
+        ],
+        "tables": [],
+    }
+    path = root / doc_id / "document.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+    return doc_id
 
 
 def _patch_llm(monkeypatch, rounds, final_answer="营业收入 1,234 万元 [1]。"):
@@ -254,3 +283,122 @@ def test_lint_requires_calc_for_derived_points():
     task = {"id": "T-derive", "answer_points": [{"text": "占比 12%", "derived": True}]}
     errors, _warnings = _lint_calc(task)
     assert any("没有 calc" in error for error in errors), errors
+
+
+def _complex_task(index: int, kind: str) -> dict:
+    return {
+        "id": f"CX-{index:02d}",
+        "complex_type": kind,
+        "dimension": "检索与引用",
+        "tool_constraints": {},
+        "holdout": False,
+        "answer_points": [],
+    }
+
+
+def test_lint_complex_requires_twelve_and_four_buckets():
+    from evaluation.lint_finance_tasks import COMPLEX_TYPES, _lint_complex
+
+    short = [_complex_task(i, "calc") for i in range(1, 12)]
+    errors, _warnings = _lint_complex(short)
+    assert any("少于 12" in error for error in errors), errors
+
+    twelve_same_bucket = [_complex_task(i, "calc") for i in range(1, 13)]
+    errors, _warnings = _lint_complex(twelve_same_bucket)
+    assert any("缺少 cross_table" in error for error in errors), errors
+
+    balanced = [_complex_task(index, kind) for index, kind in enumerate(COMPLEX_TYPES * 3, 1)]
+    errors, _warnings = _lint_complex(balanced)
+    assert errors == [], errors
+
+
+def test_lint_complex_rejects_tool_constraints_and_holdout():
+    from evaluation.lint_finance_tasks import COMPLEX_TYPES, _lint_complex
+
+    tasks = [_complex_task(index, kind) for index, kind in enumerate(COMPLEX_TYPES * 3, 1)]
+    tasks[0]["tool_constraints"] = {"must_include": ["calculate"]}
+    tasks[1]["holdout"] = True
+    errors, _warnings = _lint_complex(tasks)
+    assert any("不许写 tool_constraints" in error for error in errors), errors
+    assert any("不设留出" in error for error in errors), errors
+
+
+# ---------------------------------------------------------------------------
+# 覆盖检查与检索预算
+# ---------------------------------------------------------------------------
+
+def test_coverage_gaps_detect_missing_year(tmp_path):
+    write_company(tmp_path, "美的集团", "000333", 2024)
+    write_company(tmp_path, "美的集团", "000333", 2025)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+
+    gaps = toolset.coverage_gaps(
+        "美的集团 2024 年年报和 2025 年年报的数字是否一致？",
+        [{"doc_id": "cninfo-000333-2025-annual"}],
+    )
+    assert len(gaps) == 1
+    assert "2024" in gaps[0]
+
+
+def test_coverage_gaps_detect_missing_company(tmp_path):
+    write_company(tmp_path, "美的集团", "000333", 2025)
+    write_company(tmp_path, "比亚迪", "002594", 2025)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+
+    gaps = toolset.coverage_gaps(
+        "美的集团、比亚迪 2025 年营业收入谁高？",
+        [{"doc_id": "cninfo-000333-2025-annual"}],
+    )
+    assert len(gaps) == 1
+    assert "比亚迪" in gaps[0]
+
+
+def test_coverage_gaps_ignore_single_doc_question(tmp_path):
+    write_company(tmp_path, "美的集团", "000333", 2025)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+
+    # 单公司单年度：同比数据在同一份年报的上期列里，不要求再读 2024 年报
+    assert toolset.coverage_gaps("美的集团 2025 年营业收入是多少？", []) == []
+    # 语料里没有 2026 年文档：不能把“本来就没有”判成“漏读”
+    assert toolset.coverage_gaps("比亚迪 2026 年第一季度营业收入是多少？", []) == []
+
+
+def test_unsupported_periods_only_flag_future_years(tmp_path):
+    write_company(tmp_path, "美的集团", "000333", 2024)
+    write_company(tmp_path, "美的集团", "000333", 2025)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+
+    future = toolset.unsupported_periods("美的集团 2026 年第一季度营业收入是多少？")
+    assert len(future) == 1 and "2026" in future[0]
+
+    # 2023 是 2024 年报的比较期，不是“语料没覆盖”
+    assert toolset.unsupported_periods("美的集团 2025 年营业收入比 2023 年增加多少？") == []
+    assert toolset.unsupported_periods("美的集团 2025 年营业收入是多少？") == []
+
+
+def test_search_budget_blocks_then_can_be_granted(tmp_path):
+    write_company(tmp_path, "美的集团", "000333", 2025)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+
+    for _ in range(MAX_SEARCH_CALLS):
+        assert asyncio.run(toolset.call("search_sections", {"query": "营业收入"})).ok is True
+
+    blocked = asyncio.run(toolset.call("search_sections", {"query": "营业收入"}))
+    assert blocked.ok is False
+    assert blocked.error_kind == "unavailable"
+    assert "预算" in blocked.error_detail
+
+    toolset.grant_search_budget(1)
+    assert asyncio.run(toolset.call("search_sections", {"query": "营业收入"})).ok is True
+
+
+def test_prepare_resets_search_budget(tmp_path):
+    write_company(tmp_path, "美的集团", "000333", 2025)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+
+    for _ in range(MAX_SEARCH_CALLS):
+        asyncio.run(toolset.call("search_sections", {"query": "营业收入"}))
+    assert asyncio.run(toolset.call("search_sections", {"query": "营业收入"})).ok is False
+
+    toolset.prepare(None)
+    assert asyncio.run(toolset.call("search_sections", {"query": "营业收入"})).ok is True

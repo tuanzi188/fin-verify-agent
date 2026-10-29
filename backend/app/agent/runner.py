@@ -23,7 +23,15 @@ import re
 import time
 from typing import Any, Optional
 
-from app.agent.prompts import CALC_REPAIR_HINT, COVERAGE_CHECK_TEMPLATE, ROUND_EVIDENCE_TEMPLATE
+from app.agent.prompts import (
+    ABSTAIN_REWRITE_HINT,
+    CALC_REPAIR_HINT,
+    CELL_REPAIR_HINT,
+    COVERAGE_CHECK_TEMPLATE,
+    COVERAGE_REPAIR_HINT,
+    ROUND_EVIDENCE_TEMPLATE,
+    UNSUPPORTED_PERIOD_HINT,
+)
 from app.services import model_provider
 from app.tools.contract import ABSTAIN_KEYWORDS
 from app.tools.mock import Toolbox
@@ -181,6 +189,187 @@ def _format_calcs(calcs: list[dict]) -> str:
         )
     return "\n".join(lines) or "（没有计算记录）"
 
+
+# 修复回合预算：闸门发现"该做没做"时，最多追加 3 个模型回合。
+# 只加在真正触发闸门的那次，不无条件放宽 max_tool_rounds——
+# 否则模型会拿多出来的回合继续空转。
+REPAIR_ROUND_BUDGET = 3
+
+# 拒答里不允许出现的数字：带千分位的金额，或带单位的比率/数量。
+# 年份、页码、引用编号、表/节 id、股票代码都不算泄漏——所以**不收裸 4 位以上数字**：
+# 000651 / 000333 这类代码会被误伤，而真正的金额在答案里几乎总带逗号或单位。
+# 负向断言 `(?<![A-Za-z_#])` 是为了别把 t0006 / s0009 里的数字当成金额。
+_LEAK_NUMBER_PATTERN = re.compile(
+    r"(?<![A-Za-z_#])("
+    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?"
+    r"|\d+(?:\.\d+)?\s*(?:%|％|亿元|万元|千元|元|倍|个百分点)"
+    r")"
+)
+_PAGE_REFERENCE_PATTERN = re.compile(r"(?:PDF\s*)?第\s*\d+\s*页")
+# doc_id / table_id / section_id 这类标识符里的数字不是金额：
+# cninfo-000333-2025-annual、t0006、s0009 都要先剥掉再判泄漏。
+_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_#-]*\d[A-Za-z0-9_#-]*")
+
+# 答案里的"数值断言"：用于判断表级引用要不要补单元格。
+_TABLE_NUMBER_PATTERN = re.compile(
+    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?"
+    r"|\d[\d,]*\.?\d*\s*(?:%|％|亿元|万元|千元|元|倍|个百分点)"
+)
+
+
+def _numeric_leaks(answer: str) -> list[str]:
+    """拒答文本里的具体数值。年份、页码、引用编号和 id 数字都不算。"""
+    text = _MARKER_PATTERN.sub("", answer or "")
+    text = _PAGE_REFERENCE_PATTERN.sub("", text)
+    text = _IDENTIFIER_PATTERN.sub(" ", text)
+    leaks: list[str] = []
+    for match in _LEAK_NUMBER_PATTERN.finditer(text):
+        literal = match.group(1).strip()
+        if re.fullmatch(r"20\d{2}", literal):
+            continue
+        leaks.append(literal)
+    # 去重但保留出现顺序，报告里只举前三个例子
+    return list(dict.fromkeys(leaks))
+
+
+def needs_cell_repair(answer: str, evidence: list[dict]) -> bool:
+    """答案引用了表级证据、且答案里有数值 → 需要补一次 get_cell。
+
+    只看“被引用的证据里有没有 cell”。如果答案已经引了某个单元格，
+    说明它至少做了一次精确引用，不再追问——避免每轮都强制补一轮。
+    """
+    if not answer or not evidence:
+        return False
+    markers: list[int] = []
+    for raw in _MARKER_PATTERN.findall(answer):
+        marker = int(raw)
+        if 1 <= marker <= len(evidence) and marker not in markers:
+            markers.append(marker)
+    if not markers:
+        return False
+    kinds = {str(evidence[marker - 1].get("kind") or "") for marker in markers}
+    if "cell" in kinds:
+        return False
+    if "table" not in kinds:
+        return False
+    return bool(_TABLE_NUMBER_PATTERN.search(answer))
+
+
+def _is_refusal(answer: str, clarify_mode: str) -> bool:
+    """与 `_decide_status` 同一套口径：首句拒答，且不是分情形作答的开场。"""
+    head = _leading_sentence(answer)
+    if not any(keyword in head for keyword in ABSTAIN_KEYWORDS):
+        return False
+    return not (
+        clarify_mode == "ask"
+        and any(signal in answer for signal in _CONDITIONAL_SIGNALS)
+    )
+
+
+def _coverage_gaps(toolbox: Any, question: str, evidence: list[dict]) -> list[str]:
+    """向工具集要“问题点名但证据里没读过的文档”。
+
+    金融工具集实现了这个方法；制度库没有，返回空列表。
+    闸门失败不能带走答案，异常只记日志。
+    """
+    fn = getattr(toolbox, "coverage_gaps", None)
+    if fn is None:
+        return []
+    try:
+        gaps = fn(question, evidence)
+    except Exception as exc:  # noqa: BLE001 - 覆盖检查失败不能阻断主流程
+        logger.warning("coverage_gaps failed: %s", exc)
+        return []
+    return [str(item) for item in (gaps or []) if item][:5]
+
+
+def _format_coverage_found(evidence: list[dict]) -> str:
+    doc_ids: list[str] = []
+    for item in evidence:
+        doc_id = str(item.get("doc_id") or "")
+        if doc_id and doc_id not in doc_ids:
+            doc_ids.append(doc_id)
+    return "、".join(doc_ids) or "（还没有读到任何文档）"
+
+
+def _unsupported_periods(toolbox: Any, question: str) -> list[str]:
+    """问题点名、但本地语料没有的期间（金融工具集实现；制度库没有）。"""
+    fn = getattr(toolbox, "unsupported_periods", None)
+    if fn is None:
+        return []
+    try:
+        periods = fn(question)
+    except Exception as exc:  # noqa: BLE001 - 期间检查失败不能阻断主流程
+        logger.warning("unsupported_periods failed: %s", exc)
+        return []
+    return [str(item) for item in (periods or []) if item][:3]
+
+
+def _answer_gate(
+    *,
+    text: str,
+    evidence: list[dict],
+    toolbox: Any,
+    question: str,
+    clarify_mode: str,
+    fired: dict[str, bool],
+) -> tuple[str, str]:
+    """回答闸门。返回 (hint, gate_name)；无闸门返回 ("", "")。
+
+    `fired` 是每条任务的可变状态，保证每个闸门最多触发一次。
+    顺序：期间不支持 → 跨文档覆盖 → 拒答数值 → 补算 → 补单元格。
+
+    期间不支持排最前：负样本（2026 Q1）如果先走补单元格，模型会被逼着
+    去取 2025 年的季度数字，最后写出一份"拒答但夹带数字"的答案。
+    """
+    if clarify_mode != "ask" and not fired.get("unsupported"):
+        periods = _unsupported_periods(toolbox, question)
+        if periods and not (
+            _is_refusal(text, clarify_mode) and not _numeric_leaks(text)
+        ):
+            fired["unsupported"] = True
+            return (
+                UNSUPPORTED_PERIOD_HINT.format(periods="、".join(periods)),
+                "unsupported_period",
+            )
+
+    if clarify_mode != "ask" and not fired.get("coverage"):
+        gaps = _coverage_gaps(toolbox, question, evidence)
+        if gaps:
+            fired["coverage"] = True
+            # 缺文档必须能搜到：给检索预算临时加两次
+            grant_budget = getattr(toolbox, "grant_search_budget", None)
+            if grant_budget is not None:
+                grant_budget(2)
+            return (
+                COVERAGE_REPAIR_HINT.format(
+                    found=_format_coverage_found(evidence),
+                    missing="；".join(gaps),
+                ),
+                "coverage_repair",
+            )
+
+    if clarify_mode != "ask" and not fired.get("abstain") and _is_refusal(text, clarify_mode):
+        leaks = _numeric_leaks(text)
+        if leaks:
+            fired["abstain"] = True
+            return (
+                ABSTAIN_REWRITE_HINT.format(examples="、".join(leaks[:3])),
+                "abstain_rewrite",
+            )
+
+    if not fired.get("calc"):
+        calcs = getattr(toolbox, "calcs", None)
+        if calcs is not None and needs_calc_repair(text, evidence, calcs):
+            fired["calc"] = True
+            return CALC_REPAIR_HINT, "calc_repair"
+
+    if clarify_mode != "ask" and not fired.get("cell") and needs_cell_repair(text, evidence):
+        fired["cell"] = True
+        return CELL_REPAIR_HINT, "cell_repair"
+
+    return "", ""
+
 def _accumulate_tokens(usage: dict, call_usage: Optional[dict]) -> tuple[int, int]:
     tokens_in = int((call_usage or {}).get("prompt_tokens") or 0)
     tokens_out = int((call_usage or {}).get("completion_tokens") or 0)
@@ -196,9 +385,10 @@ def _accumulate_tokens(usage: dict, call_usage: Optional[dict]) -> tuple[int, in
     return tokens_in, tokens_out
 
 
-def _format_evidence(evidence: list[dict]) -> str:
+def _format_evidence(evidence: list[dict], start: int = 0) -> str:
+    """渲染证据。`start` 用于只渲染本轮新增的部分（编号仍按全量位置）。"""
     blocks = []
-    for index, item in enumerate(evidence, 1):
+    for index, item in enumerate(evidence[start:], start + 1):
         similarity = item.get("similarity")
         similarity_text = f"{similarity:.3f}" if isinstance(similarity, (int, float)) else "未知"
         blocks.append(
@@ -400,6 +590,10 @@ def _format_locators(locators: list[dict], limit: int = 12) -> str:
     - `catalog`（文档清单）要把内容直接摊开，否则模型只看到"返回 7 条"，
       会反复调 list_documents 想看清单（2026-10-28 实测连调三次然后拒答）；
     - `section_locator`（章节定位）只给 id + 标题 + 页码，让模型下一步去读。
+
+    **必须累计渲染**：2026-10-28 试过"只显示本轮新增定位"，CX-01/CX-07 当场
+    因为看不到旧章节 id 而改口"无法确定"——定位清单是模型的菜单，不是证据，
+    收起来省不了多少 token，却直接让质量塌方。
     """
     if not locators:
         return ""
@@ -429,11 +623,17 @@ def _round_message(
     round_steps: list[dict],
     locators: list[dict],
     search_tool: str = "",
+    new_from: int = 0,
 ) -> str:
     """把本轮工具结果回填给模型。
 
     与 baseline 的 FINAL_EVIDENCE_TEMPLATE 不同：这里**不终止生成**，
     而是明确告诉模型"还缺就继续查、够了就回答"，多轮循环才有意义。
+
+    `new_from`：只回填本轮新增的证据。`messages` 是一个不断增长的对话，
+    前几轮读到的正文已经在上下文里；每轮再把全量证据重贴一遍，等于把同一段
+    表格文本按轮次重复计费（实测 45k token/题的主因）。编号仍按全量位置，
+    所以最终答案里的 [n] 不受影响。
     """
     status_lines: list[str] = []
     for step in round_steps:
@@ -455,7 +655,18 @@ def _round_message(
         for step in round_steps
     ):
         status_lines.append("- 本次检索没有新增内容：不要再用同义关键词重复检索，改用 read_section / get_table 读已定位的内容")
-    evidence_text = _format_evidence(evidence) if evidence else "（还没有读到原文，下面是可定位/可读取的内容）"
+    if evidence and len(evidence) > new_from:
+        evidence_text = _format_evidence(evidence, start=new_from)
+    elif evidence:
+        evidence_text = "（本轮没有新增原文，已读到的内容见上文）"
+    else:
+        evidence_text = "（还没有读到原文，下面是可定位/可读取的内容）"
+    if new_from > 0 and evidence:
+        seen = "；".join(
+            f"[{index}] {item.get('chunk_id') or item.get('title') or ''}"
+            for index, item in enumerate(evidence[:new_from], 1)
+        )
+        evidence_text = f"此前已读到（编号不变，正文已在上文，可直接引用）：{seen}\n\n{evidence_text}"
     locator_text = _format_locators(locators)
     if locator_text:
         evidence_text = f"{evidence_text}\n\n{locator_text}"
@@ -464,7 +675,7 @@ def _round_message(
     if not evidence and locators:
         evidence_text = (
             f"{evidence_text}\n\n"
-            "下一步：从上面挑 1–2 个最相关的章节 id，直接调用 read_section 读原文；"
+            "下一步：从上面挑 1-2 个最相关的章节 id，直接调用 read_section 读原文；"
             "读到的章节若带 table_ids，再用 get_table / get_cell 取数字。不要再用同义关键词重复检索。"
         )
     return ROUND_EVIDENCE_TEMPLATE.format(
@@ -556,7 +767,15 @@ async def _run_improved(
     auto_retries = 0
     self_checks = 0
     budget_exceeded = False
-    calc_repaired = False
+    fired = {
+        "unsupported": False,
+        "coverage": False,
+        "abstain": False,
+        "calc": False,
+        "cell": False,
+    }
+    repair_rounds = 0
+    repair_pending = False
     failed = False
     answer = ""
     final_meta: dict = {}
@@ -565,10 +784,13 @@ async def _run_improved(
     final_tokens_out = 0
     self_eval: Optional[dict] = None
 
+    # `max_tool_rounds` 指“工具回合”，收口必须单独留一轮：
+    # 否则模型用满 5 轮工具后，答案只能走 fallback，回合内的闸门（补算/补单元格/
+    # 拒答重写）全部失效——2026-10-29 冒烟 CX-04/FIN-15 都是 5 轮工具后走 fallback。
     max_rounds = max(
         1,
         min(getattr(toolbox, "max_tool_rounds", IMPROVED_MAX_TOOL_ROUNDS), max_steps),
-    )
+    ) + 1
 
     try:
         while rounds < max_rounds:
@@ -578,10 +800,18 @@ async def _run_improved(
             if executed >= max_steps:
                 break
             rounds += 1
+            was_repair_round = repair_pending
             llm_started_at = time.perf_counter()
+            # 最后一轮强制收口：不再让模型拿这一轮继续检索。
+            # 但如果这一轮是闸门刚批下来的“补救轮”，必须允许工具——
+            # 否则补 get_cell / 补读文档的指令发出去，模型却没有工具可用。
+            round_tool_choice = (
+                "none" if (rounds >= max_rounds and not repair_pending) else None
+            )
             text, tool_calls, _, round_usage = await model_provider.chat_with_tools(
                 messages,
                 toolbox.specs(),
+                tool_choice=round_tool_choice,
                 reasoning_mode="flash",
                 temperature=TOOL_TEMPERATURE,
             )
@@ -591,20 +821,24 @@ async def _run_improved(
 
             if not tool_calls:
                 text = (text or "").strip()
-                # 派生数值必须留下 calculate 记录。提示词已经写了两遍"比率一律 calculate"，
-                # 2026-10-28 实测仍有 2/24 条在正文里手算（数值还对），所以这里加一道确定性闸门：
-                # 答案里出现"证据原文里没有的比率"且本轮没有任何 calc → 退回让它补做一次。
-                # 只对声明了 `calcs` 的工具集生效：制度库那套没有 calculate，硬追问会问出空转。
-                calcs = getattr(toolbox, "calcs", None)
-                if (
-                    not calc_repaired
-                    and calcs is not None
-                    and needs_calc_repair(text, evidence, calcs)
-                ):
-                    calc_repaired = True
-                    notes.append("calc_repair")
+                hint, gate = _answer_gate(
+                    text=text,
+                    evidence=evidence,
+                    toolbox=toolbox,
+                    question=question,
+                    clarify_mode=clarify_mode,
+                    fired=fired,
+                )
+
+                if hint:
+                    notes.append(gate)
+                    # 只给真正触发的这一次闸门增加回合，不无条件放宽轮次
+                    if repair_rounds < REPAIR_ROUND_BUDGET:
+                        repair_rounds += 1
+                        max_rounds += 1
+                    repair_pending = True
                     messages.append({"role": "assistant", "content": text})
-                    messages.append({"role": "user", "content": CALC_REPAIR_HINT})
+                    messages.append({"role": "user", "content": hint})
                     continue
                 answer = text
                 break
@@ -614,6 +848,8 @@ async def _run_improved(
                 break
 
             round_steps: list[dict] = []
+            # 本轮开始前的证据条数：回填时只贴新增部分，避免把前几轮的表格正文再计一次费
+            evidence_before = len(evidence)
             for call in tool_calls:
                 if executed >= max_steps:
                     budget_exceeded = True
@@ -664,9 +900,14 @@ async def _run_improved(
             messages.append({
                 "role": "user",
                 "content": _round_message(
-                    evidence, round_steps, locators, toolbox.search_tool
+                    evidence, round_steps, locators, toolbox.search_tool, new_from=evidence_before
                 ),
             })
+            # 补救轮已经执行完工具，下一轮重新进入“该收口就收口”的状态
+            repair_pending = False
+            if was_repair_round:
+                # 补救轮执行完工具后，再留一轮让模型按新证据收口
+                max_rounds += 1
 
         if not answer:
             # 回合用完 / 预算撞顶：仍然要产出一个可判分的答案，不能丢记录。
@@ -696,21 +937,43 @@ async def _run_improved(
             final_meta = final_usage or {}
             answer = (text or "").strip()
 
-        # 派生数值复核：答案已经产生了，但里面的比率是手算的（证据原文里没有、calcs 为空）。
-        # 放在覆盖自检之前——先保证"数是怎么来的"对，再谈"子问题全不全"。
-        # 只补算一次；只接受 calculate 这一步，别的工具调用忽略（避免借机把预算花在检索上）。
+        # 后置闸门：回合用尽时 fallback 生成答案，这条路径没经过回合内闸门。
+        # 这里补跑：文本类（期间不支持/拒答重写）直接重写；工具类（覆盖/补算/补单元格）
+        # 最多再调一次工具，然后按新证据重写。每条任务最多补三闸门。
+        post_gate_rounds = 0
         calcs = getattr(toolbox, "calcs", None)
-        if (
-            answer
-            and calcs is not None
-            and not calc_repaired
-            and executed < max_steps
-            and needs_calc_repair(answer, evidence, calcs)
-        ):
-            calc_repaired = True
-            notes.append("calc_repair")
+        while answer and post_gate_rounds < REPAIR_ROUND_BUDGET:
+            hint, gate = _answer_gate(
+                text=answer,
+                evidence=evidence,
+                toolbox=toolbox,
+                question=question,
+                clarify_mode=clarify_mode,
+                fired=fired,
+            )
+            if not hint:
+                break
+            post_gate_rounds += 1
+            repair_rounds += 1
+            notes.append(f"{gate}_post")
             messages.append({"role": "assistant", "content": answer})
-            messages.append({"role": "user", "content": CALC_REPAIR_HINT})
+            messages.append({"role": "user", "content": hint})
+
+            if gate in ("abstain_rewrite", "unsupported_period"):
+                llm_started_at = time.perf_counter()
+                text, _, post_usage = await model_provider.chat(
+                    messages,
+                    reasoning_mode="flash",
+                    temperature=TOOL_TEMPERATURE,
+                    max_tokens=FINAL_MAX_TOKENS,
+                )
+                final_latency_ms = _elapsed_ms(llm_started_at)
+                final_tokens_in, final_tokens_out = _accumulate_tokens(usage, post_usage)
+                final_meta = post_usage or {}
+                answer = (text or "").strip()
+                continue
+
+            # 工具类修复：覆盖 / 补算 / 补单元格
             llm_started_at = time.perf_counter()
             text, repair_calls, _, repair_usage = await model_provider.chat_with_tools(
                 messages,
@@ -719,36 +982,36 @@ async def _run_improved(
                 temperature=TOOL_TEMPERATURE,
             )
             _accumulate_tokens(usage, repair_usage)
+            allowed = {"calculate"} if gate == "calc_repair" else None
             for call in repair_calls or []:
                 if executed >= max_steps:
                     break
-                if str(call.get("name") or "") != "calculate":
+                if allowed and str(call.get("name") or "") not in allowed:
                     continue
                 executed += 1
                 step = await _execute_tool_call(
                     toolbox, call, executed, evidence, seen_chunk_ids,
-                    locators, seen_locator_ids, policy="calc_repair",
+                    locators, seen_locator_ids, policy=gate,
                 )
                 trace.append(step)
-            messages.append({
-                "role": "user",
-                "content": (
-                    toolbox.final_template.format(evidence=_format_evidence(evidence))
-                    + "\n\n补算说明：上一版草稿里的比率是手算的，现已用 calculate 复核，结果如下：\n"
+            content = toolbox.final_template.format(evidence=_format_evidence(evidence))
+            if gate == "calc_repair":
+                content += (
+                    "\n\n补算说明：上一版草稿里的比率是手算的，现已用 calculate 复核，结果如下：\n"
                     + _format_calcs(calcs)
                     + "\n\n请按上面的公式与结果重写最终回答，不要再用草稿里的数字。"
-                ),
-            })
+                )
+            messages.append({"role": "user", "content": content})
             llm_started_at = time.perf_counter()
-            text, _, final_usage = await model_provider.chat(
+            text, _, post_usage = await model_provider.chat(
                 messages,
                 reasoning_mode="flash",
                 temperature=TOOL_TEMPERATURE,
                 max_tokens=FINAL_MAX_TOKENS,
             )
             final_latency_ms = _elapsed_ms(llm_started_at)
-            final_tokens_in, final_tokens_out = _accumulate_tokens(usage, final_usage)
-            final_meta = final_usage or {}
+            final_tokens_in, final_tokens_out = _accumulate_tokens(usage, post_usage)
+            final_meta = post_usage or {}
             answer = (text or "").strip()
 
         # 覆盖自检：只在"有证据、有草稿、还有步数预算"时做一次。
@@ -822,6 +1085,19 @@ async def _run_improved(
             notes.append("empty_final_answer:reasoning_only")
         else:
             notes.append("empty_final_answer")
+    # 闸门没修干净也要留痕：报告里能直接区分"没触发"和"触发了但没改成"。
+    if not failed:
+        if clarify_mode != "ask":
+            final_gaps = _coverage_gaps(toolbox, question, evidence)
+            if final_gaps:
+                prefix = "coverage_unresolved" if fired.get("coverage") else "coverage_missing"
+                notes.append(f"{prefix}:" + "；".join(final_gaps[:2]))
+            if needs_cell_repair(answer, evidence):
+                notes.append("cell_citation_missing")
+        if _is_refusal(answer, clarify_mode):
+            leaks = _numeric_leaks(answer)
+            if leaks:
+                notes.append("abstain_numeric_leak:" + "、".join(leaks[:2]))
     planned = getattr(toolbox, "planned_injections", 0)
     fired = getattr(toolbox, "fired_injections", 0)
     if planned and fired < planned:
@@ -844,6 +1120,7 @@ async def _run_improved(
     usage["rounds"] = rounds
     usage["auto_retries"] = auto_retries
     usage["self_checks"] = self_checks
+    usage["repair_rounds"] = repair_rounds
     usage["latency_ms"] = _elapsed_ms(started_at)
 
     final_step = {

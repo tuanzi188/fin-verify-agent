@@ -89,6 +89,21 @@ async def test_abstained_when_evidence_empty(monkeypatch):
     assert validate_result(result) == []
 
 
+async def test_abstained_when_answer_says_period_not_included(monkeypatch):
+    """期间边界常写成"不包含/不含"，不能因为没命中"无法确定"就判成 answered。"""
+    _patch_llm(
+        monkeypatch,
+        tool_calls=[_search_call()],
+        text="",
+        final_answer="本地文档资料中不包含该期间的财务数据。",
+    )
+    _patch_dispatch(monkeypatch, [_evidence_item()])
+
+    result = await run({"id": "T13", "question": "2026 年营收是多少？", "max_steps": 3})
+
+    assert result["status"] == "abstained"
+
+
 async def test_no_tool_call_is_recorded_as_note(monkeypatch):
     _patch_llm(
         monkeypatch,
@@ -540,6 +555,7 @@ class _CalcToolset:
     name = "fake-finance"
     search_tool = "search_kb"
     max_tool_rounds = 3
+    final_template = "证据：\n{evidence}\n请回答。"
 
     def __init__(self):
         self.calcs: list[dict] = []
@@ -616,7 +632,8 @@ async def test_post_loop_calc_repair_when_rounds_are_exhausted(monkeypatch):
             ("", [_search_call("c1", "净利率")]),
             ("", [_search_call("c2", "营业收入")]),
             ("", [_search_call("c3", "净利润")]),
-            # 第 4 次是补算那一步
+            ("", [_search_call("c4", "归母净利润")]),
+            # 第 5 次是回合结束后的补算（max_tool_rounds=3 + 1 收口轮 = 4 轮搜索）
             ("", [{"id": "c9", "name": "calculate",
                    "arguments": {"expression": "a / b * 100", "inputs": {"a": 1, "b": 3}}}]),
         ],
@@ -630,3 +647,325 @@ async def test_post_loop_calc_repair_when_rounds_are_exhausted(monkeypatch):
     assert "calc_repair" in result["trace"][-1]["note"]
     assert len(toolset.calcs) == 1
     assert any(step["tool"] == "calculate" for step in result["trace"])
+
+
+def test_round_message_only_repeats_new_evidence():
+    """多轮回填只贴新增证据：旧正文已在上文，重贴等于按轮次重复计费。"""
+    old = {"chunk_id": "d1#t1", "title": "旧证据", "content": "旧正文-不应再出现"}
+    new = {"chunk_id": "d1#t2", "title": "新证据", "content": "新正文-本轮新增"}
+    message = runner._round_message(
+        [old, new],
+        [{"tool": "get_table", "ok": True, "result_count": 1, "new_result_count": 1}],
+        [],
+        "search_kb",
+        new_from=1,
+    )
+    assert "新正文-本轮新增" in message
+    assert "旧正文-不应再出现" not in message
+    assert "[1] d1#t1" in message  # 旧编号仍要给索引，否则模型无法引用
+    assert "[2]" in message
+
+
+def test_round_message_without_new_evidence_says_so():
+    old = {"chunk_id": "d1#t1", "title": "旧证据", "content": "旧正文"}
+    message = runner._round_message(
+        [old],
+        [{"tool": "get_table", "ok": True, "result_count": 1, "new_result_count": 0}],
+        [],
+        "search_kb",
+        new_from=1,
+    )
+    assert "本轮没有新增原文" in message
+    assert "旧正文" not in message
+
+
+# ---------------------------------------------------------------------------
+# 回答闸门：拒答数值泄漏 / 单元格引用 / 跨文档覆盖
+# ---------------------------------------------------------------------------
+
+def test_numeric_leaks_ignore_years_pages_and_ids():
+    text = (
+        "2026 年第一季度没有数据，PDF 第 11 页只有 2025 年四个季度，"
+        "表 t0006 和 cninfo-000333-2025-annual 都没列。"
+    )
+    assert runner._numeric_leaks(text) == []
+
+    text = "无法确定。资料中只有 2025 年第一季度的 127,838,538 千元（约 1,278.39 亿元）。"
+    leaks = runner._numeric_leaks(text)
+    assert "127,838,538" in leaks
+    assert any("1,278.39" in leak for leak in leaks)
+
+
+def test_needs_cell_repair_only_when_table_cited_with_number():
+    table = {"kind": "table", "chunk_id": "d#t1"}
+    cell = {"kind": "cell", "chunk_id": "d#t1#0#2025 年"}
+    assert runner.needs_cell_repair("营业收入 1,234 万元 [1]", [table]) is True
+    assert runner.needs_cell_repair("营业收入 1,234 万元 [1]", [cell]) is False
+    assert runner.needs_cell_repair("表里有相关数据 [1]", [table]) is False
+    assert runner.needs_cell_repair("营业收入 1,234 万元", [table]) is False
+
+
+class _GateToolset:
+    """最小金融形状工具集：可控 coverage_gaps、表/单元格证据。"""
+
+    name = "fake-finance"
+    search_tool = "search_sections"
+    max_tool_rounds = 3
+    final_template = "证据：\n{evidence}\n请回答。"
+
+    def __init__(self, *, missing_doc: str = "", unsupported: list[str] | None = None):
+        self.calcs: list[dict] = []
+        self.missing_doc = missing_doc
+        self.unsupported = unsupported or []
+        self.calls: list[str] = []
+
+    def specs(self):
+        return []
+
+    def system_prompt(self, variant):
+        return "system"
+
+    async def call(self, name, arguments):
+        from app.tools.toolset import ToolOutcome
+
+        self.calls.append(name)
+        if name == "read_section":
+            return ToolOutcome(
+                tool=name,
+                ok=True,
+                data={"section_id": "d2#s1", "text": "2024 年数据", "page_start": 1},
+                result_ids=["d2#s1"],
+                result_count=1,
+            )
+        if name == "get_table":
+            return ToolOutcome(
+                tool=name,
+                ok=True,
+                data={
+                    "table_id": "d1#t1",
+                    "rows": [["营业收入", "1,234"]],
+                    "columns": ["项目", "2025 年"],
+                    "page": 12,
+                    "unit": "万元",
+                },
+                result_ids=["d1#t1"],
+                result_count=1,
+            )
+        if name == "get_cell":
+            return ToolOutcome(
+                tool=name,
+                ok=True,
+                data={
+                    "table_id": "d1#t1",
+                    "row": 0,
+                    "row_name": "营业收入",
+                    "column": "2025 年",
+                    "cell_text": "1,234",
+                    "page": 12,
+                    "unit": "万元",
+                    "table_caption": "主要会计数据",
+                },
+                result_ids=["d1#t1#0#2025 年"],
+                result_count=1,
+            )
+        return ToolOutcome(tool=name, ok=True, data=[])
+
+    def to_evidence(self, name, data):
+        from app.tools.toolset import evidence_item
+
+        if name == "read_section":
+            return [
+                evidence_item(
+                    chunk_id="d2#s1",
+                    title="2024 年报",
+                    content="2024 年数据",
+                    kind="section",
+                    page=1,
+                    doc_id="d2",
+                )
+            ]
+        if name == "get_table":
+            return [
+                evidence_item(
+                    chunk_id="d1#t1",
+                    title="主要会计数据",
+                    content="表 d1#t1｜单位：万元\n项目 | 2025 年\n营业收入 | 1,234",
+                    kind="table",
+                    page=12,
+                    table_caption="主要会计数据",
+                    unit="万元",
+                    doc_id="d1",
+                )
+            ]
+        if name == "get_cell":
+            return [
+                evidence_item(
+                    chunk_id="d1#t1#0#2025 年",
+                    title="主要会计数据",
+                    content="营业收入 的「2025 年」= 1,234（单位：万元）",
+                    kind="cell",
+                    page=12,
+                    table_id="d1#t1",
+                    row_name="营业收入",
+                    column="2025 年",
+                    cell_text="1,234",
+                    unit="万元",
+                    doc_id="d1",
+                )
+            ]
+        return []
+
+    def coverage_gaps(self, question, evidence):
+        if not self.missing_doc:
+            return []
+        doc_ids = {str(item.get("doc_id") or "") for item in evidence}
+        return [] if self.missing_doc in doc_ids else [f"缺失文档 {self.missing_doc}"]
+
+    def unsupported_periods(self, question):
+        return list(self.unsupported)
+
+
+async def test_coverage_gate_reads_missing_document_before_answering(monkeypatch):
+    toolset = _GateToolset(missing_doc="d2")
+    _patch_improved_llm(
+        monkeypatch,
+        rounds=[
+            ("无法确定 2024 年数据 [1]。", []),
+            ("", [{"id": "c1", "name": "read_section", "arguments": {"section_id": "d2#s1"}}]),
+            ("2024 年数据为 1,234 万元 [2]。", []),
+        ],
+        coverage_reply='{"covered": true, "missing": [], "next_query": ""}',
+        final_reply="",
+    )
+
+    result = await run(_TASK, variant="improved", toolset=toolset)
+
+    assert "coverage_repair" in result["trace"][-1]["note"]
+    assert any(step["tool"] == "read_section" for step in result["trace"])
+    assert any(item.get("doc_id") == "d2" for item in result["evidence"])
+    assert "coverage_unresolved" not in result["trace"][-1]["note"]
+
+
+async def test_cell_gate_adds_get_cell_for_table_only_citation(monkeypatch):
+    toolset = _GateToolset()
+    _patch_improved_llm(
+        monkeypatch,
+        rounds=[
+            ("", [{"id": "c1", "name": "get_table", "arguments": {"table_id": "d1#t1"}}]),
+            ("营业收入 1,234 万元 [1]。", []),
+            ("", [{"id": "c2", "name": "get_cell",
+                   "arguments": {"table_id": "d1#t1", "row": "营业收入", "column": "2025 年"}}]),
+            ("营业收入 1,234 万元 [2]。", []),
+        ],
+        coverage_reply='{"covered": true, "missing": [], "next_query": ""}',
+        final_reply="",
+    )
+
+    result = await run(_TASK, variant="improved", toolset=toolset)
+
+    assert "cell_repair" in result["trace"][-1]["note"]
+    assert any(step["tool"] == "get_cell" for step in result["trace"])
+    assert result["citations"] == [{"marker": 2, "chunk_id": "d1#t1#0#2025 年"}]
+    assert "cell_citation_missing" not in result["trace"][-1]["note"]
+
+
+async def test_unsupported_period_gate_forces_clean_refusal(monkeypatch):
+    """2026 Q1 这类语料里没有的期间：直接拒答，不许拿 2025 的数字顶上。"""
+    toolset = _GateToolset(unsupported=["2026 年（本地语料最新到 2025 年）"])
+    _patch_improved_llm(
+        monkeypatch,
+        rounds=[
+            ("美的集团 2026 年 Q1 营业收入约为 1,278.39 亿元 [1]。", []),
+            (
+                (
+                    "根据现有资料无法确定美的集团 2026 年第一季度的营业收入。"
+                    "本地资料最新到 2025 年，不含 2026 年第一季度。"
+                ),
+                [],
+            ),
+        ],
+        coverage_reply='{"covered": true, "missing": [], "next_query": ""}',
+        final_reply="",
+    )
+
+    result = await run(_TASK, variant="improved", toolset=toolset)
+
+    assert "unsupported_period" in result["trace"][-1]["note"]
+    assert "1,278.39" not in result["answer"]
+    assert "abstain_numeric_leak" not in result["trace"][-1]["note"]
+
+
+async def test_abstain_gate_rewrites_adjacent_period_numbers(monkeypatch):
+    toolset = _GateToolset()
+    _patch_improved_llm(
+        monkeypatch,
+        rounds=[
+            (
+                (
+                    "根据现有资料无法确定 2026 年第一季度的营业收入。"
+                    "资料中只有 2025 年第一季度的 127,838,538 千元。"
+                ),
+                [],
+            ),
+            (
+                (
+                    "根据现有资料无法确定 2026 年第一季度的营业收入。"
+                    "资料只覆盖 2025 年，不含 2026 年第一季度。"
+                ),
+                [],
+            ),
+        ],
+        coverage_reply='{"covered": true, "missing": [], "next_query": ""}',
+        final_reply="",
+    )
+
+    result = await run(_TASK, variant="improved", toolset=toolset)
+
+    assert "abstain_rewrite" in result["trace"][-1]["note"]
+    assert "127,838,538" not in result["answer"]
+    assert "abstain_numeric_leak" not in result["trace"][-1]["note"]
+
+
+async def test_forced_final_round_then_repair_round_allows_tools(monkeypatch):
+    """最后一轮强制收口；闸门批下的补救轮必须重新允许工具。
+
+    2026-10-29 冒烟踩过：补救轮仍然带 tool_choice=none，模型只能写
+    "我无法完成第 1 步：本轮没有可用的 get_cell 返回结果"。
+    """
+    toolset = _GateToolset()
+    choices: list[str | None] = []
+    state = {"calls": 0}
+    rounds = [
+        ("", [{"id": "c1", "name": "get_table", "arguments": {"table_id": "d1#t1"}}]),
+        ("", [{"id": "c2", "name": "get_table", "arguments": {"table_id": "d1#t1"}}]),
+        ("", [{"id": "c3", "name": "get_table", "arguments": {"table_id": "d1#t1"}}]),
+        ("营业收入 1,234 万元 [1]。", []),
+        ("", [{"id": "c4", "name": "get_cell",
+               "arguments": {"table_id": "d1#t1", "row": "营业收入", "column": "2025 年"}}]),
+        ("营业收入 1,234 万元 [2]。", []),
+    ]
+
+    async def fake_tools(messages, tools, tool_choice=None, reasoning_mode="flash",
+                         temperature=0.1, max_tokens=None):
+        choices.append(tool_choice)
+        index = min(state["calls"], len(rounds) - 1)
+        state["calls"] += 1
+        text, calls = rounds[index]
+        return text, calls, None, _usage()
+
+    async def fake_chat(messages, reasoning_mode="flash", temperature=0.1, max_tokens=None):
+        return '{"covered": true, "missing": [], "next_query": ""}', None, _usage()
+
+    monkeypatch.setattr("app.services.model_provider.chat_with_tools", fake_tools)
+    monkeypatch.setattr("app.services.model_provider.chat", fake_chat)
+
+    result = await run({**_TASK, "max_steps": 10}, variant="improved", toolset=toolset)
+
+    # 第 4 轮是 base 的最后一轮（3 轮工具 + 1 轮收口）→ 强制收口
+    assert choices[3] == "none"
+    # 闸门批下的补救轮 → 必须允许工具
+    assert choices[4] is None
+    # 补救完再收口 → 再次强制
+    assert choices[5] == "none"
+    assert "cell_repair" in result["trace"][-1]["note"]
+    assert result["citations"] == [{"marker": 2, "chunk_id": "d1#t1#0#2025 年"}]
