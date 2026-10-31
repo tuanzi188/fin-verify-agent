@@ -317,6 +317,7 @@ async def test_finance_chat_auto_routes_simple_query_to_structured(api_app, demo
         )
 
     monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-test")
     monkeypatch.setattr(finance_api, "run_structured_rag", fake_structured)
 
     async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
