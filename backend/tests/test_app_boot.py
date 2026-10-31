@@ -6,7 +6,7 @@
 
 本测试真正拉起 uvicorn 子进程并轮询健康检查，确保：
 1. 应用能启动完成（进程存活、/api/v1/health 返回 ok）；
-2. 核心子系统（向量库 / BM25 / 图谱 / 任务队列 / 会话存储）都初始化成功。
+2. 核心子系统（向量库 / BM25 / 图谱 / 会话存储）都初始化成功。
 
 为了在 CI 与冷启动机器上都快速且确定：
 - `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`：禁止启动阶段联网下载模型，
@@ -36,7 +36,6 @@ REQUIRED_HEALTHY_CHECKS = (
     "vector_store",
     "bm25_index",
     "graph_index",
-    "task_queue",
     "conversation_memory",
 )
 

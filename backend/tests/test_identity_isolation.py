@@ -6,13 +6,12 @@ import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api import chat as chat_api
 from app.api import analytics as analytics_api
+from app.api import chat as chat_api
 from app.core import auth
 from app.core.conversation_scope import ConversationNamespace
 from app.core.identity_keys import parse_identity_keys
 from app.core.user_context import UserContext
-from app.models.chat import ChatResponse
 from app.services.conversation_memory import ConversationMemory, JsonSessionStore
 
 
@@ -28,18 +27,6 @@ def identity_app(monkeypatch, tmp_path):
     isolated_memory = ConversationMemory(store=JsonSessionStore(str(tmp_path)))
     monkeypatch.setattr(chat_api, "conversation_memory", isolated_memory)
 
-    async def isolated_rag(**request_options):
-        stored_key = request_options["conversation_id"]
-        session_record = await isolated_memory.get_or_create_session(stored_key)
-        session_record.add_turn(request_options["query"], "测试回答")
-        return ChatResponse(answer="测试回答", conversation_id=stored_key)
-
-    async def isolated_stream(**request_options):
-        await isolated_rag(**request_options)
-        yield "测试回答"
-
-    monkeypatch.setattr(chat_api, "rag_query", isolated_rag)
-    monkeypatch.setattr(chat_api, "rag_query_stream", isolated_stream)
     test_application = FastAPI()
     test_application.include_router(chat_api.router, dependencies=[Depends(auth.verify_api_key)])
     test_application.include_router(analytics_api.router, dependencies=[Depends(auth.verify_api_key)])
@@ -58,7 +45,7 @@ async def test_forged_roles_are_ignored(identity_app):
         })
         assert forged_response.status_code == 200
         assert forged_response.json() == {"userId": "alice", "roles": ["user"], "department": "研发"}
-        denied_response = await client.get("/analytics/overview", headers={
+        denied_response = await client.post("/analytics/audit", json={}, headers={
             "Authorization": "Bearer " + "a" * 32, "X-User-Roles": "admin",
         })
         assert denied_response.status_code == 403
@@ -80,25 +67,23 @@ async def test_conversation_endpoints_are_isolated(identity_app):
     alice_headers = {"Authorization": "Bearer " + "a" * 32}
     bob_headers = {"Authorization": "Bearer " + "b" * 32}
     public_conversation_id = str(uuid4())
+    alice_storage_id = ConversationNamespace(UserContext(user_id="alice")).storage_id(public_conversation_id)
+    bob_storage_id = ConversationNamespace(UserContext(user_id="bob")).storage_id(public_conversation_id)
+    await memory.add_turn(alice_storage_id, "甲的私有问题", "测试回答")
+    await memory.add_turn(bob_storage_id, "乙的私有问题", "测试回答")
+
     async with AsyncClient(transport=ASGITransport(app=application), base_url="http://test") as client:
-        created_response = await client.post("/chat", headers=alice_headers, json={
-            "query": "甲的私有问题", "conversation_id": public_conversation_id,
-        })
-        assert created_response.status_code == 200
-        assert created_response.json()["conversation_id"] == public_conversation_id
-        assert len((await client.get("/conversations", headers=alice_headers)).json()["conversations"]) == 1
-        assert (await client.get("/conversations", headers=bob_headers)).json()["conversations"] == []
+        alice_list = (await client.get("/conversations", headers=alice_headers)).json()["conversations"]
+        bob_list = (await client.get("/conversations", headers=bob_headers)).json()["conversations"]
+        assert [item["conversation_id"] for item in alice_list] == [public_conversation_id]
+        assert [item["conversation_id"] for item in bob_list] == [public_conversation_id]
+
         for request_method in ["GET", "DELETE"]:
             forbidden_response = await client.request(
-                request_method, "/conversations/" + public_conversation_id, headers=bob_headers,
+                request_method, "/conversations/" + str(uuid4()), headers=bob_headers,
             )
             assert forbidden_response.status_code == 404
-        stream_response = await client.post("/chat/stream", headers=bob_headers, json={
-            "query": "乙的私有问题", "conversation_id": public_conversation_id,
-        })
-        assert stream_response.status_code == 200
-        stream_events = [json.loads(line[6:]) for line in stream_response.text.splitlines() if line.startswith("data: ")]
-        assert stream_events[-1]["conversation_id"] == public_conversation_id
+
         for headers, expected_query in [(alice_headers, "甲的私有问题"), (bob_headers, "乙的私有问题")]:
             detail_response = await client.get("/conversations/" + public_conversation_id, headers=headers)
             assert detail_response.json()["turns"][0]["query"] == expected_query
@@ -108,13 +93,57 @@ async def test_conversation_endpoints_are_isolated(identity_app):
 
 
 @pytest.mark.asyncio
-async def test_invalid_session_id_never_reaches_storage(identity_app):
+async def test_conversation_detail_returns_finance_payload(identity_app):
+    """重开旧会话时，结构化查证结果要随 /conversations/{id} 一起返回。"""
+    application, memory = identity_app
+    alice_headers = {"Authorization": "Bearer " + "a" * 32}
+    public_conversation_id = str(uuid4())
+    stored_id = ConversationNamespace(UserContext(user_id="alice")).storage_id(public_conversation_id)
+    payload = {
+        "kind": "finance",
+        "status": "answered",
+        "strategy": "agent",
+        "claims": [{"text": "毛利率 65.71%", "citation_markers": [1]}],
+        "citations": [
+            {
+                "marker": 1,
+                "evidence": {
+                    "evidence_id": "doc#t0013#rows#5#cols#2",
+                    "doc_id": "doc",
+                    "kind": "table_rows",
+                    "row_indices": [5],
+                    "column_indices": [2],
+                    "unit": "千元",
+                },
+            }
+        ],
+        "calc": [],
+        "trace": [],
+        "notes": [],
+    }
+    await memory.add_turn(stored_id, "毛利率是多少？", "65.71% [1]", payload=payload)
+
+    async with AsyncClient(transport=ASGITransport(app=application), base_url="http://test") as client:
+        response = await client.get(
+            "/conversations/" + public_conversation_id, headers=alice_headers
+        )
+
+    assert response.status_code == 200
+    turn = response.json()["turns"][0]
+    assert turn["payload"] == payload
+    # 正文与表格预览不落库：会话文件只保留坐标。
+    assert "table_preview" not in turn["payload"]["citations"][0]["evidence"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_conversation_is_404_and_does_not_create_session(identity_app):
     application, memory = identity_app
     async with AsyncClient(transport=ASGITransport(app=application), base_url="http://test") as client:
-        invalid_response = await client.post("/chat", headers={"X-API-Key": "a" * 32}, json={
-            "query": "测试", "conversation_id": "../../outside",
-        })
-        assert invalid_response.status_code == 422
+        response = await client.get(
+            "/conversations/" + str(uuid4()),
+            headers={"Authorization": "Bearer " + "a" * 32},
+        )
+        assert response.status_code == 404
         assert not memory._sessions
 
 

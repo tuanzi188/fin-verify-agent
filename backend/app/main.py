@@ -18,15 +18,15 @@ from app.core.logging_context import (
 
 from app.config import SERVER_CONFIG, MODEL_PROVIDER, API_KEY
 from app.api.chat import router as chat_router
-from app.api.documents import router as documents_router
 from app.api.analytics import router as analytics_router
+from app.api.finance import router as finance_router
+from app.api.lab import router as lab_router
 from app.core.auth import verify_api_key, API_IDENTITIES
 from app.services.vector_store import vector_store
 from app.services.reranker import reranker
 from app.services.keyword_search import get_bm25_searcher
 from app.services.graph_search import graph_searcher
 from app.services.conversation_memory import conversation_memory
-from app.services.task_queue import task_queue
 from app.services.audit_logger import audit_logger
 from app.models.chat import DocumentChunk
 
@@ -212,13 +212,11 @@ def _assert_production_security() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _assert_production_security()
-    logger.info("Starting KnowledgeMind RAG API... (env=%s)", APP_ENV)
+    logger.info("Starting 金融查证 Agent API... (env=%s)", APP_ENV)
     await vector_store.initialize()
     logger.info("Vector store initialized")
     await conversation_memory._init_store()
     logger.info("Conversation memory initialized")
-    await task_queue.start()
-    logger.info("Task queue started")
     await audit_logger.start()
     logger.info("Audit logger started")
     await _rebuild_retrieval_indexes()
@@ -233,13 +231,12 @@ async def lifespan(app: FastAPI):
     yield
     await conversation_memory.flush()
     await audit_logger.stop()
-    await task_queue.stop()
-    logger.info("Shutting down KnowledgeMind RAG API...")
+    logger.info("Shutting down 金融查证 Agent API...")
 
 
 app = FastAPI(
-    title="KnowledgeMind RAG API",
-    description="企业级智能知识库 RAG 系统 - DeepSeek API 驱动",
+    title="金融查证 Agent API",
+    description="金融文档查证 Agent：结构检索 / 多步 Agent / 证据回查 / 会话历史",
     version="1.1.0",
     lifespan=lifespan,
 )
@@ -266,16 +263,25 @@ app.add_middleware(
 )
 
 app.include_router(chat_router, prefix="/api/v1", tags=["Chat"], dependencies=[Depends(verify_api_key)])
-app.include_router(documents_router, prefix="/api/v1", tags=["Documents"], dependencies=[Depends(verify_api_key)])
 app.include_router(analytics_router, prefix="/api/v1", tags=["Analytics"], dependencies=[Depends(verify_api_key)])
+app.include_router(finance_router, prefix="/api/v1", tags=["Finance"], dependencies=[Depends(verify_api_key)])
+app.include_router(lab_router, prefix="/api/v1", tags=["Lab"], dependencies=[Depends(verify_api_key)])
 
 FRONTEND_PATH = Path(__file__).parent.parent.parent / "frontend" / "dist"
+FRONTEND_ASSETS = FRONTEND_PATH / "assets"
 
 if FRONTEND_PATH.exists():
     logger.info("Serving frontend from %s", FRONTEND_PATH)
-    app.mount("/assets", StaticFiles(directory=str(FRONTEND_PATH / "assets")), name="frontend_assets")
+    # 只有 dist 没有 assets 时（构建中断/半产物）不要 mount 空目录，
+    # 否则整个应用在 import 阶段就崩掉，健康检查也起不来。
+    if FRONTEND_ASSETS.exists():
+        app.mount("/assets", StaticFiles(directory=str(FRONTEND_ASSETS)), name="frontend_assets")
+    else:
+        logger.warning("Frontend assets directory missing: %s", FRONTEND_ASSETS)
 
     @app.get("/")
+    @app.get("/lab")
+    @app.get("/documents")
     @app.get("/analytics")
     @app.get("/audit")
     async def serve_index():
@@ -284,7 +290,7 @@ else:
     @app.get("/")
     async def root():
         return {
-            "service": "KnowledgeMind RAG",
+            "service": "金融查证 Agent",
             "version": "1.1.0",
             "status": "running",
             "docs": "/docs",
@@ -294,7 +300,7 @@ else:
 @app.get("/api/v1/health")
 async def health_check():
     """基础健康检查"""
-    return {"status": "ok", "service": "KnowledgeMind RAG API"}
+    return {"status": "ok", "service": "金融查证 Agent API"}
 
 
 @app.get("/api/v1/health/deep", dependencies=[Depends(verify_api_key)])
@@ -371,17 +377,7 @@ async def deep_health_check():
     from app.services import rerank_api
     checks["rerank"] = rerank_api.describe()
 
-    # 7. 任务队列状态
-    try:
-        queue_size = task_queue.pending_count()
-        checks["task_queue"] = {
-            "status": "healthy",
-            "pending_tasks": queue_size,
-        }
-    except Exception as e:
-        checks["task_queue"] = {"status": "unhealthy", "error": str(e)[:200]}
-
-    # 8. 会话存储状态
+    # 7. 会话存储状态
     try:
         conversations = await conversation_memory.list_conversations()
         checks["conversation_memory"] = {
@@ -393,7 +389,7 @@ async def deep_health_check():
 
     return {
         "status": "healthy" if overall_healthy else "degraded",
-        "service": "KnowledgeMind RAG API",
+        "service": "金融查证 Agent API",
         "version": "1.1.0",
         "timestamp": datetime.now().isoformat(),
         "checks": checks,
