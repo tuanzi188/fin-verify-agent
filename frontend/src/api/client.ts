@@ -57,19 +57,10 @@ export function extractErrorMessage(err: unknown, fallback = '请求失败'): st
   return fallback
 }
 
-export type Citation = components['schemas']['Citation']
-export type ChatResponse = components['schemas']['ChatResponse']
-export type ChatSegment = components['schemas']['ChatSegment']
-export type SearchResult = components['schemas']['SearchResult']
-export type SearchResponse = components['schemas']['SearchResponse']
-export type UploadResponse = components['schemas']['DocumentUploadResponse']
 export type ConversationTurn = components['schemas']['ConversationTurn']
 export type ConversationSummary = components['schemas']['ConversationSummary']
 export type ConversationDetail = components['schemas']['ConversationDetail']
 export type ConversationListResponse = components['schemas']['ConversationListResponse']
-
-/** Agent 模式的引用没有重排分：score 允许为空，不要编 0 让界面显示“匹配 0%”。 */
-export type DisplayCitation = Omit<Citation, 'score'> & { score?: number | null }
 
 export type AgentStatus = 'answered' | 'abstained' | 'clarified' | 'error'
 
@@ -83,75 +74,258 @@ export interface AgentTraceStep {
   error_kind?: string | null
   args?: Record<string, unknown>
   note?: string | null
+  result_ids?: string[]
+  new_result_count?: number | null
+  truncated?: boolean
+  table_id?: string | null
+  row_indices?: number[]
+  column_indices?: number[]
+  result_chars?: number
+  payload_chars?: number
+  evidence_chars_added?: number
+  duplicate_skipped?: number
+  policy?: string | null
+  error_detail?: string | null
 }
 
-export interface AgentChatResponse extends Omit<ChatResponse, 'citations'> {
-  citations: DisplayCitation[]
-  status?: AgentStatus | null
-  trace?: AgentTraceStep[] | null
-  variant?: string | null
-  duration_ms?: number | null
+// ---------------------------------------------------------------------------
+// 金融查证契约
+// ---------------------------------------------------------------------------
+
+export type EvidenceKind = 'paragraph' | 'table_rows' | 'table_cell' | 'document'
+
+export interface SourceSpan {
+  source_id: string
+  kind: 'section' | 'table' | string
+  page?: number | null
+  start?: number | null
+  end?: number | null
+  chars?: number | null
 }
 
-/**
- * 非流式问答。mode=agent 时走工具循环（单轮、不可流式）。
- * 复用 /chat 入口：鉴权、会话隔离、审计与 RAG 路径完全一致。
- */
-export async function sendChat(
+export interface EvidenceTableCell {
+  column: string
+  column_index: number
+  value?: string | null
+}
+
+export interface EvidenceTableRow {
+  row: number
+  row_name: string
+  cells: EvidenceTableCell[]
+}
+
+export interface TablePreview {
+  table_id: string
+  caption: string
+  page?: number | null
+  page_end?: number | null
+  unit: string
+  unit_source: string
+  footnote: string
+  columns: string[]
+  display_columns: string[]
+  column_indices: number[]
+  rows: EvidenceTableRow[]
+  row_indices: number[]
+  total_rows: number
+}
+
+export interface EvidenceRef {
+  evidence_id: string
+  doc_id: string
+  doc_title: string
+  company: string
+  period: string
+  doc_type: string
+  kind: EvidenceKind
+  page?: number | null
+  section_id?: string | null
+  path: string[]
+  table_id?: string | null
+  table_caption?: string | null
+  row_indices: number[]
+  column_indices: number[]
+  row_name?: string | null
+  column?: string | null
+  cell_text?: string | null
+  unit: string
+  footnote: string
+  content: string
+  source_spans: SourceSpan[]
+  table_preview?: TablePreview | null
+  verified: boolean
+  note?: string | null
+}
+
+export interface FinanceCitation {
+  marker: number
+  evidence: EvidenceRef
+}
+
+export interface CalcRecord {
+  formula: string
+  inputs: Record<string, unknown>
+  result: unknown
+  unit?: string
+  tolerance?: number | null
+  note?: string
+}
+
+export interface Claim {
+  text: string
+  citation_markers: number[]
+  calc_index?: number | null
+  uncertainty?: string | null
+}
+
+export interface FinanceChatResponse {
+  status: AgentStatus
+  answer: string
+  claims: Claim[]
+  citations: FinanceCitation[]
+  calc: CalcRecord[]
+  trace: AgentTraceStep[]
+  conversation_id: string
+  model_used: string
+  variant: string
+  strategy: 'structured_rag' | 'agent' | string
+  route_reason: string
+  search_mode: string
+  duration_ms: number
+  token_usage?: Record<string, number> | null
+  notes: string[]
+}
+
+export interface FinanceStats {
+  documents: number
+  companies: number
+  periods: string[]
+  sections: number
+  tables: number
+  blocks: number
+  prose_blocks: number
+  table_blocks: number
+  chunks?: number | null
+  index_fingerprint?: string | null
+  index_version?: string | null
+  corpus_ready: boolean
+  company_names: string[]
+}
+
+export interface FinanceDocumentInfo {
+  doc_id: string
+  title: string
+  company: string
+  period: string
+  doc_type: string
+  code: string
+  unit: string
+  currency?: string
+  announcement_date?: string | null
+  published_at?: string | null
+  source_url?: string | null
+  page_start?: number | null
+  page_end?: number | null
+  sections: number
+  tables: number
+  status: string
+}
+
+export async function sendFinanceChat(
   query: string,
   conversationId?: string,
-  mode: 'rag' | 'agent' = 'rag',
-  maxSteps = 3,
-): Promise<AgentChatResponse> {
-  const response = await api.post<AgentChatResponse>('/chat', {
+  maxSteps = 10,
+  searchMode: 'sections' | 'blocks' = 'blocks',
+): Promise<FinanceChatResponse> {
+  const { data } = await api.post<FinanceChatResponse>('/finance/chat', {
     query,
     conversation_id: conversationId,
-    mode,
     max_steps: maxSteps,
+    search_mode: searchMode,
+    // 产品默认自动选路；UI 不暴露固定窗 RAG 或 Agent/RAG 开关。
+    strategy: 'auto',
   })
-  return response.data
-}
-
-export interface DocumentInfo {
-  document_id: string
-  filename: string
-  title?: string | null
-  author?: string | null
-  department?: string | null
-  classification?: string | null
-  file_type: string
-  file_size: number
-  upload_time?: string | null
-  chunks_count: number
-  status?: string
-  owner?: string | null
-  is_public?: boolean
-  allowed_users?: string[]
-  allowed_departments?: string[]
-  allowed_roles?: string[]
-}
-
-export interface AclOptions {
-  isPublic?: boolean
-  allowedUsers?: string
-  allowedDepartments?: string
-  allowedRoles?: string
-}
-
-export async function uploadDocument(file: File, title?: string, acl?: AclOptions): Promise<UploadResponse> {
-  const form = new FormData()
-  form.append('file', file)
-  if (title) form.append('title', title)
-  if (acl?.isPublic !== undefined) form.append('is_public', String(acl.isPublic))
-  if (acl?.allowedUsers) form.append('allowed_users', acl.allowedUsers)
-  if (acl?.allowedDepartments) form.append('allowed_departments', acl.allowedDepartments)
-  if (acl?.allowedRoles) form.append('allowed_roles', acl.allowedRoles)
-  const { data } = await api.post<UploadResponse>('/upload', form)
   return data
 }
 
-export async function getStats(): Promise<{ total_chunks: number; status: string }> {
-  const { data } = await api.get('/stats')
+export async function getFinanceStats(): Promise<FinanceStats> {
+  const { data } = await api.get<FinanceStats>('/finance/stats')
+  return data
+}
+
+export async function getFinanceDocuments(): Promise<{ documents: FinanceDocumentInfo[] }> {
+  const { data } = await api.get<{ documents: FinanceDocumentInfo[] }>('/finance/documents')
+  return data
+}
+
+export async function getFinanceEvidence(options: {
+  evidenceId?: string
+  tableId?: string
+  rows?: string
+  columns?: string
+}): Promise<EvidenceRef> {
+  const { data } = await api.get<{ evidence: EvidenceRef }>('/finance/evidence', {
+    params: {
+      evidence_id: options.evidenceId,
+      table_id: options.tableId,
+      rows: options.rows,
+      columns: options.columns,
+    },
+  })
+  return data.evidence
+}
+
+export interface LabArmSummary {
+  name: string
+  label?: string
+  pass_at_1?: number | null
+  pass_pow_k?: number | null
+  tasks: number
+  runs: number
+  tokens_per_run?: number | null
+  median_latency_ms?: number | null
+  latency_mean_ms?: number | null
+  avg_steps?: number | null
+  hard_gates: Record<string, unknown>
+  manifest: Record<string, unknown>
+}
+
+export interface LabDimensionSummary {
+  name: string
+  tasks: number
+  baseline_pass_at_1?: number | null
+  improved_pass_at_1?: number | null
+  delta?: number | null
+  delta_exceeds_ci_width?: boolean | null
+}
+
+export interface LabRunSummary {
+  available: boolean
+  comparison_kind: string
+  left_label: string
+  right_label: string
+  generated_at?: string | null
+  verdict?: string | null
+  metric?: string | null
+  tasks_compared: number
+  arms: LabArmSummary[]
+  dimensions: LabDimensionSummary[]
+  mcnemar: Record<string, unknown>
+  optional_baseline?: LabArmSummary | null
+  optional_baseline_label?: string | null
+  artifact?: string | null
+  compare_artifact?: string | null
+  message?: string | null
+}
+
+export async function getLabRuns(): Promise<LabRunSummary> {
+  const { data } = await api.get<LabRunSummary>('/lab/runs')
+  return data
+}
+
+export async function getHealth(): Promise<{ status: string; service?: string }> {
+  const { data } = await api.get('/health')
   return data
 }
 
@@ -168,35 +342,6 @@ export async function getConversation(conversationId: string): Promise<Conversat
 export async function deleteConversation(conversationId: string): Promise<{ success: boolean }> {
   const { data } = await api.delete(`/conversations/${conversationId}`)
   return data
-}
-
-export async function listDocuments(): Promise<{ documents: DocumentInfo[] }> {
-  const { data } = await api.get('/documents')
-  return data
-}
-
-export async function deleteDocument(documentId: string): Promise<{ status: string }> {
-  const { data } = await api.delete(`/documents/${documentId}`)
-  return data
-}
-
-export interface AnalyticsTimeRange {
-  start?: string
-  end?: string
-}
-
-export interface AnalyticsRequest {
-  time_range?: AnalyticsTimeRange
-  group_by?: string
-  top_k?: number
-}
-
-export interface AnalyticsResponse {
-  metric: string
-  summary: Record<string, unknown>
-  series: Record<string, unknown>[]
-  detail?: Record<string, unknown> | null
-  generated_at: string
 }
 
 export interface AuditLogQueryRequest {
@@ -216,138 +361,7 @@ export interface AuditLogQueryResponse {
   logs: Record<string, unknown>[]
 }
 
-export async function getAnalyticsOverview(): Promise<AnalyticsResponse> {
-  const { data } = await api.get<AnalyticsResponse>('/analytics/overview')
-  return data
-}
-
-export async function analyzeDocuments(request?: AnalyticsRequest): Promise<AnalyticsResponse> {
-  const { data } = await api.post<AnalyticsResponse>('/analytics/documents', request ?? {})
-  return data
-}
-
-export async function analyzeConversations(request?: AnalyticsRequest): Promise<AnalyticsResponse> {
-  const { data } = await api.post<AnalyticsResponse>('/analytics/conversations', request ?? {})
-  return data
-}
-
-export async function analyzeTasks(request?: AnalyticsRequest): Promise<AnalyticsResponse> {
-  const { data } = await api.post<AnalyticsResponse>('/analytics/tasks', request ?? {})
-  return data
-}
-
-export async function analyzeGraph(request?: AnalyticsRequest): Promise<AnalyticsResponse> {
-  const { data } = await api.post<AnalyticsResponse>('/analytics/graph', request ?? {})
-  return data
-}
-
 export async function queryAuditLogs(request: AuditLogQueryRequest): Promise<AuditLogQueryResponse> {
   const { data } = await api.post<AuditLogQueryResponse>('/analytics/audit', request)
   return data
-}
-
-export interface StreamDoneResult {
-  conversation_id: string
-  citations: Citation[]
-  confidence: number
-  model_used: string
-  reasoning_mode_used: string
-  reasoning_content?: string
-  is_fallback: boolean
-  answer: string
-}
-
-export async function sendChatStream(
-  query: string,
-  onToken: (token: string) => void,
-  onDone: (result: StreamDoneResult) => void,
-  onError: (error: Error, code?: number) => void,
-  conversationId?: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  const response = await fetch('/api/v1/chat/stream', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify({
-      query,
-      conversation_id: conversationId,
-      top_k: 5,
-      use_fallback: true,
-    }),
-    signal,
-  })
-
-  if (!response.ok) {
-    let detail = `HTTP error: ${response.status}`
-    try {
-      const data = await response.json()
-      if (data.detail) {
-        detail = data.detail
-      }
-    } catch {
-      // 非 JSON 响应，使用默认文案
-    }
-    throw new Error(detail)
-  }
-
-  const reader = response.body?.getReader()
-  if (!reader) {
-    throw new Error('Response body is not readable')
-  }
-
-  const decoder = new TextDecoder()
-  let fullAnswer = ''
-  let buffer = ''
-  let finished = false
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed.startsWith('data: ')) continue
-
-        const jsonStr = trimmed.slice(6)
-        try {
-          const event = JSON.parse(jsonStr)
-
-          if (event.type === 'token') {
-            fullAnswer += event.content
-            onToken(event.content)
-          } else if (event.type === 'done') {
-            onDone({
-              conversation_id: event.conversation_id,
-              citations: event.citations || [],
-              confidence: event.confidence_score || 0,
-              model_used: event.model_used || '',
-              reasoning_mode_used: '',
-              reasoning_content: event.reasoning_content || '',
-              is_fallback: event.is_fallback || false,
-              answer: fullAnswer,
-            })
-            finished = true
-          } else if (event.type === 'error') {
-            onError(new Error(event.content), event.code)
-          }
-        } catch (e) {
-          console.warn('SSE line parse failed:', e)
-        }
-      }
-
-      // 收到 done 即结束读取，不再只依赖服务端关流——否则经 keep-alive 代理时
-      // 连接不关闭，UI 会一直停在「正在生成」状态。
-      if (finished) break
-    }
-  } finally {
-    reader.releaseLock()
-  }
 }

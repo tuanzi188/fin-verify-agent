@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Space, Tag, Typography } from 'antd'
+import { Space, Typography } from 'antd'
 import {
   ApartmentOutlined,
   CheckCircleOutlined,
@@ -8,35 +8,29 @@ import {
   UpOutlined,
 } from '@ant-design/icons'
 import type { AgentTraceStep } from '../api/client'
+import { traceStepResult, traceStepTarget, traceToolLabel } from '../utils/trace'
 
 const { Text } = Typography
+
+/**
+ * 用户版「查证过程」：只回答“查了哪份文档 / 哪张表 / 几次计算”。
+ *
+ * 工具名、参数、延迟、注入、错误码属于实验数据，只在 /lab 的评测产物里看，
+ * 不进入普通查证页面。
+ */
 
 interface AgentTracePanelProps {
   trace?: AgentTraceStep[]
 }
 
-/**
- * Agent 执行轨迹。默认折叠，点标题栏展开。
- * 仿 `ReasoningSection` 的手写折叠，不引 antd Collapse。
- */
 const AgentTracePanel: React.FC<AgentTracePanelProps> = ({ trace }) => {
   const [expanded, setExpanded] = useState(false)
   const steps = (trace || []).filter((step) => step.tool && step.tool !== '__final__')
 
   if (steps.length === 0) return null
 
-  const totalMs = steps.reduce((sum, step) => sum + (step.latency_ms || 0), 0)
-
   return (
-    <div
-      style={{
-        marginTop: 10,
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        background: 'var(--color-bg)',
-        padding: '8px 10px',
-      }}
-    >
+    <div className="surface" style={{ marginTop: 10, padding: 'var(--space-2) var(--space-3)' }}>
       <div
         role="button"
         tabIndex={0}
@@ -57,10 +51,8 @@ const AgentTracePanel: React.FC<AgentTracePanelProps> = ({ trace }) => {
       >
         <Space size={6}>
           <ApartmentOutlined style={{ color: 'var(--color-primary)' }} />
-          <Text strong style={{ fontSize: 12 }}>执行轨迹</Text>
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            {steps.length} 步 · {totalMs} ms
-          </Text>
+          <Text strong style={{ fontSize: 12 }}>查证过程</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>{steps.length} 步</Text>
         </Space>
         {expanded
           ? <UpOutlined style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }} />
@@ -77,19 +69,12 @@ const AgentTracePanel: React.FC<AgentTracePanelProps> = ({ trace }) => {
               <Text type="secondary" style={{ width: 16, fontSize: 11 }}>{step.step}</Text>
               {step.ok
                 ? <CheckCircleOutlined style={{ color: 'var(--color-success)' }} />
-                : <CloseCircleOutlined style={{ color: '#ff4d4f' }} />}
-              <Text code style={{ fontSize: 11 }}>{step.tool}</Text>
-              <Text type="secondary">{step.result_count ?? 0} 条</Text>
-              <Text type="secondary">{step.latency_ms ?? 0} ms</Text>
-              {step.injected && (
-                <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>注入: {step.injected}</Tag>
+                : <CloseCircleOutlined style={{ color: 'var(--color-error)' }} />}
+              <Text style={{ fontSize: 12 }}>{traceToolLabel(step.tool)}</Text>
+              {traceStepTarget(step) && (
+                <Text type="secondary" style={{ fontSize: 11 }}>{traceStepTarget(step)}</Text>
               )}
-              {step.error_kind && (
-                <Tag color="red" style={{ margin: 0, fontSize: 11 }}>{step.error_kind}</Tag>
-              )}
-              {step.args && typeof step.args.query === 'string' && (
-                <Text type="secondary" style={{ fontSize: 11 }}>查询: {step.args.query}</Text>
-              )}
+              <Text type="secondary" style={{ fontSize: 11 }}>{traceStepResult(step)}</Text>
             </div>
           ))}
         </div>

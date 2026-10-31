@@ -29,7 +29,7 @@ describe('ChatInput', () => {
   it('does not call onSend when loading', () => {
     const onSend = vi.fn()
     render(<ChatInput loading={true} onSend={onSend} />)
-    const textarea = screen.getByPlaceholderText(/输入问题/)
+    const textarea = screen.getByPlaceholderText(/正在查证/)
     fireEvent.change(textarea, { target: { value: 'Hello' } })
     fireEvent.click(screen.getByLabelText('发送'))
     expect(onSend).not.toHaveBeenCalled()
@@ -40,17 +40,9 @@ describe('ChatInput', () => {
     expect(screen.getByText(/Enter 发送/)).toBeTruthy()
   })
 
-  it('toggles agent mode through the switch', () => {
-    const onAgentModeChange = vi.fn()
-    render(
-      <ChatInput
-        loading={false}
-        onSend={vi.fn()}
-        agentMode={false}
-        onAgentModeChange={onAgentModeChange}
-      />
-    )
-    fireEvent.click(screen.getByLabelText('深度检索'))
-    expect(onAgentModeChange).toHaveBeenCalledWith(true)
+  it('does not expose the experiment switch in the normal input', () => {
+    render(<ChatInput loading={false} onSend={vi.fn()} />)
+    expect(screen.queryByLabelText('深度检索')).toBeNull()
+    expect(screen.getByText(/结构检索/)).toBeTruthy()
   })
 })

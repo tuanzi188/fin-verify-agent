@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "KnowledgeMind RAG API",
-    "description": "企业级智能知识库 RAG 系统 - DeepSeek API 驱动",
+    "title": "金融查证 Agent API",
+    "description": "金融文档查证 Agent：结构检索 / 多步 Agent / 证据回查 / 会话历史",
     "version": "1.1.0"
   },
   "paths": {
@@ -28,187 +28,6 @@
             "HTTPBearer": []
           }
         ]
-      }
-    },
-    "/api/v1/chat": {
-      "post": {
-        "tags": [
-          "Chat"
-        ],
-        "summary": "Chat",
-        "operationId": "chat_api_v1_chat_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/chat/stream": {
-      "post": {
-        "tags": [
-          "Chat"
-        ],
-        "summary": "Chat Stream",
-        "operationId": "chat_stream_api_v1_chat_stream_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/search": {
-      "post": {
-        "tags": [
-          "Chat"
-        ],
-        "summary": "Search",
-        "operationId": "search_api_v1_search_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SearchRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/classify": {
-      "post": {
-        "tags": [
-          "Chat"
-        ],
-        "summary": "Classify Query",
-        "operationId": "classify_query_api_v1_classify_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "query",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Query"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/v1/conversations": {
@@ -329,471 +148,6 @@
         }
       }
     },
-    "/api/v1/upload": {
-      "post": {
-        "tags": [
-          "Documents"
-        ],
-        "summary": "Upload Document",
-        "operationId": "upload_document_api_v1_upload_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_upload_document_api_v1_upload_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocumentUploadResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/documents": {
-      "get": {
-        "tags": [
-          "Documents"
-        ],
-        "summary": "List Documents",
-        "description": "列出当前用户有权限访问的文档（按 document_id 聚合）。",
-        "operationId": "list_documents_api_v1_documents_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/documents/{document_id}": {
-      "delete": {
-        "tags": [
-          "Documents"
-        ],
-        "summary": "Delete Document",
-        "description": "删除文档，仅管理员或 owner 可执行。",
-        "operationId": "delete_document_api_v1_documents__document_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Document Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/stats": {
-      "get": {
-        "tags": [
-          "Documents"
-        ],
-        "summary": "Get Stats",
-        "operationId": "get_stats_api_v1_stats_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/tasks/{task_id}": {
-      "get": {
-        "tags": [
-          "Documents"
-        ],
-        "summary": "Get Task Status",
-        "description": "查询索引任务状态；非管理员只能查看自己的任务。",
-        "operationId": "get_task_status_api_v1_tasks__task_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "task_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Task Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/tasks": {
-      "get": {
-        "tags": [
-          "Documents"
-        ],
-        "summary": "List Tasks",
-        "description": "列出索引任务；非管理员只看得到自己提交的任务。",
-        "operationId": "list_tasks_api_v1_tasks_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 50,
-              "title": "Limit"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/analytics/overview": {
-      "get": {
-        "tags": [
-          "Analytics"
-        ],
-        "summary": "Get Analytics Overview",
-        "description": "系统运行总览数据分析。",
-        "operationId": "get_analytics_overview_api_v1_analytics_overview_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnalyticsResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/analytics/documents": {
-      "post": {
-        "tags": [
-          "Analytics"
-        ],
-        "summary": "Analyze Documents",
-        "description": "文档与 chunks 数据分析。",
-        "operationId": "analyze_documents_api_v1_analytics_documents_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DocumentAnalyticsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnalyticsResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/analytics/conversations": {
-      "post": {
-        "tags": [
-          "Analytics"
-        ],
-        "summary": "Analyze Conversations",
-        "description": "对话数据分析。",
-        "operationId": "analyze_conversations_api_v1_analytics_conversations_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConversationAnalyticsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnalyticsResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/analytics/tasks": {
-      "post": {
-        "tags": [
-          "Analytics"
-        ],
-        "summary": "Analyze Tasks",
-        "description": "任务队列数据分析。",
-        "operationId": "analyze_tasks_api_v1_analytics_tasks_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TaskAnalyticsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnalyticsResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/analytics/graph": {
-      "post": {
-        "tags": [
-          "Analytics"
-        ],
-        "summary": "Analyze Graph",
-        "description": "知识图谱数据分析。",
-        "operationId": "analyze_graph_api_v1_analytics_graph_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GraphAnalyticsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnalyticsResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/v1/analytics/audit": {
       "post": {
         "tags": [
@@ -841,6 +195,302 @@
         ]
       }
     },
+    "/api/v1/finance/chat": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "summary": "Finance Chat",
+        "operationId": "finance_chat_api_v1_finance_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinanceChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/finance/stats": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "summary": "Get Finance Stats",
+        "operationId": "get_finance_stats_api_v1_finance_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/finance/documents": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "summary": "List Finance Documents",
+        "operationId": "list_finance_documents_api_v1_finance_documents_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/finance/evidence": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "summary": "Get Finance Evidence",
+        "operationId": "get_finance_evidence_api_v1_finance_evidence_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "章节/表格/行组/单元格锚点",
+              "title": "Evidence Id"
+            },
+            "description": "章节/表格/行组/单元格锚点"
+          },
+          {
+            "name": "table_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按表格取证据",
+              "title": "Table Id"
+            },
+            "description": "按表格取证据"
+          },
+          {
+            "name": "rows",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "行号或行名，逗号分隔",
+              "title": "Rows"
+            },
+            "description": "行号或行名，逗号分隔"
+          },
+          {
+            "name": "columns",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "列号或列名，逗号分隔",
+              "title": "Columns"
+            },
+            "description": "列号或列名，逗号分隔"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceEvidenceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/runs": {
+      "get": {
+        "tags": [
+          "Lab"
+        ],
+        "summary": "Get Lab Runs",
+        "operationId": "get_lab_runs_api_v1_lab_runs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "compare",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "compare JSON 文件名",
+              "title": "Compare"
+            },
+            "description": "compare JSON 文件名"
+          },
+          {
+            "name": "baseline",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "baseline report 文件名",
+              "title": "Baseline"
+            },
+            "description": "baseline report 文件名"
+          },
+          {
+            "name": "improved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "improved report 文件名",
+              "title": "Improved"
+            },
+            "description": "improved report 文件名"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabRunSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/audit": {
       "get": {
         "summary": "Serve Index",
@@ -861,6 +511,38 @@
       "get": {
         "summary": "Serve Index",
         "operationId": "serve_index_analytics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents": {
+      "get": {
+        "summary": "Serve Index",
+        "operationId": "serve_index_documents_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lab": {
+      "get": {
+        "summary": "Serve Index",
+        "operationId": "serve_index_lab_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -931,79 +613,166 @@
   },
   "components": {
     "schemas": {
-      "AnalyticsResponse": {
+      "AgentTraceStep": {
         "properties": {
-          "metric": {
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "tool": {
             "type": "string",
-            "title": "Metric"
+            "title": "Tool"
           },
-          "summary": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Summary"
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
           },
-          "series": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Series",
-            "default": []
+          "result_count": {
+            "type": "integer",
+            "title": "Result Count",
+            "default": 0
           },
-          "detail": {
+          "latency_ms": {
+            "type": "integer",
+            "title": "Latency Ms",
+            "default": 0
+          },
+          "injected": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Detail"
+            "title": "Injected"
           },
-          "generated_at": {
-            "type": "string",
-            "title": "Generated At"
+          "error_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Kind"
+          },
+          "args": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Args"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "result_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Result Ids"
+          },
+          "new_result_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Result Count"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "table_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Id"
+          },
+          "row_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Row Indices"
+          },
+          "column_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Column Indices"
+          },
+          "result_chars": {
+            "type": "integer",
+            "title": "Result Chars",
+            "default": 0
+          },
+          "payload_chars": {
+            "type": "integer",
+            "title": "Payload Chars",
+            "default": 0
+          },
+          "evidence_chars_added": {
+            "type": "integer",
+            "title": "Evidence Chars Added",
+            "default": 0
+          },
+          "duplicate_skipped": {
+            "type": "integer",
+            "title": "Duplicate Skipped",
+            "default": 0
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
           }
         },
         "type": "object",
         "required": [
-          "metric",
-          "summary"
+          "step",
+          "tool",
+          "ok"
         ],
-        "title": "AnalyticsResponse"
-      },
-      "AnalyticsTimeRange": {
-        "properties": {
-          "start": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start",
-            "description": "开始时间 ISO 格式"
-          },
-          "end": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End",
-            "description": "结束时间 ISO 格式"
-          }
-        },
-        "type": "object",
-        "title": "AnalyticsTimeRange"
+        "title": "AgentTraceStep"
       },
       "AuditLogQueryRequest": {
         "properties": {
@@ -1123,275 +892,62 @@
         ],
         "title": "AuditLogQueryResponse"
       },
-      "Body_upload_document_api_v1_upload_post": {
+      "CalcRecord": {
         "properties": {
-          "file": {
+          "formula": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File"
+            "title": "Formula"
           },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
+          "inputs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Inputs"
           },
-          "chunking_strategy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chunking Strategy",
-            "default": "semantic"
+          "result": {
+            "title": "Result"
           },
-          "ocr_enabled": {
-            "type": "boolean",
-            "title": "Ocr Enabled",
-            "default": false
-          },
-          "allowed_users": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Allowed Users",
-            "description": "逗号分隔的允许访问用户 ID"
-          },
-          "allowed_departments": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Allowed Departments",
-            "description": "逗号分隔的允许访问部门"
-          },
-          "allowed_roles": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Allowed Roles",
-            "description": "逗号分隔的允许访问角色"
-          },
-          "is_public": {
-            "type": "boolean",
-            "title": "Is Public",
-            "description": "是否公开访问",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "Body_upload_document_api_v1_upload_post"
-      },
-      "ChatRequest": {
-        "properties": {
-          "query": {
+          "unit": {
             "type": "string",
-            "maxLength": 10000,
-            "minLength": 1,
-            "title": "Query",
-            "description": "用户问题"
-          },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "reasoning_mode": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReasoningMode"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "top_k": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 20.0,
-                "minimum": 1.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Top K",
-            "default": 5
-          },
-          "temperature": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 2.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Temperature",
-            "default": 0.1
-          },
-          "use_fallback": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Use Fallback"
-          }
-        },
-        "type": "object",
-        "required": [
-          "query"
-        ],
-        "title": "ChatRequest"
-      },
-      "ChatResponse": {
-        "properties": {
-          "answer": {
-            "type": "string",
-            "title": "Answer"
-          },
-          "segments": {
-            "items": {
-              "$ref": "#/components/schemas/ChatSegment"
-            },
-            "type": "array",
-            "title": "Segments",
-            "default": []
-          },
-          "citations": {
-            "items": {
-              "$ref": "#/components/schemas/Citation"
-            },
-            "type": "array",
-            "title": "Citations",
-            "default": []
-          },
-          "reasoning_content": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reasoning Content"
-          },
-          "confidence_score": {
-            "type": "number",
-            "title": "Confidence Score",
-            "default": 0.0
-          },
-          "conversation_id": {
-            "type": "string",
-            "title": "Conversation Id"
-          },
-          "token_usage": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Token Usage"
-          },
-          "model_used": {
-            "type": "string",
-            "title": "Model Used",
+            "title": "Unit",
             "default": ""
           },
-          "reasoning_mode_used": {
-            "type": "string",
-            "title": "Reasoning Mode Used",
-            "default": ""
+          "tolerance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerance"
           },
-          "is_fallback": {
-            "type": "boolean",
-            "title": "Is Fallback",
-            "default": false
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
           }
         },
         "type": "object",
         "required": [
-          "answer",
-          "conversation_id"
+          "formula"
         ],
-        "title": "ChatResponse"
+        "title": "CalcRecord"
       },
-      "ChatSegment": {
+      "Claim": {
         "properties": {
           "text": {
             "type": "string",
             "title": "Text"
           },
-          "citations": {
+          "citation_markers": {
             "items": {
-              "$ref": "#/components/schemas/Citation"
+              "type": "integer"
             },
             "type": "array",
-            "title": "Citations",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "title": "ChatSegment"
-      },
-      "Citation": {
-        "properties": {
-          "document_id": {
-            "type": "string",
-            "title": "Document Id"
+            "title": "Citation Markers"
           },
-          "document_title": {
-            "type": "string",
-            "title": "Document Title"
-          },
-          "page": {
+          "calc_index": {
             "anyOf": [
               {
                 "type": "integer"
@@ -1400,9 +956,9 @@
                 "type": "null"
               }
             ],
-            "title": "Page"
+            "title": "Calc Index"
           },
-          "paragraph": {
+          "uncertainty": {
             "anyOf": [
               {
                 "type": "string"
@@ -1411,54 +967,14 @@
                 "type": "null"
               }
             ],
-            "title": "Paragraph"
-          },
-          "content": {
-            "type": "string",
-            "title": "Content"
-          },
-          "score": {
-            "type": "number",
-            "title": "Score"
+            "title": "Uncertainty"
           }
         },
         "type": "object",
         "required": [
-          "document_id",
-          "document_title",
-          "content",
-          "score"
+          "text"
         ],
-        "title": "Citation"
-      },
-      "ConversationAnalyticsRequest": {
-        "properties": {
-          "time_range": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AnalyticsTimeRange"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "group_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Group By",
-            "description": "分组维度: day, week, month",
-            "default": "day"
-          }
-        },
-        "type": "object",
-        "title": "ConversationAnalyticsRequest"
+        "title": "Claim"
       },
       "ConversationDeleteResponse": {
         "properties": {
@@ -1566,6 +1082,18 @@
           "timestamp": {
             "type": "number",
             "title": "Timestamp"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
           }
         },
         "type": "object",
@@ -1576,115 +1104,376 @@
         ],
         "title": "ConversationTurn"
       },
-      "DocumentAnalyticsRequest": {
+      "EvidenceKind": {
+        "type": "string",
+        "enum": [
+          "paragraph",
+          "table_rows",
+          "table_cell",
+          "document"
+        ],
+        "title": "EvidenceKind"
+      },
+      "EvidenceRef": {
         "properties": {
-          "time_range": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "doc_id": {
+            "type": "string",
+            "title": "Doc Id"
+          },
+          "doc_title": {
+            "type": "string",
+            "title": "Doc Title",
+            "default": ""
+          },
+          "company": {
+            "type": "string",
+            "title": "Company",
+            "default": ""
+          },
+          "period": {
+            "type": "string",
+            "title": "Period",
+            "default": ""
+          },
+          "doc_type": {
+            "type": "string",
+            "title": "Doc Type",
+            "default": ""
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EvidenceKind",
+            "default": "document"
+          },
+          "page": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/AnalyticsTimeRange"
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Id"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "table_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Id"
+          },
+          "table_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Caption"
+          },
+          "row_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Row Indices"
+          },
+          "column_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Column Indices"
+          },
+          "row_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Name"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "cell_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell Text"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": ""
+          },
+          "footnote": {
+            "type": "string",
+            "title": "Footnote",
+            "default": ""
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "default": ""
+          },
+          "source_spans": {
+            "items": {
+              "$ref": "#/components/schemas/SourceSpan"
+            },
+            "type": "array",
+            "title": "Source Spans"
+          },
+          "table_preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TablePreview"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "group_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Group By",
-            "description": "分组维度: file_type, department, classification",
-            "default": "file_type"
-          }
-        },
-        "type": "object",
-        "title": "DocumentAnalyticsRequest"
-      },
-      "DocumentUploadResponse": {
-        "properties": {
-          "document_id": {
-            "type": "string",
-            "title": "Document Id"
-          },
-          "filename": {
-            "type": "string",
-            "title": "Filename"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "chunks_count": {
-            "type": "integer",
-            "title": "Chunks Count",
-            "default": 0
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": ""
-          },
-          "task_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Task Id"
-          },
-          "owner": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner"
-          },
-          "is_public": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Public",
+          "verified": {
+            "type": "boolean",
+            "title": "Verified",
             "default": false
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           }
         },
         "type": "object",
         "required": [
-          "document_id",
-          "filename",
-          "status"
+          "evidence_id",
+          "doc_id"
         ],
-        "title": "DocumentUploadResponse"
+        "title": "EvidenceRef"
       },
-      "GraphAnalyticsRequest": {
+      "FinanceChatRequest": {
         "properties": {
-          "top_k": {
+          "query": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "max_steps": {
             "type": "integer",
-            "maximum": 100.0,
+            "maximum": 20.0,
             "minimum": 1.0,
-            "title": "Top K",
-            "description": "Top-K 高频实体",
-            "default": 20
+            "title": "Max Steps",
+            "default": 10
+          },
+          "search_mode": {
+            "type": "string",
+            "pattern": "^(sections|blocks)$",
+            "title": "Search Mode",
+            "default": "blocks"
+          },
+          "strategy": {
+            "type": "string",
+            "pattern": "^(auto|agent|structured_rag)$",
+            "title": "Strategy",
+            "default": "auto"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "FinanceChatRequest"
+      },
+      "FinanceChatResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "error"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer",
+            "default": ""
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "type": "array",
+            "title": "Claims"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/FinanceCitation"
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "calc": {
+            "items": {
+              "$ref": "#/components/schemas/CalcRecord"
+            },
+            "type": "array",
+            "title": "Calc"
+          },
+          "trace": {
+            "items": {
+              "$ref": "#/components/schemas/AgentTraceStep"
+            },
+            "type": "array",
+            "title": "Trace"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id",
+            "default": ""
+          },
+          "model_used": {
+            "type": "string",
+            "title": "Model Used",
+            "default": ""
+          },
+          "variant": {
+            "type": "string",
+            "title": "Variant",
+            "default": "improved"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "Strategy",
+            "default": "agent"
+          },
+          "route_reason": {
+            "type": "string",
+            "title": "Route Reason",
+            "default": ""
+          },
+          "search_mode": {
+            "type": "string",
+            "title": "Search Mode",
+            "default": "blocks"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms",
+            "default": 0
+          },
+          "token_usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Usage"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
           }
         },
         "type": "object",
-        "title": "GraphAnalyticsRequest"
+        "title": "FinanceChatResponse"
+      },
+      "FinanceCitation": {
+        "properties": {
+          "marker": {
+            "type": "integer",
+            "title": "Marker"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceRef"
+          }
+        },
+        "type": "object",
+        "required": [
+          "marker",
+          "evidence"
+        ],
+        "title": "FinanceCitation"
+      },
+      "FinanceEvidenceResponse": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceRef"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "FinanceEvidenceResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1699,42 +1488,195 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "ReasoningMode": {
-        "type": "string",
-        "enum": [
-          "non_think",
-          "think_high",
-          "think_max"
-        ],
-        "title": "ReasoningMode"
-      },
-      "SearchRequest": {
+      "LabArmSummary": {
         "properties": {
-          "query": {
+          "name": {
             "type": "string",
-            "minLength": 1,
-            "title": "Query"
+            "title": "Name"
           },
-          "top_k": {
-            "type": "integer",
-            "maximum": 50.0,
-            "minimum": 1.0,
-            "title": "Top K",
-            "default": 10
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
           },
-          "filters": {
+          "pass_at_1": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "type": "number"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Filters"
+            "title": "Pass At 1"
           },
-          "query_type": {
+          "pass_pow_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Pow K"
+          },
+          "tasks": {
+            "type": "integer",
+            "title": "Tasks",
+            "default": 0
+          },
+          "runs": {
+            "type": "integer",
+            "title": "Runs",
+            "default": 0
+          },
+          "tokens_per_run": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Per Run"
+          },
+          "median_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Latency Ms"
+          },
+          "latency_mean_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Mean Ms"
+          },
+          "avg_steps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Steps"
+          },
+          "hard_gates": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Hard Gates"
+          },
+          "manifest": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Manifest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "LabArmSummary"
+      },
+      "LabDimension": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "tasks": {
+            "type": "integer",
+            "title": "Tasks",
+            "default": 0
+          },
+          "baseline_pass_at_1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Pass At 1"
+          },
+          "improved_pass_at_1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Improved Pass At 1"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "delta_exceeds_ci_width": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta Exceeds Ci Width"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "LabDimension"
+      },
+      "LabRunSummary": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": false
+          },
+          "comparison_kind": {
+            "type": "string",
+            "title": "Comparison Kind",
+            "default": "unavailable"
+          },
+          "left_label": {
+            "type": "string",
+            "title": "Left Label",
+            "default": "对照臂"
+          },
+          "right_label": {
+            "type": "string",
+            "title": "Right Label",
+            "default": "Agent"
+          },
+          "generated_at": {
             "anyOf": [
               {
                 "type": "string"
@@ -1743,85 +1685,65 @@
                 "type": "null"
               }
             ],
-            "title": "Query Type",
-            "description": "检索权重类型，如 概念解释、精确查找、综合分析",
-            "default": "综合分析"
-          }
-        },
-        "type": "object",
-        "required": [
-          "query"
-        ],
-        "title": "SearchRequest"
-      },
-      "SearchResponse": {
-        "properties": {
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/SearchResult"
-            },
-            "type": "array",
-            "title": "Results"
+            "title": "Generated At"
           },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "query": {
-            "type": "string",
-            "title": "Query"
-          }
-        },
-        "type": "object",
-        "required": [
-          "results",
-          "total",
-          "query"
-        ],
-        "title": "SearchResponse"
-      },
-      "SearchResult": {
-        "properties": {
-          "document_id": {
-            "type": "string",
-            "title": "Document Id"
-          },
-          "content": {
-            "type": "string",
-            "title": "Content"
-          },
-          "score": {
-            "type": "number",
-            "title": "Score"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata"
-          }
-        },
-        "type": "object",
-        "required": [
-          "document_id",
-          "content",
-          "score",
-          "metadata"
-        ],
-        "title": "SearchResult"
-      },
-      "TaskAnalyticsRequest": {
-        "properties": {
-          "time_range": {
+          "verdict": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/AnalyticsTimeRange"
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "tasks_compared": {
+            "type": "integer",
+            "title": "Tasks Compared",
+            "default": 0
+          },
+          "arms": {
+            "items": {
+              "$ref": "#/components/schemas/LabArmSummary"
+            },
+            "type": "array",
+            "title": "Arms"
+          },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/LabDimension"
+            },
+            "type": "array",
+            "title": "Dimensions"
+          },
+          "mcnemar": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Mcnemar"
+          },
+          "optional_baseline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LabArmSummary"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "group_by": {
+          "optional_baseline_label": {
             "anyOf": [
               {
                 "type": "string"
@@ -1830,13 +1752,255 @@
                 "type": "null"
               }
             ],
-            "title": "Group By",
-            "description": "分组维度: status, name",
-            "default": "status"
+            "title": "Optional Baseline Label"
+          },
+          "artifact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact"
+          },
+          "compare_artifact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compare Artifact"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
           }
         },
         "type": "object",
-        "title": "TaskAnalyticsRequest"
+        "title": "LabRunSummary"
+      },
+      "SourceSpan": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "section"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chars"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "SourceSpan"
+      },
+      "TableCell": {
+        "properties": {
+          "column": {
+            "type": "string",
+            "title": "Column"
+          },
+          "column_index": {
+            "type": "integer",
+            "title": "Column Index"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "column",
+          "column_index"
+        ],
+        "title": "TableCell"
+      },
+      "TablePreview": {
+        "properties": {
+          "table_id": {
+            "type": "string",
+            "title": "Table Id"
+          },
+          "caption": {
+            "type": "string",
+            "title": "Caption",
+            "default": ""
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": ""
+          },
+          "unit_source": {
+            "type": "string",
+            "title": "Unit Source",
+            "default": ""
+          },
+          "footnote": {
+            "type": "string",
+            "title": "Footnote",
+            "default": ""
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "display_columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Display Columns"
+          },
+          "column_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Column Indices"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TableRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "row_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Row Indices"
+          },
+          "total_rows": {
+            "type": "integer",
+            "title": "Total Rows",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "table_id"
+        ],
+        "title": "TablePreview"
+      },
+      "TableRow": {
+        "properties": {
+          "row": {
+            "type": "integer",
+            "title": "Row"
+          },
+          "row_name": {
+            "type": "string",
+            "title": "Row Name",
+            "default": ""
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/TableCell"
+            },
+            "type": "array",
+            "title": "Cells"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row"
+        ],
+        "title": "TableRow"
       },
       "ValidationError": {
         "properties": {

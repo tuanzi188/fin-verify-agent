@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider, theme as antTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { UserProvider } from './contexts/UserContext'
 import ChatBox from './components/ChatBox'
 import PageShell from './components/PageShell'
-import AnalyticsDashboard from './pages/AnalyticsDashboard'
+import LabDashboard from './pages/LabDashboard'
+import FinanceDocuments from './pages/FinanceDocuments'
 import AuditLogs from './pages/AuditLogs'
 
 const App: React.FC = () => {
@@ -35,13 +36,22 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<ChatBox isDark={isDark} onToggleTheme={toggleTheme} />} />
             <Route
-              path="/analytics"
+              path="/lab"
               element={
                 <PageShell isDark={isDark} onToggleTheme={toggleTheme}>
-                  <AnalyticsDashboard />
+                  <LabDashboard />
                 </PageShell>
               }
             />
+            <Route
+              path="/documents"
+              element={
+                <PageShell isDark={isDark} onToggleTheme={toggleTheme}>
+                  <FinanceDocuments />
+                </PageShell>
+              }
+            />
+            <Route path="/analytics" element={<Navigate to="/lab" replace />} />
             <Route
               path="/audit"
               element={

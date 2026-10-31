@@ -6,13 +6,15 @@ import {
   SunOutlined,
   MoonOutlined,
   LogoutOutlined,
-  MessageOutlined,
-  BarChartOutlined,
+  FileSearchOutlined,
+  ExperimentOutlined,
+  FolderOpenOutlined,
   SafetyOutlined,
 } from '@ant-design/icons'
 import { Link, useLocation } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import UserSettingsDrawer from './UserSettingsDrawer'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 interface PageShellProps {
   children: React.ReactNode
@@ -24,11 +26,13 @@ const PageShell: React.FC<PageShellProps> = ({ children, isDark, onToggleTheme }
   const location = useLocation()
   const { userId, isAdmin, logout } = useUser()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const compact = useMediaQuery('(max-width: 900px)')
 
   const navItems = [
-    { key: '/', label: '对话', icon: <MessageOutlined />, path: '/' },
-    { key: '/analytics', label: '数据分析', icon: <BarChartOutlined />, path: '/analytics', adminOnly: true },
-    { key: '/audit', label: '审计日志', icon: <SafetyOutlined />, path: '/audit', adminOnly: true },
+    { key: '/', label: '查证', icon: <FileSearchOutlined />, path: '/' },
+    { key: '/documents', label: '语料', icon: <FolderOpenOutlined />, path: '/documents' },
+    { key: '/lab', label: '实验', icon: <ExperimentOutlined />, path: '/lab' },
+    { key: '/audit', label: '审计', icon: <SafetyOutlined />, path: '/audit', adminOnly: true },
   ]
 
   const userMenuItems = [
@@ -41,40 +45,46 @@ const PageShell: React.FC<PageShellProps> = ({ children, isDark, onToggleTheme }
     <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
       <header
         style={{
-          padding: '12px 24px',
+          padding: compact ? '10px 12px' : '12px 24px',
           background: 'var(--color-bg-white)',
           borderBottom: '1px solid var(--color-border)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          gap: 8,
           position: 'sticky',
           top: 0,
           zIndex: 100,
+          minWidth: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 8 : 20, minWidth: 0, flex: 1 }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', flexShrink: 0 }}>
             <div
               style={{
-                width: 36,
-                height: 36,
+                width: compact ? 30 : 36,
+                height: compact ? 30 : 36,
                 borderRadius: 'var(--radius-md)',
-                background: 'linear-gradient(135deg, #1677ff 0%, #0958d9 100%)',
+                background: 'linear-gradient(135deg, #0f3b66 0%, #145a8a 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#fff',
-                fontSize: 18,
+                fontSize: compact ? 15 : 18,
                 fontWeight: 700,
                 flexShrink: 0,
               }}
             >
-              K
+              F
             </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>KnowledgeMind</div>
+            {!compact && (
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
+                金融查证
+              </div>
+            )}
           </Link>
 
-          <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <nav style={{ display: 'flex', alignItems: 'center', gap: 2, overflowX: 'auto', minWidth: 0 }}>
             {navItems
               .filter((item) => !item.adminOnly || isAdmin)
               .map((item) => {
@@ -86,11 +96,12 @@ const PageShell: React.FC<PageShellProps> = ({ children, isDark, onToggleTheme }
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 6,
-                      padding: '6px 12px',
+                      gap: 5,
+                      padding: compact ? '5px 8px' : '6px 11px',
                       borderRadius: 'var(--radius-md)',
                       textDecoration: 'none',
-                      fontSize: 14,
+                      fontSize: compact ? 12 : 14,
+                      whiteSpace: 'nowrap',
                       fontWeight: active ? 500 : 400,
                       color: active ? 'var(--color-primary)' : 'var(--color-text)',
                       background: active ? 'var(--color-primary-light)' : 'transparent',
@@ -106,7 +117,7 @@ const PageShell: React.FC<PageShellProps> = ({ children, isDark, onToggleTheme }
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {isAdmin && (
+          {isAdmin && !compact && (
             <Tag color="red" style={{ marginRight: 8 }}>
               管理员
             </Tag>

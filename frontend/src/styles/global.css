@@ -6,7 +6,15 @@
   --color-success: #52c41a;
   --color-warning: #faad14;
   --color-error: #ff4d4f;
+  /* 需人工复核：和"资料不足"区分，用更深的琥珀 */
+  --color-review: #d46b08;
+  --color-success-bg: rgba(82, 196, 26, 0.08);
+  --color-warning-bg: rgba(250, 173, 20, 0.10);
+  --color-error-bg: rgba(255, 77, 79, 0.08);
+  --color-review-bg: rgba(212, 107, 8, 0.10);
+  --color-info-bg: rgba(22, 119, 255, 0.08);
   --color-text: #262626;
+  --color-text-inverse: #ffffff;
   --color-text-secondary: #8c8c8c;
   --color-text-tertiary: #bfbfbf;
   --color-bg: #f9fafb;
@@ -24,6 +32,20 @@
   --transition-normal: 0.25s ease;
   --transition-slow: 0.35s ease;
   --max-width: 1440px;
+
+  /* 间距与边框：新组件只从这里取，别再写魔法数字 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --border-width: 1px;
+
+  /*
+   * 断点（media query 不能用 var，统一记在这里）：
+   * 移动 <768 / 紧凑 <1280 / 三栏 ≥1280
+   */
 }
 
 /* ===== 暗色模式 ===== */
@@ -34,7 +56,14 @@
   --color-success: #49aa19;
   --color-warning: #d89614;
   --color-error: #d32029;
+  --color-review: #e8a33d;
+  --color-success-bg: rgba(73, 170, 25, 0.12);
+  --color-warning-bg: rgba(216, 150, 20, 0.14);
+  --color-error-bg: rgba(211, 32, 41, 0.14);
+  --color-review-bg: rgba(232, 163, 61, 0.14);
+  --color-info-bg: rgba(89, 126, 247, 0.14);
   --color-text: #e8e8e8;
+  --color-text-inverse: #141414;
   --color-text-secondary: #8c8c8c;
   --color-text-tertiary: #595959;
   --color-bg: #141414;
@@ -235,6 +264,10 @@ body {
   .chat-header {
     padding: 12px 16px !important;
   }
+  /* 移动端底部空间有限：快捷键说明收进帮助页，输入区只留一行提示。 */
+  .chat-shortcut-hint {
+    display: none !important;
+  }
 }
 
 /* ===== 环形加载动效 ===== */
@@ -245,4 +278,117 @@ body {
 
 .connection-ring {
   animation: ring-rotate 1.2s linear infinite;
+}
+
+/* ===== 工作台：轮次条与问题头 ===== */
+.turn-strip {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+  border-bottom: var(--border-width) solid var(--color-border);
+  background: var(--color-bg-white);
+  flex-shrink: 0;
+}
+
+.turn-strip-label {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.turn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: var(--border-width) solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.turn-chip.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-info-bg);
+  font-weight: 600;
+}
+
+.turn-chip-index {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.turn-chip.is-active .turn-chip-index {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.turn-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.question-head {
+  margin-bottom: var(--space-3);
+}
+
+.question-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.question-meta-text {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.question-title {
+  margin-top: 6px;
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+/* ===== 工作台：通用表面与数字 ===== */
+.surface {
+  background: var(--color-bg-white);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.meta-text {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+/* 表格数字：等宽 + 右对齐 */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }

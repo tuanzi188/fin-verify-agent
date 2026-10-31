@@ -1,135 +1,100 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import React from 'react'
 import MessageItem from '../components/MessageItem'
 
+const financePayload = {
+  status: 'answered' as const,
+  strategy: 'agent',
+  route_reason: '多步查证',
+  claims: [{ text: '智能家居收入占比 65.71%', citation_markers: [1], calc_index: 0 }],
+  citations: [
+    {
+      marker: 1,
+      evidence: {
+        evidence_id: 'doc#t0013#rows#5#cols#2',
+        doc_id: 'doc',
+        doc_title: '美的集团2025年年度报告',
+        company: '美的集团',
+        period: '2025',
+        doc_type: 'annual_report',
+        kind: 'table_rows' as const,
+        page: 58,
+        path: [],
+        table_id: 'doc#t0013',
+        row_indices: [5],
+        column_indices: [2],
+        unit: '千元',
+        footnote: '',
+        content: '',
+        source_spans: [],
+        table_preview: null,
+        verified: true,
+      },
+    },
+  ],
+  calc: [
+    {
+      formula: 'a / b * 100',
+      inputs: { a: '299927239', b: '456451731' },
+      result: '65.7084',
+      unit: '%',
+    },
+  ],
+  trace: [],
+  notes: [],
+}
+
 describe('MessageItem', () => {
-  it('renders user message correctly', () => {
-    render(
-      <MessageItem
-        role="user"
-        content="Hello World"
-      />
-    )
-    expect(screen.getByText('Hello World')).toBeTruthy()
-    expect(screen.getByText('U')).toBeTruthy()
-  })
-
-  it('renders assistant message with markdown', () => {
-    render(
-      <MessageItem
-        role="assistant"
-        content="**Bold** text"
-      />
-    )
+  it('renders markdown content for legacy turns', () => {
+    render(<MessageItem content="**Bold** text" />)
     expect(screen.getByText('Bold')).toBeTruthy()
-    expect(screen.getByText('K')).toBeTruthy()
   })
 
-  it('renders confidence tag when provided', () => {
-    render(
-      <MessageItem
-        role="assistant"
-        content="Answer"
-        confidence={0.85}
-      />
-    )
-    expect(screen.getByText('置信度: 85%')).toBeTruthy()
-  })
-
-  it('renders fallback tag when isFallback is true', () => {
-    render(
-      <MessageItem
-        role="assistant"
-        content="Answer"
-        isFallback={true}
-      />
-    )
-    expect(screen.getByText('兜底回答')).toBeTruthy()
-  })
-
-  it('renders model and mode info', () => {
-    render(
-      <MessageItem
-        role="assistant"
-        content="Answer"
-        model="deepseek-chat"
-        mode="flash"
-      />
-    )
-    expect(screen.getByText('deepseek-chat')).toBeTruthy()
-    expect(screen.getByText('flash')).toBeTruthy()
+  it('renders claims, citation descriptor and calc from the finance payload', () => {
+    render(<MessageItem plain content="完整回答" finance={financePayload} />)
+    expect(screen.getByText('智能家居收入占比 65.71%')).toBeTruthy()
+    // 胶囊稳定显示文档、页码、表格与目标行列
+    expect(screen.getByText(/P\.58/)).toBeTruthy()
+    expect(screen.getByText(/t0013/)).toBeTruthy()
+    expect(screen.getByText(/行5/)).toBeTruthy()
+    expect(screen.getByText(/65\.7084/)).toBeTruthy()
   })
 
   it('calls onCopy when copy button clicked', () => {
     const onCopy = vi.fn()
-    render(
-      <MessageItem
-        role="assistant"
-        content="Test content"
-        onCopy={onCopy}
-      />
-    )
-    const copyButtons = screen.getAllByRole('button')
-    const copyBtn = copyButtons.find(btn => btn.querySelector('.anticon-copy'))
-    if (copyBtn) {
-      fireEvent.click(copyBtn)
-      expect(onCopy).toHaveBeenCalledWith('Test content')
-    }
+    render(<MessageItem content="Test content" onCopy={onCopy} />)
+    const copyBtn = screen.getAllByRole('button').find((btn) => btn.querySelector('.anticon-copy'))
+    expect(copyBtn).toBeTruthy()
+    fireEvent.click(copyBtn!)
+    expect(onCopy).toHaveBeenCalledWith('Test content')
   })
 
-  it('renders citation tags when provided', () => {
+  it('collapses the user-facing trace by default and expands on click', () => {
     render(
       <MessageItem
-        role="assistant"
         content="Answer"
-        citations={[
-          { document_id: '1', document_title: 'Doc One', content: '...', score: 0.9 },
-          { document_id: '2', document_title: 'Doc Two', content: '...', score: 0.8 },
-        ]}
-      />
-    )
-    expect(screen.getByText('Doc One')).toBeTruthy()
-    expect(screen.getByText('Doc Two')).toBeTruthy()
-  })
-
-  it('renders agent status tag', () => {
-    render(<MessageItem role="assistant" content="无法确定。" status="abstained" />)
-    expect(screen.getByText('资料不足')).toBeTruthy()
-  })
-
-  it('collapses agent trace by default and expands on click', () => {
-    render(
-      <MessageItem
-        role="assistant"
-        content="Answer"
-        status="answered"
         trace={[
-          { step: 1, tool: 'search_kb', ok: true, result_count: 3, latency_ms: 42 },
+          { step: 1, tool: 'search_blocks', ok: true, result_count: 3, latency_ms: 42 },
           { step: 2, tool: '__final__', ok: true },
         ]}
-      />
+      />,
     )
-    expect(screen.getByText('执行轨迹')).toBeTruthy()
-    expect(screen.queryByText('search_kb')).toBeNull()
+    expect(screen.getByText('查证过程')).toBeTruthy()
+    expect(screen.queryByText('检索结构块')).toBeNull()
 
-    fireEvent.click(screen.getByText('执行轨迹'))
+    fireEvent.click(screen.getByText('查证过程'))
 
-    expect(screen.getByText('search_kb')).toBeTruthy()
-    expect(screen.getByText('3 条')).toBeTruthy()
-    expect(screen.getByText('42 ms')).toBeTruthy()
+    expect(screen.getByText('检索结构块')).toBeTruthy()
+    expect(screen.getByText('3 条结果')).toBeTruthy()
+    // 延迟、工具名等实验数据不进入普通查证页面
+    expect(screen.queryByText('42 ms')).toBeNull()
   })
 
-  it('handles agent citations without a score', () => {
-    render(
-      <MessageItem
-        role="assistant"
-        content="住宿标准为每晚五百元 [1]。"
-        citations={[
-          { document_id: 'd2', document_title: '差旅与报销制度', content: '住宿标准...' },
-        ]}
-      />
-    )
-    expect(screen.getByText('差旅与报销制度')).toBeTruthy()
+  it('plain mode does not render an avatar or bubble chrome', () => {
+    render(<MessageItem plain content="毛利率 65.71%。" />)
+    expect(screen.getByText('毛利率 65.71%。')).toBeTruthy()
+    expect(screen.queryByText('K')).toBeNull()
+    expect(screen.queryByText('U')).toBeNull()
   })
 })

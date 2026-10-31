@@ -21,74 +21,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/chat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Chat */
-        post: operations["chat_api_v1_chat_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/chat/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Chat Stream */
-        post: operations["chat_stream_api_v1_chat_stream_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Search */
-        post: operations["search_api_v1_search_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/classify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Classify Query */
-        post: operations["classify_query_api_v1_classify_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/conversations": {
         parameters: {
             query?: never;
@@ -124,220 +56,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/upload": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Upload Document */
-        post: operations["upload_document_api_v1_upload_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/documents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Documents
-         * @description 列出当前用户有权限访问的文档（按 document_id 聚合）。
-         */
-        get: operations["list_documents_api_v1_documents_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/documents/{document_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Document
-         * @description 删除文档，仅管理员或 owner 可执行。
-         */
-        delete: operations["delete_document_api_v1_documents__document_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Stats */
-        get: operations["get_stats_api_v1_stats_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tasks/{task_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Task Status
-         * @description 查询索引任务状态；非管理员只能查看自己的任务。
-         */
-        get: operations["get_task_status_api_v1_tasks__task_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tasks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Tasks
-         * @description 列出索引任务；非管理员只看得到自己提交的任务。
-         */
-        get: operations["list_tasks_api_v1_tasks_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analytics/overview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Analytics Overview
-         * @description 系统运行总览数据分析。
-         */
-        get: operations["get_analytics_overview_api_v1_analytics_overview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analytics/documents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Analyze Documents
-         * @description 文档与 chunks 数据分析。
-         */
-        post: operations["analyze_documents_api_v1_analytics_documents_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analytics/conversations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Analyze Conversations
-         * @description 对话数据分析。
-         */
-        post: operations["analyze_conversations_api_v1_analytics_conversations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analytics/tasks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Analyze Tasks
-         * @description 任务队列数据分析。
-         */
-        post: operations["analyze_tasks_api_v1_analytics_tasks_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analytics/graph": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Analyze Graph
-         * @description 知识图谱数据分析。
-         */
-        post: operations["analyze_graph_api_v1_analytics_graph_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/analytics/audit": {
         parameters: {
             query?: never;
@@ -352,6 +70,91 @@ export interface paths {
          * @description 审计日志查询（建议仅管理员使用）。
          */
         post: operations["query_audit_logs_api_v1_analytics_audit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/finance/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finance Chat */
+        post: operations["finance_chat_api_v1_finance_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/finance/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Finance Stats */
+        get: operations["get_finance_stats_api_v1_finance_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/finance/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Finance Documents */
+        get: operations["list_finance_documents_api_v1_finance_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/finance/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Finance Evidence */
+        get: operations["get_finance_evidence_api_v1_finance_evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lab Runs */
+        get: operations["get_lab_runs_api_v1_lab_runs_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -384,6 +187,40 @@ export interface paths {
         };
         /** Serve Index */
         get: operations["serve_index_analytics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serve Index */
+        get: operations["serve_index_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serve Index */
+        get: operations["serve_index_lab_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -454,40 +291,73 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AnalyticsResponse */
-        AnalyticsResponse: {
-            /** Metric */
-            metric: string;
-            /** Summary */
-            summary: {
+        /** AgentTraceStep */
+        AgentTraceStep: {
+            /** Step */
+            step: number;
+            /** Tool */
+            tool: string;
+            /** Ok */
+            ok: boolean;
+            /**
+             * Result Count
+             * @default 0
+             */
+            result_count: number;
+            /**
+             * Latency Ms
+             * @default 0
+             */
+            latency_ms: number;
+            /** Injected */
+            injected?: string | null;
+            /** Error Kind */
+            error_kind?: string | null;
+            /** Args */
+            args?: {
                 [key: string]: unknown;
             };
+            /** Note */
+            note?: string | null;
+            /** Result Ids */
+            result_ids?: string[];
+            /** New Result Count */
+            new_result_count?: number | null;
             /**
-             * Series
-             * @default []
+             * Truncated
+             * @default false
              */
-            series: {
-                [key: string]: unknown;
-            }[];
-            /** Detail */
-            detail?: {
-                [key: string]: unknown;
-            } | null;
-            /** Generated At */
-            generated_at?: string;
-        };
-        /** AnalyticsTimeRange */
-        AnalyticsTimeRange: {
+            truncated: boolean;
+            /** Table Id */
+            table_id?: string | null;
+            /** Row Indices */
+            row_indices?: number[];
+            /** Column Indices */
+            column_indices?: number[];
             /**
-             * Start
-             * @description 开始时间 ISO 格式
+             * Result Chars
+             * @default 0
              */
-            start?: string | null;
+            result_chars: number;
             /**
-             * End
-             * @description 结束时间 ISO 格式
+             * Payload Chars
+             * @default 0
              */
-            end?: string | null;
+            payload_chars: number;
+            /**
+             * Evidence Chars Added
+             * @default 0
+             */
+            evidence_chars_added: number;
+            /**
+             * Duplicate Skipped
+             * @default 0
+             */
+            duplicate_skipped: number;
+            /** Policy */
+            policy?: string | null;
+            /** Error Detail */
+            error_detail?: string | null;
         };
         /** AuditLogQueryRequest */
         AuditLogQueryRequest: {
@@ -525,144 +395,39 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
-        /** Body_upload_document_api_v1_upload_post */
-        Body_upload_document_api_v1_upload_post: {
-            /** File */
-            file: string;
-            /** Title */
-            title?: string | null;
-            /**
-             * Chunking Strategy
-             * @default semantic
-             */
-            chunking_strategy: string | null;
-            /**
-             * Ocr Enabled
-             * @default false
-             */
-            ocr_enabled: boolean;
-            /**
-             * Allowed Users
-             * @description 逗号分隔的允许访问用户 ID
-             */
-            allowed_users?: string | null;
-            /**
-             * Allowed Departments
-             * @description 逗号分隔的允许访问部门
-             */
-            allowed_departments?: string | null;
-            /**
-             * Allowed Roles
-             * @description 逗号分隔的允许访问角色
-             */
-            allowed_roles?: string | null;
-            /**
-             * Is Public
-             * @description 是否公开访问
-             * @default false
-             */
-            is_public: boolean;
-        };
-        /** ChatRequest */
-        ChatRequest: {
-            /**
-             * Query
-             * @description 用户问题
-             */
-            query: string;
-            /** Conversation Id */
-            conversation_id?: string | null;
-            reasoning_mode?: components["schemas"]["ReasoningMode"] | null;
-            /**
-             * Top K
-             * @default 5
-             */
-            top_k: number | null;
-            /**
-             * Temperature
-             * @default 0.1
-             */
-            temperature: number | null;
-            /** Use Fallback */
-            use_fallback?: boolean | null;
-        };
-        /** ChatResponse */
-        ChatResponse: {
-            /** Answer */
-            answer: string;
-            /**
-             * Segments
-             * @default []
-             */
-            segments: components["schemas"]["ChatSegment"][];
-            /**
-             * Citations
-             * @default []
-             */
-            citations: components["schemas"]["Citation"][];
-            /** Reasoning Content */
-            reasoning_content?: string | null;
-            /**
-             * Confidence Score
-             * @default 0
-             */
-            confidence_score: number;
-            /** Conversation Id */
-            conversation_id: string;
-            /** Token Usage */
-            token_usage?: {
+        /** CalcRecord */
+        CalcRecord: {
+            /** Formula */
+            formula: string;
+            /** Inputs */
+            inputs?: {
                 [key: string]: unknown;
-            } | null;
+            };
+            /** Result */
+            result?: unknown;
             /**
-             * Model Used
+             * Unit
              * @default
              */
-            model_used: string;
+            unit: string;
+            /** Tolerance */
+            tolerance?: number | null;
             /**
-             * Reasoning Mode Used
+             * Note
              * @default
              */
-            reasoning_mode_used: string;
-            /**
-             * Is Fallback
-             * @default false
-             */
-            is_fallback: boolean;
+            note: string;
         };
-        /** ChatSegment */
-        ChatSegment: {
+        /** Claim */
+        Claim: {
             /** Text */
             text: string;
-            /**
-             * Citations
-             * @default []
-             */
-            citations: components["schemas"]["Citation"][];
-        };
-        /** Citation */
-        Citation: {
-            /** Document Id */
-            document_id: string;
-            /** Document Title */
-            document_title: string;
-            /** Page */
-            page?: number | null;
-            /** Paragraph */
-            paragraph?: string | null;
-            /** Content */
-            content: string;
-            /** Score */
-            score: number;
-        };
-        /** ConversationAnalyticsRequest */
-        ConversationAnalyticsRequest: {
-            time_range?: components["schemas"]["AnalyticsTimeRange"] | null;
-            /**
-             * Group By
-             * @description 分组维度: day, week, month
-             * @default day
-             */
-            group_by: string | null;
+            /** Citation Markers */
+            citation_markers?: number[];
+            /** Calc Index */
+            calc_index?: number | null;
+            /** Uncertainty */
+            uncertainty?: string | null;
         };
         /** ConversationDeleteResponse */
         ConversationDeleteResponse: {
@@ -706,115 +471,380 @@ export interface components {
             answer: string;
             /** Timestamp */
             timestamp: number;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
         };
-        /** DocumentAnalyticsRequest */
-        DocumentAnalyticsRequest: {
-            time_range?: components["schemas"]["AnalyticsTimeRange"] | null;
+        /**
+         * EvidenceKind
+         * @enum {string}
+         */
+        EvidenceKind: "paragraph" | "table_rows" | "table_cell" | "document";
+        /** EvidenceRef */
+        EvidenceRef: {
+            /** Evidence Id */
+            evidence_id: string;
+            /** Doc Id */
+            doc_id: string;
             /**
-             * Group By
-             * @description 分组维度: file_type, department, classification
-             * @default file_type
-             */
-            group_by: string | null;
-        };
-        /** DocumentUploadResponse */
-        DocumentUploadResponse: {
-            /** Document Id */
-            document_id: string;
-            /** Filename */
-            filename: string;
-            /** Status */
-            status: string;
-            /**
-             * Chunks Count
-             * @default 0
-             */
-            chunks_count: number;
-            /**
-             * Message
+             * Doc Title
              * @default
              */
-            message: string;
-            /** Task Id */
-            task_id?: string | null;
-            /** Owner */
-            owner?: string | null;
+            doc_title: string;
             /**
-             * Is Public
+             * Company
+             * @default
+             */
+            company: string;
+            /**
+             * Period
+             * @default
+             */
+            period: string;
+            /**
+             * Doc Type
+             * @default
+             */
+            doc_type: string;
+            /** @default document */
+            kind: components["schemas"]["EvidenceKind"];
+            /** Page */
+            page?: number | null;
+            /** Section Id */
+            section_id?: string | null;
+            /** Path */
+            path?: string[];
+            /** Table Id */
+            table_id?: string | null;
+            /** Table Caption */
+            table_caption?: string | null;
+            /** Row Indices */
+            row_indices?: number[];
+            /** Column Indices */
+            column_indices?: number[];
+            /** Row Name */
+            row_name?: string | null;
+            /** Column */
+            column?: string | null;
+            /** Cell Text */
+            cell_text?: string | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /**
+             * Footnote
+             * @default
+             */
+            footnote: string;
+            /**
+             * Content
+             * @default
+             */
+            content: string;
+            /** Source Spans */
+            source_spans?: components["schemas"]["SourceSpan"][];
+            table_preview?: components["schemas"]["TablePreview"] | null;
+            /**
+             * Verified
              * @default false
              */
-            is_public: boolean | null;
+            verified: boolean;
+            /** Note */
+            note?: string | null;
         };
-        /** GraphAnalyticsRequest */
-        GraphAnalyticsRequest: {
+        /** FinanceChatRequest */
+        FinanceChatRequest: {
+            /** Query */
+            query: string;
+            /** Conversation Id */
+            conversation_id?: string | null;
             /**
-             * Top K
-             * @description Top-K 高频实体
-             * @default 20
+             * Max Steps
+             * @default 10
              */
-            top_k: number;
+            max_steps: number;
+            /**
+             * Search Mode
+             * @default blocks
+             */
+            search_mode: string;
+            /**
+             * Strategy
+             * @default auto
+             */
+            strategy: string;
+        };
+        /** FinanceChatResponse */
+        FinanceChatResponse: {
+            /**
+             * Status
+             * @default error
+             */
+            status: string;
+            /**
+             * Answer
+             * @default
+             */
+            answer: string;
+            /** Claims */
+            claims?: components["schemas"]["Claim"][];
+            /** Citations */
+            citations?: components["schemas"]["FinanceCitation"][];
+            /** Calc */
+            calc?: components["schemas"]["CalcRecord"][];
+            /** Trace */
+            trace?: components["schemas"]["AgentTraceStep"][];
+            /**
+             * Conversation Id
+             * @default
+             */
+            conversation_id: string;
+            /**
+             * Model Used
+             * @default
+             */
+            model_used: string;
+            /**
+             * Variant
+             * @default improved
+             */
+            variant: string;
+            /**
+             * Strategy
+             * @default agent
+             */
+            strategy: string;
+            /**
+             * Route Reason
+             * @default
+             */
+            route_reason: string;
+            /**
+             * Search Mode
+             * @default blocks
+             */
+            search_mode: string;
+            /**
+             * Duration Ms
+             * @default 0
+             */
+            duration_ms: number;
+            /** Token Usage */
+            token_usage?: {
+                [key: string]: unknown;
+            } | null;
+            /** Notes */
+            notes?: string[];
+        };
+        /** FinanceCitation */
+        FinanceCitation: {
+            /** Marker */
+            marker: number;
+            evidence: components["schemas"]["EvidenceRef"];
+        };
+        /** FinanceEvidenceResponse */
+        FinanceEvidenceResponse: {
+            evidence: components["schemas"]["EvidenceRef"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /**
-         * ReasoningMode
-         * @enum {string}
-         */
-        ReasoningMode: "non_think" | "think_high" | "think_max";
-        /** SearchRequest */
-        SearchRequest: {
-            /** Query */
-            query: string;
+        /** LabArmSummary */
+        LabArmSummary: {
+            /** Name */
+            name: string;
             /**
-             * Top K
-             * @default 10
+             * Label
+             * @default
              */
-            top_k: number;
-            /** Filters */
-            filters?: {
+            label: string;
+            /** Pass At 1 */
+            pass_at_1?: number | null;
+            /** Pass Pow K */
+            pass_pow_k?: number | null;
+            /**
+             * Tasks
+             * @default 0
+             */
+            tasks: number;
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
+            /** Tokens Per Run */
+            tokens_per_run?: number | null;
+            /** Median Latency Ms */
+            median_latency_ms?: number | null;
+            /** Latency Mean Ms */
+            latency_mean_ms?: number | null;
+            /** Avg Steps */
+            avg_steps?: number | null;
+            /** Hard Gates */
+            hard_gates?: {
                 [key: string]: unknown;
-            } | null;
-            /**
-             * Query Type
-             * @description 检索权重类型，如 概念解释、精确查找、综合分析
-             * @default 综合分析
-             */
-            query_type: string | null;
-        };
-        /** SearchResponse */
-        SearchResponse: {
-            /** Results */
-            results: components["schemas"]["SearchResult"][];
-            /** Total */
-            total: number;
-            /** Query */
-            query: string;
-        };
-        /** SearchResult */
-        SearchResult: {
-            /** Document Id */
-            document_id: string;
-            /** Content */
-            content: string;
-            /** Score */
-            score: number;
-            /** Metadata */
-            metadata: {
+            };
+            /** Manifest */
+            manifest?: {
                 [key: string]: unknown;
             };
         };
-        /** TaskAnalyticsRequest */
-        TaskAnalyticsRequest: {
-            time_range?: components["schemas"]["AnalyticsTimeRange"] | null;
+        /** LabDimension */
+        LabDimension: {
+            /** Name */
+            name: string;
             /**
-             * Group By
-             * @description 分组维度: status, name
-             * @default status
+             * Tasks
+             * @default 0
              */
-            group_by: string | null;
+            tasks: number;
+            /** Baseline Pass At 1 */
+            baseline_pass_at_1?: number | null;
+            /** Improved Pass At 1 */
+            improved_pass_at_1?: number | null;
+            /** Delta */
+            delta?: number | null;
+            /** Delta Exceeds Ci Width */
+            delta_exceeds_ci_width?: boolean | null;
+        };
+        /** LabRunSummary */
+        LabRunSummary: {
+            /**
+             * Available
+             * @default false
+             */
+            available: boolean;
+            /**
+             * Comparison Kind
+             * @default unavailable
+             */
+            comparison_kind: string;
+            /**
+             * Left Label
+             * @default 对照臂
+             */
+            left_label: string;
+            /**
+             * Right Label
+             * @default Agent
+             */
+            right_label: string;
+            /** Generated At */
+            generated_at?: string | null;
+            /** Verdict */
+            verdict?: string | null;
+            /** Metric */
+            metric?: string | null;
+            /**
+             * Tasks Compared
+             * @default 0
+             */
+            tasks_compared: number;
+            /** Arms */
+            arms?: components["schemas"]["LabArmSummary"][];
+            /** Dimensions */
+            dimensions?: components["schemas"]["LabDimension"][];
+            /** Mcnemar */
+            mcnemar?: {
+                [key: string]: unknown;
+            };
+            optional_baseline?: components["schemas"]["LabArmSummary"] | null;
+            /** Optional Baseline Label */
+            optional_baseline_label?: string | null;
+            /** Artifact */
+            artifact?: string | null;
+            /** Compare Artifact */
+            compare_artifact?: string | null;
+            /** Message */
+            message?: string | null;
+        };
+        /** SourceSpan */
+        SourceSpan: {
+            /** Source Id */
+            source_id: string;
+            /**
+             * Kind
+             * @default section
+             */
+            kind: string;
+            /** Page */
+            page?: number | null;
+            /** Start */
+            start?: number | null;
+            /** End */
+            end?: number | null;
+            /** Chars */
+            chars?: number | null;
+        };
+        /** TableCell */
+        TableCell: {
+            /** Column */
+            column: string;
+            /** Column Index */
+            column_index: number;
+            /** Value */
+            value?: string | null;
+        };
+        /** TablePreview */
+        TablePreview: {
+            /** Table Id */
+            table_id: string;
+            /**
+             * Caption
+             * @default
+             */
+            caption: string;
+            /** Page */
+            page?: number | null;
+            /** Page End */
+            page_end?: number | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /**
+             * Unit Source
+             * @default
+             */
+            unit_source: string;
+            /**
+             * Footnote
+             * @default
+             */
+            footnote: string;
+            /** Columns */
+            columns?: string[];
+            /** Display Columns */
+            display_columns?: string[];
+            /** Column Indices */
+            column_indices?: number[];
+            /** Rows */
+            rows?: components["schemas"]["TableRow"][];
+            /** Row Indices */
+            row_indices?: number[];
+            /**
+             * Total Rows
+             * @default 0
+             */
+            total_rows: number;
+        };
+        /** TableRow */
+        TableRow: {
+            /** Row */
+            row: number;
+            /**
+             * Row Name
+             * @default
+             */
+            row_name: string;
+            /** Cells */
+            cells?: components["schemas"]["TableCell"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -854,136 +884,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    chat_api_v1_chat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChatResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    chat_stream_api_v1_chat_stream_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    search_api_v1_search_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SearchRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    classify_query_api_v1_classify_post: {
-        parameters: {
-            query: {
-                query: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1070,325 +970,6 @@ export interface operations {
             };
         };
     };
-    upload_document_api_v1_upload_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_document_api_v1_upload_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocumentUploadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_documents_api_v1_documents_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    delete_document_api_v1_documents__document_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_stats_api_v1_stats_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_task_status_api_v1_tasks__task_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_tasks_api_v1_tasks_get: {
-        parameters: {
-            query?: {
-                status?: string | null;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_analytics_overview_api_v1_analytics_overview_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalyticsResponse"];
-                };
-            };
-        };
-    };
-    analyze_documents_api_v1_analytics_documents_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DocumentAnalyticsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalyticsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    analyze_conversations_api_v1_analytics_conversations_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConversationAnalyticsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalyticsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    analyze_tasks_api_v1_analytics_tasks_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TaskAnalyticsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalyticsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    analyze_graph_api_v1_analytics_graph_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GraphAnalyticsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalyticsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     query_audit_logs_api_v1_analytics_audit_post: {
         parameters: {
             query?: never;
@@ -1409,6 +990,153 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditLogQueryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finance_chat_api_v1_finance_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinanceChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceChatResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_finance_stats_api_v1_finance_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_finance_documents_api_v1_finance_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_finance_evidence_api_v1_finance_evidence_get: {
+        parameters: {
+            query?: {
+                /** @description 章节/表格/行组/单元格锚点 */
+                evidence_id?: string | null;
+                /** @description 按表格取证据 */
+                table_id?: string | null;
+                /** @description 行号或行名，逗号分隔 */
+                rows?: string | null;
+                /** @description 列号或列名，逗号分隔 */
+                columns?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceEvidenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lab_runs_api_v1_lab_runs_get: {
+        parameters: {
+            query?: {
+                /** @description compare JSON 文件名 */
+                compare?: string | null;
+                /** @description baseline report 文件名 */
+                baseline?: string | null;
+                /** @description improved report 文件名 */
+                improved?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabRunSummary"];
                 };
             };
             /** @description Validation Error */
@@ -1443,6 +1171,46 @@ export interface operations {
         };
     };
     serve_index_analytics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    serve_index_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    serve_index_lab_get: {
         parameters: {
             query?: never;
             header?: never;

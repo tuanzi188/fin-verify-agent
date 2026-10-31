@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { getConversations, getConversation, deleteConversation, ConversationSummary } from '../api/client'
+import type { HistoryTurn } from './useChat'
 
 export interface UseConversationsReturn {
   conversations: ConversationSummary[]
@@ -7,7 +8,7 @@ export interface UseConversationsReturn {
   activeConversationId: string | undefined
   setActiveConversationId: (id: string | undefined) => void
   loadConversations: () => Promise<void>
-  loadConversation: (convId: string) => Promise<{ query: string; answer: string; timestamp: number }[]>
+  loadConversation: (convId: string) => Promise<HistoryTurn[]>
   deleteConv: (convId: string) => Promise<void>
   startNewConversation: () => void
 }
@@ -30,13 +31,15 @@ export function useConversations(): UseConversationsReturn {
     }
   }, [])
 
-  const loadConversation = useCallback(async (convId: string) => {
+  const loadConversation = useCallback(async (convId: string): Promise<HistoryTurn[]> => {
     const result = await getConversation(convId)
     setActiveConversationId(convId)
     return result.turns.map((turn) => ({
       query: turn.query,
       answer: turn.answer,
       timestamp: turn.timestamp,
+      // 结构化查证结果随会话返回；旧轮次为 null，由 loadHistoryMessages 退回纯文本。
+      payload: turn.payload ?? undefined,
     }))
   }, [])
 
