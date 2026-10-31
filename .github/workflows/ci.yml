@@ -24,8 +24,6 @@ jobs:
           pip install pytest pytest-asyncio pytest-cov httpx
       - name: Run tests
         run: pytest --cov=app --cov-report=xml -v
-      - name: MCP server import smoke
-        run: python -c "import app.mcp.server as s; assert callable(s.search_kb) and callable(s.get_citation); print('mcp tools importable')"
       - name: Verify OpenAPI schema is up to date
         run: |
           python scripts/generate_schema.py

@@ -1,283 +1,77 @@
-# KnowledgeMind 智知 — 可扩展的 RAG 智能知识库应用原型
+# 金融查证 Agent 与检索评测
 
-基于 **DeepSeek** 大模型的检索增强生成（RAG）知识库应用，支持多格式文档解析、混合检索、流式对话和多轮会话记忆，适合学习、原型验证和小规模内部使用。
-
----
-
-## 项目背景
-
-个人开发者和小型团队在学习 RAG、验证架构和搭建内部工具时，常需要处理产品手册、制度文件、会议纪要、技术文档等资料，传统基于关键词的全文搜索难以精准获取所需知识。KnowledgeMind 通过 **RAG（检索增强生成）** 技术，将文档向量化存储，结合 LLM 的语义理解与生成能力，面向学习、原型验证和小规模内部使用的知识库应用。
+面向金融文档的查证产品：**材料入库 → 提问 → 结论与证据 → 历史复核**。
+产品只保留一条主路径（`/finance/*`），评测独立运行（`/lab` 只读离线产物）。
 
 ---
 
-## 项目定位与边界
+## 项目定位
 
-KnowledgeMind 当前定位为可扩展的 RAG 智能知识库应用原型，主要用于学习、架构验证和小规模内部使用。
+传统知识库问答只给一段 Markdown，数字对不对、出自哪张表、口径是什么都无法核对。
+本项目把一次查证拆成可验证的结构：
 
-当前版本已经包含文档解析、混合检索、流式对话、会话记忆、基础身份认证、会话隔离、Docker Compose 配置和自动化测试。
+- 问题自动选路：单点读数走结构检索，比较/计算/跨文档走多步 Agent；
+- 结论拆成要点、引用坐标、计算记录和不确定性；
+- 每条引用能定位到文档、页码、表格、目标行列和单位；
+- 会话落库时保留结构化载荷，重开还能继续核对；
+- 评测台只展示已落盘的实验产物，不在 Web 请求里跑模型。
 
-当前版本尚未完成大规模并发、生产级监控、模型服务高可用、完整运维体系、企业单点登录和正式的多租户管理。因此，部署到真实生产环境前仍需要根据实际场景补充压测、监控、备份、权限管理和故障恢复方案。
-
----
-
-## 核心特性
-
-| 特性 | 说明 |
-|------|------|
-| **多格式文档解析** | 支持 12 种格式：PDF / Word / Excel / PPT / Markdown / TXT / CSV，以及 PNG / JPG / JPEG / BMP / GIF 五类图片。图片默认只登记元数据；扫描件 OCR 为可选能力，需安装 `requirements-optional.txt` 并显式开启 |
-| **多路混合检索** | 向量检索（ChromaDB）+ 关键词检索（BM25），RRF 融合 |
-| **智能重排序** | L2 精排优先调用托管重排（阿里云百炼 qwen3.7-text-rerank）；未配置 key 或调用失败时降级到本地 Cross-Encoder（BAAI/bge-reranker-base），再降级到 l1 规则重排。仅「综合分析 / 对比分析」两类查询走 LLM 重排（l3） |
-| **流式对话** | SSE 流式输出，打字机效果，用户体验流畅 |
-| **多轮会话记忆** | 会话持久化（Redis 可选，默认 JSON 落盘），支持上下文连续对话 |
-| **多模型支持** | DeepSeek / 阿里云百炼，按配置切换 |
-| **置信度评估** | 自动评估回答可信度，透明展示知识来源 |
-| **引用追溯** | 每条回答精确标注引用片段，支持原文查看 |
-| **Agent 深度模式** | `mode=agent`：多轮工具循环、空/错自动重试、终轮覆盖自检；支持 baseline / improved 双变体与五维能力评测 |
-| **Docker Compose 开发部署** | 提供前端、后端和 Redis 的容器化启动配置；该链路未在本机验证，使用前请先跑通一次上传 |
+当前语料是本地预先准备的 **7 份年报/募集说明书（4 家公司）**，不走网页上传；
+入库、校验由脚本完成。
 
 ---
 
-## 技术架构
+## 页面
 
-```mermaid
-graph TB
-    subgraph 前端
-        A[React 18 + TypeScript]
-        B[Ant Design 5]
-        C[Vite 5]
-    end
-
-    subgraph 后端
-        D[FastAPI + Uvicorn]
-        E[ChromaDB 向量库]
-        F[Redis 会话缓存]
-        G[BM25 关键词检索]
-    end
-
-    subgraph AI 模型
-        I[DeepSeek API]
-        J[阿里云百炼]
-    end
-
-    subgraph 文档处理
-        L[文档解析器]
-        M[智能分块 Pipeline]
-        N[嵌入模型]
-    end
-
-    A --> C
-    A --> D
-    D --> E
-    D --> F
-    D --> G
-    D --> I
-    D --> J
-    L --> M
-    M --> N
-    N --> E
-
-    style A fill:#1677ff,color:#fff
-    style D fill:#52c41a,color:#fff
-    style I fill:#722ed1,color:#fff
-```
-
-### 检索流程
-
-```mermaid
-sequenceDiagram
-    participant U as 用户
-    participant F as 前端
-    participant B as FastAPI
-    participant R as RAG 引擎
-    participant V as 向量库
-    participant L as LLM
-
-    U->>F: 输入问题
-    F->>B: POST /chat/stream
-    B->>R: 意图识别 + 查询改写
-    R->>V: 多路检索 (向量+BM25)
-    V-->>R: 候选文档
-    R->>R: Rerank 重排序
-    R->>L: 组装 Prompt + 上下文
-    L-->>R: 流式生成
-    R-->>B: 逐 token 返回
-    B-->>F: SSE 事件流
-    F-->>U: 打字机效果展示
-```
+| 路由 | 功能 |
+|---|---|
+| `/` 查证 | 左侧语料覆盖 + 当前材料 + 最近查证；中间问题、状态、结论要点、计算；右侧证据检查器（≥1280 常驻，<1280 抽屉，<768 底部 Sheet） |
+| `/documents` 语料 | 文档清单：公司、期间、类型、页码、章节数、表数、单位、解析状态 |
+| `/lab` 实验台 | Agent vs 结构感知 RAG 的主比较、pass@1 / pass^k、硬门禁、token、延迟、分维度、逐题翻转、McNemar；固定窗 RAG 默认收起为离线基线 |
+| `/audit` 审计 | 按用户 / 动作 / 资源 / 状态 / 时间查询审计日志（管理员） |
 
 ---
 
-## 技术栈
+## 一次查证发生什么
 
-| 层级 | 技术 | 选型理由 |
-|------|------|----------|
-| **前端框架** | React 18 + TypeScript | 类型安全、生态丰富、适合快速构建应用 |
-| **UI 组件库** | Ant Design 5 | 开箱即用、适合快速搭建界面 |
-| **构建工具** | Vite 5 | 极快的 HMR 和构建速度 |
-| **后端框架** | FastAPI | 高性能异步、自动 API 文档、Pydantic 校验 |
-| **向量数据库** | ChromaDB | 轻量嵌入、零配置、适合中小规模 |
-| **缓存** | Redis 7 | 会话持久化 |
-| **LLM 提供商** | DeepSeek API | 高性价比、中文能力强 |
-| **重排模型** | qwen3.7-text-rerank / BAAI-bge-reranker-base | 托管优先、本地兜底，按可用性自动降级 |
-| **嵌入模型** | BGE-small-zh-v1.5 | 中文语义匹配 SOTA |
-| **容器化** | Docker + docker-compose | 方便本地开发、环境复现和功能验证 |
+1. **自动选路**（`backend/app/services/finance_router.py`）
+   - 单公司 / 单期间 / 单指标 → 结构感知 RAG；
+   - 对比、计算、跨文档、跨期间、未来期间、多个子问题 → 多步 Agent。
+2. **结构检索**：块级混合检索（向量 + BM25 + RRF），按问题识别公司与期间过滤，一次 LLM 生成，证据转成 `EvidenceRef`。
+3. **多步 Agent**：只读工具循环
+   `search_blocks` / `read_block` / `read_section` / `get_rows` / `get_table` / `get_cell` / `calculate` / `list_documents`；
+   空结果与失败会改写重试一次，终轮做覆盖自检。
+4. **结构化输出**：`answer`、`claims`（要点 / 引用编号 / 计算下标 / 不确定性）、
+   `citations`（坐标）、`calc`（公式 / 输入 / 结果 / 单位 / 口径）、`trace`、`status`、`route_reason`、`notes`。
+5. **状态口径**：已回答 / 资料不足 / 需澄清 / 需人工复核 / 执行失败。
+   前四个来自后端；`需人工复核` 由证据可核验性派生（语料版本变化、有结论无引用、回查 404）。
 
 ---
 
-## 快速开始
+## 证据与历史
 
-### 前置要求
+- 每条证据包含：文档、公司/期间、页码、章节路径、表 id/表名、行/列索引、行名/列名、
+  单元格、单位、脚注、来源跨度、`verified`。
+- 证据检查器四个 Tab：**原文 / 表格 / 计算 / 引用链**。
+  表格高亮目标行列、首列冻结，单位与脚注单独展示；计算卡可展开复算。
+- 引用胶囊统一显示「文档 · 页码 · 表格 · 目标行列」，点击右栏同步定位。
+- 会话每轮落库结构化载荷；重开还原结论卡、引用坐标、计算和查证过程。
+- 历史证据按需回查：加载中 / 找不到 / 回查失败可重试 / 语料版本变化，四态明确；
+  404 会把该轮标成「需人工复核」。
 
-- Python 3.10+
-- Node.js 18+
-- Redis 7+（可选，用于会话持久化）
-- DeepSeek API Key（或阿里云百炼 API Key）
-- 阿里云百炼 API Key（可选，仅用于托管重排；不配则走本地 Cross-Encoder）
+---
 
-### 1. 克隆项目
+## 评测（独立于产品）
+
+- 任务集：30 条 Agent 任务 × 5 维（多步拆解 / 恢复与纠错 / 拒答与边界 / 检索与引用 / 澄清与追问）；
+  金融任务 30 基础 + 12 complex + 10 stress；另有 2 条冒烟。
+- `baseline`：最多一轮工具调用，不重试、不自检（对照组）。
+- `improved`：多轮工具循环 + 空/错自动重试 + 终轮覆盖自检（产品默认）。
+- 指标：`pass@1`、`pass^k`、硬门禁、token/次、延迟、步数；显著性只做整卷配对 McNemar。
+- `/lab` 只读 `docs/evidence`，没有产物时显示“主比较未运行 + 复现命令”。
 
 ```bash
-git clone https://github.com/tuanzi188/KnowledgeMind.git
-cd KnowledgeMind
-```
-
-### 2. 配置环境变量
-
-```bash
-cp backend/.env.example backend/.env
-# 编辑 backend/.env，填入 DS_API_KEY
-```
-
-### 3. Docker Compose 开发部署（可选）
-
-提供前端、后端和 Redis 的容器化启动配置，方便本地开发、环境复现和功能验证。
-
-```bash
-docker compose up -d --build
-# 网页：http://localhost:5173
-# API 文档：http://localhost:8002/docs
-```
-
-### 4. 本地开发模式
-
-**后端：**
-
-```bash
-cd backend
-pip install -r requirements.txt
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8002 --reload
-```
-
-**前端：**
-
-```bash
-cd frontend
-npm ci
-npm run dev
-# 访问 http://localhost:5173
-```
-
----
-
-## 项目结构
-
-```
-KnowledgeMind/
-├── frontend/                # React 前端
-│   ├── src/
-│   │   ├── api/             # API 客户端 & 类型定义
-│   │   ├── components/      # 组件
-│   │   │   ├── ChatBox.tsx          # 聊天主组件
-│   │   │   ├── MessageItem.tsx      # 消息气泡
-│   │   │   ├── ChatSidebar.tsx      # 侧边栏
-│   │   │   ├── ChatHeader.tsx       # 顶部栏
-│   │   │   ├── ChatInput.tsx        # 输入框
-│   │   │   ├── CitationPanel.tsx    # 引用面板
-│   │   │   ├── DocumentUpload.tsx   # 文档上传
-│   │   │   └── DocumentManager.tsx  # 文档管理
-│   │   ├── hooks/           # 自定义 Hooks
-│   │   │   ├── useChat.ts           # 聊天逻辑
-│   │   │   └── useConversations.ts  # 会话管理
-│   │   ├── styles/          # 全局样式
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── package.json
-│   └── vite.config.ts
-├── backend/                 # FastAPI 后端
-│   ├── app/
-│   │   ├── api/             # API 路由
-│   │   ├── agent/           # Agent runner（baseline / improved）与提示词
-│   │   ├── tools/           # Agent 只读工具层（检索 / 回查 / 故障注入）
-│   │   ├── core/            # 认证、安全
-│   │   ├── models/          # 数据模型
-│   │   ├── services/        # 核心服务
-│   │   │   ├── rag_engine.py        # RAG 引擎
-│   │   │   ├── hybrid_search.py     # 混合检索
-│   │   │   ├── vector_store.py      # 向量存储
-│   │   │   ├── reranker.py          # 重排序
-│   │   │   ├── model_provider.py    # 模型提供商
-│   │   │   └── ...
-│   │   └── config.py        # 配置管理
-│   ├── evaluation/          # Agent 评测：任务集、判分、pass^k、双变体对比
-│   ├── requirements.txt
-│   └── Dockerfile
-├── docs/                    # 评测设计与证据（AGENT_EVAL_PROJECT_SPEC.md）
-├── docker-compose.yml
-├── README.md
-└── .gitignore
-```
-
----
-
-## API 文档
-
-启动后端后访问 http://localhost:8002/docs 查看 Swagger 自动生成的 API 文档。
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/v1/chat` | POST | 同步对话；`mode=agent` 走 Agent 深度模式 |
-| `/api/v1/chat/stream` | POST | 流式对话 (SSE)；Agent 模式暂不支持 |
-| `/api/v1/search` | POST | 语义搜索 |
-| `/api/v1/upload` | POST | 上传文档 |
-| `/api/v1/documents` | GET | 文档列表 |
-| `/api/v1/documents/{id}` | DELETE | 删除文档 |
-| `/api/v1/conversations` | GET | 会话列表 |
-| `/api/v1/conversations/{id}` | GET | 会话详情 |
-| `/api/v1/conversations/{id}` | DELETE | 删除会话 |
-| `/api/v1/health` | GET | 健康检查 |
-| `/api/v1/stats` | GET | 统计信息 |
-
----
-
-## MCP 接口
-
-检索能力同时以 MCP（Model Context Protocol）server 的形式对外提供，任何 MCP 兼容客户端（Cursor / Claude Desktop / LangGraph 等）都能接入：
-
-```bash
-cd backend
-python -m app.mcp.server                                   # stdio（本机客户端）
-python -m app.mcp.server --transport http --port 8931      # streamable-http
-python -m app.mcp.demo_client                              # 客户端示例：握手 → 工具清单 → 检索 → 回查
-```
-
-工具：`search_kb(query, top_k)`（混合召回 + CE 重排）、`get_citation(chunk_id)`（按段落回查原文）。
-默认读取真实向量库；设置 `MCP_DEMO=1` 时改用评测语料，便于零依赖演示。
-
-> MCP 协议本身没有内建鉴权：stdio 模式靠进程隔离，http 模式默认只绑定 `127.0.0.1`；如需跨机使用，必须放在带 token 校验的网关之后。
-
-## Agent 模式与能力评测
-
-`POST /api/v1/chat` 支持 `mode=agent`（前端「深度检索」开关）。Agent 有两套实现，共用同一套证据纪律（只用检索结果、必须引用、不许编数字）：
-
-| 变体 | 机制 | 用途 |
-|---|---|---|
-| `baseline` | 最多一轮工具调用；不重试、不纠错、不自检 | 对照组，测量“单轮决策上限” |
-| `improved` | 多轮工具循环 + 空/错自动重试（query 改写）+ 终轮覆盖自检 | 线上默认；证明评测能驱动改进 |
-
-评测口径：30 条任务 × 五维（检索与引用 / 多步拆解 / 拒答与边界 / 澄清与追问 / 恢复与纠错），每任务 3 次；确定性检查 + LLM judge；报告给 `pass@1`（任务均值）、`pass^3`（三次全过）与逐任务表；显著性只做整卷 30 条配对 McNemar，分维度只报 delta。
-
-```bash
-# 1) 跑原始结果（约 30–45 分钟含判分；--skip-index 复用已有演示语料）
+# 1) 跑原始结果（--skip-index 复用已有语料）
 cd backend
 python -m evaluation.run_agent_eval --variant improved --runs 3 --skip-index \
   --out ../docs/evidence/agent_improved_runs3_20261027.json
@@ -296,47 +90,170 @@ python -m evaluation.compare_agent_reports \
 |---|---|---|
 | pass@1（任务均值） | 80.0% | 95.6% |
 | pass^3 | 70.0% | 93.3% |
-| 恢复与纠错 | 22.2% | 83.3%（delta 61.1 ≥ 该维 CI 宽度 53.3） |
-| 拒答与边界 | 100% | 94.4%（N3 有 1 次把“没有扣款条款”答成确定结论） |
+| 恢复与纠错 | 22.2% | 83.3% |
+| 拒答与边界 | 100% | 94.4% |
 | token / 次运行 | 2,378 | 5,650（+137.6%） |
 | 中位延迟 | 6.05 s | 10.81 s（+78.6%） |
 
-整卷配对 McNemar：修好 5 / 弄坏 0，**p=0.0625（未达 0.05）**。准确表述应是“恢复维度有可分辨改进，整卷显著性因只有 5 个不一致对而不成立”，不能写成“全卷显著提升”。完整数据见 `docs/evidence/agent_compare3_20261027.json` 与 `docs/AGENT_EVAL_PROJECT_SPEC.md` §10.4。
+整卷配对 McNemar：修好 5 / 弄坏 0，**p=0.0625（未达 0.05）**。
+准确表述是“恢复维度有可分辨改进，整卷显著性因只有 5 个不一致对而不成立”，
+不能写成“全卷显著提升”。数据见 `docs/evidence/agent_compare3_20261027.json`。
+
+---
+
+## 技术栈
+
+- 前端：React 18 + TypeScript + Ant Design 5 + Vite 5
+- 后端：FastAPI + Uvicorn
+- 检索：结构块索引（向量 + BM25 + RRF），金融语料专用
+- 存储：会话 JSON/Redis 可选；审计日志落盘
+- 模型：DeepSeek / 阿里云百炼，按配置切换
+
+---
+
+## 快速开始
+
+### 前置要求
+
+- Python 3.10+
+- Node.js 18+
+- 可用的模型 API（DeepSeek 或阿里云百炼）
+- Redis 7+（可选，仅用于会话持久化）
+
+### 1. 配置
+
+```bash
+cp backend/.env.example backend/.env
+# 编辑 backend/.env，填入 DS_API_KEY / 模型出口
+```
+
+### 2. 准备金融语料
+
+```bash
+cd backend
+pip install -r requirements.txt
+python -m scripts.fetch_finance_corpus      # 可选：拉取年报/募集说明书
+python -m scripts.ingest_finance_corpus     # 解析、建块索引
+python -m scripts.verify_finance_corpus     # 校验文档/章节/表格数量
+```
+
+语料默认放在仓库根目录 `data/finance/`，已加入 `.gitignore`；
+网页不提供上传入口，避免把通用文档混进查证库。
+
+### 3. 启动后端
+
+```bash
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8002 --reload
+# Swagger: http://localhost:8002/docs
+```
+
+### 4. 启动前端
+
+```bash
+cd frontend
+npm ci
+npm run dev
+# 访问 http://localhost:5173
+```
+
+### 5. Docker Compose（可选）
+
+```bash
+docker compose up -d --build
+# 网页：http://localhost:5173
+# API：http://localhost:8002/docs
+```
+
+Docker 使用 `DATA_DIR=/app/data`；需要先把 `data/finance` 挂载进容器。
+
+---
+
+## API
+
+| 端点 | 方法 | 说明 |
+|---|---|---|
+| `/api/v1/auth/me` | GET | 当前身份 |
+| `/api/v1/finance/chat` | POST | 金融查证；`strategy=auto\|structured_rag\|agent` |
+| `/api/v1/finance/stats` | GET | 语料覆盖与索引指纹 |
+| `/api/v1/finance/documents` | GET | 文档清单 |
+| `/api/v1/finance/evidence` | GET | 按 `evidence_id` 或表格坐标回查证据 |
+| `/api/v1/conversations` | GET | 会话列表 |
+| `/api/v1/conversations/{id}` | GET | 会话详情（含结构化 payload） |
+| `/api/v1/conversations/{id}` | DELETE | 删除会话 |
+| `/api/v1/lab/runs` | GET | 只读评测产物 |
+| `/api/v1/analytics/audit` | POST | 审计日志查询（管理员） |
+| `/api/v1/health` | GET | 基础健康检查 |
+| `/api/v1/health/deep` | GET | 子系统深度检查（需认证） |
+
+通用 `/chat`、`/chat/stream`、`/search`、`/classify`、`/upload`、`/documents`、`/stats`、`/tasks`
+以及 MCP 示例服务已下线；产品统一走金融入口。
+
+---
+
+## 项目结构
+
+```
+fin-verify-agent/
+├── frontend/
+│   └── src/
+│       ├── components/          # 工作台、证据检查器、结论卡、轮次条
+│       ├── hooks/               # useChat（仅金融）、useConversations
+│       ├── pages/               # LabDashboard / FinanceDocuments / AuditLogs
+│       ├── utils/               # 状态口径、引用描述、历史载荷解析
+│       └── styles/              # CSS tokens 与工作台样式
+├── backend/
+│   ├── app/
+│   │   ├── api/                 # chat(认证/会话)、finance、lab、analytics(审计)
+│   │   ├── finance/             # 文档库、结构块索引、入库解析
+│   │   ├── services/            # 金融入口、检索、会话、审计、模型层
+│   │   ├── agent/               # Agent runner（baseline / improved）
+│   │   └── tools/               # 金融只读工具层
+│   ├── evaluation/              # 任务集、判分、pass^k、双变体对比
+│   └── scripts/                 # 语料抓取 / 入库 / 校验
+├── docs/                        # 评测设计与证据
+└── docker-compose.yml
+```
+
+---
+
+## 身份与权限
+
+- 单用户开发模式：未配置认证时使用固定 `anonymous` 身份，仅适合本机。
+- 生产/预发模式：`APP_ENV=production` 时若既无 `API_KEY` 也无 `AUTH_USERS_JSON`，服务拒绝启动。
+- 多用户模式：在 `backend/.env` 配置 `AUTH_USERS_JSON`（独立随机令牌、用户 ID、角色、部门）。
+- 角色只由服务端授予；实验台对所有登录用户开放（便于演示与复核），审计仅管理员。
+- 会话按用户命名空间隔离，列表、详情、删除均隔离。
+- 令牌只存在当前标签页的会话存储；公网部署必须 HTTPS。
+
+---
+
+## 数据与升级
+
+- 本地数据默认在仓库根目录 `data/`；Docker 使用 `DATA_DIR=/app/data`。
+- 金融语料在 `data/finance/`，会话在 `data/conversations/`，审计在 `data/audit_logs/`。
+- 语料重新入库后索引指纹会变化；历史会话会提示“语料版本已变化”，证据按新语料回查。
+- 无外部模型凭据时可以跑单元测试；真实查证仍需可用的模型 API。
+
+---
+
+## 开发验证
+
+```bash
+cd backend
+pip install -r requirements.txt
+pip install pytest pytest-asyncio
+python -m pytest -q          # 292 passed
+
+cd ../frontend
+npm ci
+npm run typecheck            # tsc --noEmit
+npm test                     # 48 passed
+npm run build
+```
+
+CI 运行后端测试、前端测试、类型检查与生产构建。
 
 ## License
 
 MIT
-
-## 身份与权限
-
-- 单用户开发模式：未配置认证时使用固定的 `anonymous` 身份，不读取客户端自报的用户、部门或角色。仅适合本机开发。
-- 生产/预发模式：设置 `APP_ENV=production`（或 `staging`）后，若既未配置 `API_KEY` 也未配置 `AUTH_USERS_JSON`，服务会拒绝启动；`/api/v1/health/deep` 也要求认证。
-- 单用户访问控制：后端设置 `API_KEY`，在网页右上角账号面板输入该令牌。不要使用 `VITE_API_KEY` 将共享密钥编译进前端。
-- 多用户模式：在 `backend/.env` 配置 `AUTH_USERS_JSON`，为每人提供独立随机令牌、用户 ID、角色与部门。配置示例见 `backend/.env.example`。启用后共享 `API_KEY` 不再有效。
-- 用户 ID 应保持稳定；同一用户 ID 可配置多个令牌用于轮换。角色仅由服务端授予，只有管理员可查看全局分析与审计。
-- 访问令牌只保存在当前标签页的会话存储中；退出后清除。部署到公网时必须使用 HTTPS，并设置身份凭据。
-- 每个用户的会话使用独立存储命名空间，列表、详情、续聊、流式对话和删除均隔离。历史无身份会话仅在原单用户模式下可见，不自动分配给新用户。
-- 本轮是访问凭据与会话隔离加固，不包含注册、找回密码、企业单点登录或用户管理后台。
-
-## 数据与升级
-
-- 本地默认写入仓库根目录 `data/`；Docker 使用 `DATA_DIR=/app/data`，与宿主机 `./data` 挂载一致，会话文件也使用这个目录。
-- 旧版本曾将部分数据写到仓库父目录。升级前停止服务，备份旧目录，并手动迁移到新的 `data/`；不要直接覆盖已有数据。也可临时将 `DATA_DIR` 指向旧目录。
-- Redis 仅在容器网络内使用，不再向宿主机公开 6379 端口。
-- `frontend/index.html` 加载 React 入口，构建产物在 `frontend/dist/`。
-- 无外部模型凭据时可以运行单元测试；实际文档问答仍需可用的模型 API。
-
-## 开发验证
-
-```sh
-cd backend
-pip install -r requirements.txt
-pip install pytest pytest-asyncio
-python -m pytest -q
-cd ../frontend
-npm ci
-npm test
-npm run build
-```
-
-CI 同时运行后端测试、前端测试与生产构建。权限回归覆盖伪造角色、会话维度的跨用户读取与删除、流式会话隔离和非法会话编号；文档级 ACL 另有独立端到端测试（上传时共享给他人 → 被授权用户可见、未授权用户不可见）。

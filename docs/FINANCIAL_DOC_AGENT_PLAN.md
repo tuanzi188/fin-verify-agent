@@ -840,6 +840,7 @@ python -m evaluation.compare_arms --agent-report %TEMP%\agent_cx_report.json --a
 | 表格切片 | 连续 6 行为一组、组间重叠 1 行；宽表按首列 + 8 个数据列切列组 | 行组是机械分组，不猜业务语义；后续按召回调参 |
 | 证据元数据 | 每块带 doc_id、公司、报告期、章节路径/表名、页码、单位、脚注、原始行列号 | 脚注只在表级保存；单元格脚注仍需解析器补 |
 | Agent 读取 | 新增 `get_rows(table_id, rows, columns?)`：一次 1–20 行、最多 12 列；`get_cell → get_rows → get_table` 分层 | `get_table` 保留为全表浏览/兜底 |
+| Agent 结构检索 | 新增 `search_blocks(query, top_k?)` + `read_block(block_id)`；与结构 RAG 共用 `app/finance/block_index.py` 的块生成、混合检索、过滤与排序 | `--search-mode blocks` 显式启用；默认 `sections` 保持旧口径 |
 | 固定窗引用 | 每个窗口记录全部重叠来源 `source_spans`，锚点按任一来源核验；重叠不足 8 字不算命中 | 旧 run 文件没有 `source_spans`，历史读数无法追溯补录，只能重跑 |
 | 第三臂 | `structured_corpus.py`：结构感知但仍是一次检索、一次生成；保留公司+报告期 metadata 过滤 | 没有多轮、修复、calculate；不替换预注册固定窗基线 |
 
@@ -849,7 +850,8 @@ python -m evaluation.compare_arms --agent-report %TEMP%\agent_cx_report.json --a
   证明“只取重叠最多的一个来源”会系统性漏记引用覆盖。
 - 结构切片：5,296 块 = 正文 2,363 + 表格行组 2,933；覆盖 7 份文档、1,114 张表。
 - 12 道复杂题、top-8、只看是否命中任务卡目标表：固定窗 **5/16**，
-  结构臂 **8/16**。这只是一次离线召回筛查，未调 judge、未跑答案、不能当质量提升。
+  结构臂 **8/16**。这是统一检索实现、修正空过滤回退之前的读数，统一后需重跑；
+  它只是一次离线召回筛查，未调 judge、未跑答案、不能当质量提升。
 - 两臂的可检索块数和上下文形态不同，token 与答案质量必须用同一模型实跑后才可比较。
 
 **运行命令**
@@ -862,12 +864,78 @@ python -m evaluation.run_rag_eval --retrieval-mode fixed \
 # 结构感知第三臂
 python -m evaluation.run_rag_eval --retrieval-mode structured \
     --tasks evaluation/finance_tasks_complex.jsonl --runs 1 --out %TEMP%\rag_structured.json
+
+# Agent 使用结构块检索（显式新口径，不改默认 sections）
+python -m evaluation.run_finance_eval --variant improved --search-mode blocks \
+    --tasks evaluation/finance_tasks_complex.jsonl --runs 1 --out %TEMP%\agent_blocks.json
+
+# 检索一致性验收：两边必须同序、同内容、同过滤条件
+python -m evaluation.check_block_retrieval \
+    --tasks evaluation/finance_tasks_complex.jsonl --top-k 5
 ```
+
+**运行清单（`manifest`）**：`run_finance_eval` / `run_rag_eval` 落盘时都会写
+`manifest`，包含 git commit/branch/dirty、Python/平台、模型与端点（不含 key）、
+任务 sha256、语料 sha256、索引类型/块数/有序内容指纹、切片参数、生成参数。
+原始轨迹在 `results[*].trace`，证据在 `results[*].evidence`。工作区 `dirty=true`
+时只能当“该次工作区快照”，不能声称对应某个 commit。
+
+**检索一致性验收**：结构 RAG 的 `search()` 与 Agent 的 `search_blocks` 都直接调用
+`app.finance.block_index.BlockIndex`；验收脚本逐题比对有序 `block_id`、正文
+sha256、分数序列以及公司/期间过滤。集合相同但顺序不同也算失败；`top_k` 超出 5
+时按 Agent 工具层上限 5 比较。2026-10-29 首轮验收抓到一个真问题：过滤条件
+一条都不匹配时旧实现会退化成全库检索，`2026 Q1` 题因此召回 2024/2025 年报；
+现已改为返回空集，12 条复杂题复验 12/12 同序同内容。
+
+**成本归因轨迹（2026-10-29 落地，不调用模型）**
+
+- 每次 LLM 调用写入 `results[*].llm_calls`：`phase`、`round`、消息条数、
+  消息字符数、`tokens_in/out`、延迟、provider/model、`finish_reason`。
+- `usage` 新增：`llm_calls`、`max_context_tokens`、`final_context_tokens`、
+  `max_messages_chars`、`tool_result_chars`、`tool_payload_chars`、
+  `duplicate_skipped`。
+- 每个工具 step 新增：`result_chars`（模型实际看到的证据字符）、
+  `payload_chars`（工具原始返回）、`evidence_chars_added`、
+  `locator_chars_added`、`duplicate_skipped`。
+- 离线归因命令：
+
+```bash
+python -m evaluation.audit_run_cost \
+    --runs %TEMP%\agent_blocks.json --out %TEMP%\cost.json
+```
+
+旧 runs 没有 `llm_calls`，仍能看总 token、步数、精确重复读取和同表重复读取；
+新 runs 才能拆到阶段。用旧 4 题探针跑出的结论：精确重复读取 **0 组**，
+但 4 题都出现同表跨工具/跨行列的重复读取；CX-10 单题 61,852 token，占 37.9%，
+且触发 `cell_repair` / `abstain_rewrite_post` / `budget_truncated`。
+因此下一步优先验证“拒答/修复路径”或“轮次上下文”，不是同参读取缓存。
 
 **验收顺序**：先 4 题探针确认 schema、token 与引用坐标，再跑 12 题；
 三方（Agent / 固定窗 RAG / 结构 RAG）统一用 `compare_arms` 的逐题配对口径。
 参数选择只改一个变量，记录证据召回、任务通过、页码/表格/单元格定位、输入 token；
 未过 20k 成本线不得写成项目结论。
+
+**2026-10-29 Agent `--search-mode blocks` 4 题探针（3 轮迭代）**：
+
+| 版本 | 总 token | 平均/题 | 判分 | 硬门禁 | 引用 |
+|---|---:|---:|---:|---:|---:|
+| 初版 blocks | 228,436 | 57,109 | 3/4 | 0 | 17/17 |
+| 去 search_sections + top5 | 176,690 | 44,172 | 1/4（误拒） | 1 false_refusal | 11/11 |
+| 加来源多样化 | **163,046** | **40,761** | **3/4** | **0** | 16/16 |
+
+> 判分口径：上表“判分”= `score_agent_runs` 的逐题 `outcome=pass`（judge 开启、
+> 每任务 1 次），不是 `status=answered`。4 题样本的 95% 区间约 30%–95%，只能当
+> 链路探针，不能当质量结论；这组数字来自 `dirty=true` 的工作区快照，且是统一
+> 检索实现与空过滤修正之前的读数，当前代码需重跑后才能复用。
+
+第三轮改动：块模式只暴露 `search_blocks`；top-k 4–5；`get_table` 上限 1500 字；
+同一读取参数走缓存；返回块先按文档、再按来源去重。
+
+- 相对初版 blocks：token **−28.6%**，质量恢复 3/4，硬门禁 0；
+- 相对旧 sections 探针 32,901/题仍高 **24%**；
+- CX-10 仍耗 61.9k，是主要尾项；CX-01 仍有 1 次召回/预算问题；
+- 结论：**链路可用，但成本仍未达线，暂不扩 12 题或 30 题**。下一步只针对
+  CX-10 类长拒答和块读取上限做单项实验，不能把 40.8k 写成结构检索的最终读数。
 
 ### 12.5 下一步
 
