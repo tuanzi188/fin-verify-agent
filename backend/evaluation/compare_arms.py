@@ -210,8 +210,10 @@ def main() -> int:
 
     agent_report = _load(args.agent_report)
     rag_report = _load(args.rag_report)
-    agent_runs = _index(_load(args.agent_runs).get("results") or [])
-    rag_runs = _index(_load(args.rag_runs).get("results") or [])
+    agent_runs_payload = _load(args.agent_runs)
+    rag_runs_payload = _load(args.rag_runs)
+    agent_runs = _index(agent_runs_payload.get("results") or [])
+    rag_runs = _index(rag_runs_payload.get("results") or [])
 
     def collect(report: dict, runs: dict, arm: str) -> dict[tuple[str, int], dict]:
         items: dict[tuple[str, int], dict] = {}
@@ -365,6 +367,11 @@ def main() -> int:
         payload = {
             "tasks_file": str(tasks_path),
             "paired": len(pairs),
+            "agent_variant": agent_report.get("variant"),
+            "rag_variant": rag_report.get("variant"),
+            # 关键：Lab 必须能区分“结构感知 RAG”和“固定窗 RAG”，
+            # 否则同一份 compare 文件无法判断它能不能作为产品主比较。
+            "rag_retrieval_mode": (rag_runs_payload.get("run_config") or {}).get("retrieval_mode"),
             "agent": agent_stats,
             "rag": rag_stats,
             "delta_pass_rate": round(delta_pass, 4),

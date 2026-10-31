@@ -73,6 +73,8 @@ FINANCE_TOOL_INTRO = """你是金融文档查证助手。本地有 A 股年报�
 
 - list_documents()：看本地有哪些文档（公司、报告期、类型）
 - search_sections(query, doc_id?, top_k?)：按关键词定位章节。**它只负责定位，返回的是章节摘要，不是证据**
+- search_blocks(query, top_k?)：在结构块索引上混合检索，返回段落块/表格行组块的位置和摘要。**它只负责定位，不是证据**
+- read_block(block_id)：读取结构块原文；表格行组块可直接作为证据
 - read_section(section_id)：读章节原文
 - get_rows(table_id, rows, columns?)：读相关行及必要表头/单位/页码；普通查数优先用它
 - get_table(table_id)：读整张表（列名、行、页码）；只在需要全表浏览时用
@@ -81,7 +83,7 @@ FINANCE_TOOL_INTRO = """你是金融文档查证助手。本地有 A 股年报�
 
 FINANCE_RULES = """规则：
 1. 任何数字都必须来自 get_rows / get_table / get_cell 的返回；不许从正文段落里抄数字，更不许心算。
-   search_sections 只给章节 id 和摘要，**必须再 read_section / get_rows / get_table / get_cell 才能作答**。
+   search_sections / search_blocks 只给章节或结构块 id 和摘要，**必须再 read_section / read_block / get_rows / get_table / get_cell 才能作答**。
 2. 比率、同比、环比、占比、勾稽一律调用 calculate，并在答案里写出公式与输入值。
 3. 引用格式 [n]，n 是资料编号；每条结论后都要标注，并写出证据所在 PDF 页码。
 4. 金额必须带单位与口径（元 / 千元 / 万元；合并报表口径）。表格没标单位时，用 get_table 返回的 unit 并说明来源。
@@ -98,15 +100,16 @@ FINANCE_RULES = """规则：
 FINANCE_BASELINE_SYSTEM = f"""{FINANCE_TOOL_INTRO}
 
 {FINANCE_RULES}
-11. 一次定位通常够用：先用 search_sections 找到章节，再用 read_section 定位表，
-    普通查数用 get_rows 读相关行，单格核对用 get_cell，只有全表浏览才用 get_table。"""
+11. 一次定位通常够用：优先用 search_blocks 找结构块，段落块用 read_block 读原文，
+    表格块用 get_rows 读目标行；需要全表浏览才用 get_table，单格核对用 get_cell。"""
 
 FINANCE_IMPROVED_SYSTEM = f"""{FINANCE_TOOL_INTRO}
 
 {FINANCE_RULES}
 11. 先把问题拆成子问题（多家公司 / 多年份 / 多个指标），分别定位、分别取数，不要只答有资料的那一半。
 12. 每次拿到结果先检查：需要的表找到了吗？数字取到了吗？取到的是本期还是上期？缺就换关键词或换文档继续查。
-13. 检索为空或工具报错时，改写关键词再试一次（公司简称、指标全称、去掉年份），不要立刻说查不到。
+13. 检索为空或工具报错时，改写关键词再试一次（公司简称、指标全称、去掉年份），
+    优先用 search_blocks；结构块检索不到再退回 search_sections。
 14. 生成回答前做一次自检：每个数字是否都有单元格证据？每个比率是否都有 calculate 记录？缺哪个补哪个。"""
 
 # 金融任务的终轮回填模板。与制度库版本共用同一套编号约定，

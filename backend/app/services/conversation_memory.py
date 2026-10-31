@@ -225,28 +225,44 @@ def _create_session_store(persist_dir: str, session_ttl: int) -> BaseSessionStor
 
 
 class ConversationTurn:
-    def __init__(self, query: str, answer: str, timestamp: float = None):
+    def __init__(
+        self,
+        query: str,
+        answer: str,
+        timestamp: float = None,
+        payload: Optional[dict] = None,
+    ):
         self.query = query
         self.answer = answer
         self.timestamp = timestamp or time.time()
+        # 结构化结果原样保存；旧文件没有该键时为 None，保持向后兼容。
+        self.payload = payload
 
     def to_dict(self) -> dict:
-        return {"query": self.query, "answer": self.answer, "timestamp": self.timestamp}
+        data = {"query": self.query, "answer": self.answer, "timestamp": self.timestamp}
+        if self.payload is not None:
+            data["payload"] = self.payload
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> "ConversationTurn":
-        return cls(query=data["query"], answer=data["answer"], timestamp=data.get("timestamp", time.time()))
+        return cls(
+            query=data["query"],
+            answer=data["answer"],
+            timestamp=data.get("timestamp", time.time()),
+            payload=data.get("payload"),
+        )
 
 
 class ConversationSession:
-    def __init__(self, conversation_id: str, max_turns: int = 10):
+    def __init__(self, conversation_id: str, max_turns: int = 30):
         self.conversation_id = conversation_id
         self.turns: List[ConversationTurn] = []
         self.max_turns = max_turns
         self.created_at = time.time()
 
-    def add_turn(self, query: str, answer: str):
-        self.turns.append(ConversationTurn(query, answer))
+    def add_turn(self, query: str, answer: str, payload: Optional[dict] = None):
+        self.turns.append(ConversationTurn(query, answer, payload=payload))
         if len(self.turns) > self.max_turns:
             self.turns.pop(0)
 
@@ -273,7 +289,7 @@ class ConversationSession:
     def from_dict(cls, data: dict) -> "ConversationSession":
         session = cls(
             conversation_id=data["conversation_id"],
-            max_turns=data.get("max_turns", 10),
+            max_turns=data.get("max_turns", 30),
         )
         session.created_at = data.get("created_at", time.time())
         session.turns = [ConversationTurn.from_dict(t) for t in data.get("turns", [])]
@@ -285,7 +301,7 @@ class ConversationMemory:
         self,
         max_sessions: int = 100,
         session_ttl: int = 1800,
-        max_turns_per_session: int = 10,
+        max_turns_per_session: int = 30,
         persist_dir: str = None,
         store: BaseSessionStore = None,
         flush_delay: float = 2.0,
@@ -375,12 +391,18 @@ class ConversationMemory:
                 )
             return self._sessions[conversation_id]
 
-    async def add_turn(self, conversation_id: str, query: str, answer: str):
+    async def add_turn(
+        self,
+        conversation_id: str,
+        query: str,
+        answer: str,
+        payload: Optional[dict] = None,
+    ):
         session = await self.get_or_create_session(conversation_id)
         async with self._lock:
             # 重新确认会话未被清理
             session = self._sessions.get(conversation_id, session)
-            session.add_turn(query, answer)
+            session.add_turn(query, answer, payload=payload)
             self._dirty_sessions.add(conversation_id)
         self._schedule_flush()
 

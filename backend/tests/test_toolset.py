@@ -9,6 +9,7 @@ import json
 
 
 from app.agent.runner import run
+from app.finance.block_index import BlockIndex
 from app.finance.store import FinanceStore
 from app.tools.contract import validate_result
 from app.tools.finance import FINANCE_TOOL_SPECS
@@ -114,6 +115,55 @@ def test_finance_toolset_cell_evidence_carries_page_and_unit(tmp_path):
     assert "1,000" in item["content"]
     assert "万元" in item["content"]
     assert item["chunk_id"] == f"{TABLE_ID}#{cell['row']}#{cell['column']}"
+
+
+def test_finance_toolset_blocks_mode_exposes_same_structural_tools(tmp_path):
+    write_store(tmp_path)
+    toolset = FinanceToolset(FinanceStore(tmp_path), search_mode="blocks")
+    assert toolset.search_tool == "search_blocks"
+    names = {spec["function"]["name"] for spec in toolset.specs()}
+    assert {"search_blocks", "read_block", "get_rows", "get_cell"} <= names
+    assert "search_sections" not in names
+
+    block = toolset.toolbox.block_index.blocks[0]
+    outcome = __import__("asyncio").run(
+        toolset.call("read_block", {"block_id": block["block_id"]})
+    )
+    assert outcome.ok is True
+    item = toolset.to_evidence("read_block", outcome.data)[0]
+    assert item["citable"] is True
+    assert item["chunk_id"] == block["block_id"]
+    assert item["page"] == block["page"]
+
+
+def test_block_index_lexical_retrieval_returns_readable_block(tmp_path):
+    write_store(tmp_path)
+    index = BlockIndex(FinanceStore(tmp_path))
+    ranked = index._bm25_rank("营业收入", None, 5)
+    assert ranked
+    block = index.get_block(index.blocks[ranked[0]]["block_id"])
+    assert block["content"]
+    assert block["doc_id"] == DOC_ID
+
+
+def test_finance_toolset_reuses_same_read_result(tmp_path):
+    write_store(tmp_path)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+    original = toolset.toolbox.call
+    state = {"calls": 0}
+
+    async def counting_call(name, arguments):
+        state["calls"] += 1
+        return await original(name, arguments)
+
+    toolset.toolbox.call = counting_call
+
+    import asyncio
+
+    first = asyncio.run(toolset.call("get_table", {"table_id": TABLE_ID}))
+    second = asyncio.run(toolset.call("get_table", {"table_id": TABLE_ID}))
+    assert first.ok and second.ok
+    assert state["calls"] == 1
 
 
 def test_finance_toolset_rows_evidence_keeps_row_and_column_coordinates(tmp_path):

@@ -2,6 +2,7 @@
 
 import json
 
+from app.finance import block_index
 from app.finance.store import FinanceStore
 from evaluation import rag_baseline, rag_corpus, structured_corpus
 from evaluation.citation_anchor import anchor_report
@@ -44,43 +45,45 @@ def _document() -> dict:
 
 def test_body_chunks_stay_inside_section_and_respect_size():
     body = ("甲" * 350 + "。") * 5
-    chunks = structured_corpus._pack_sentences(body)
+    chunks = block_index.pack_sentences(body)
     assert len(chunks) >= 2
     assert all(chunk.strip() for chunk in chunks)
-    assert all(len(chunk) <= structured_corpus.BODY_MAX_CHARS + 120 for chunk in chunks)
+    assert all(len(chunk) <= block_index.BODY_MAX_CHARS + 120 for chunk in chunks)
     # 只在句子边界重叠，不把整章内容重复进每个块
     assert sum(len(chunk) for chunk in chunks) < len(body) * 1.5
 
 
 def test_question_period_filter_keeps_cross_year_questions():
-    assert structured_corpus.periods_for_question("美的集团 2025 年营业收入") == {"2025"}
-    assert structured_corpus.periods_for_question(
+    assert block_index.periods_for_question("美的集团 2025 年营业收入") == {"2025"}
+    assert block_index.periods_for_question(
         "比亚迪 2025 年比 2024 年增速差多少"
     ) == {"2024", "2025"}
-    assert structured_corpus.periods_for_question("美的集团营业收入") is None
+    assert block_index.periods_for_question("美的集团营业收入") is None
 
     chunks = [
         {"doc_id": "cninfo-000333-2025-annual", "period": "2025"},
         {"doc_id": "cninfo-000333-2024-annual", "period": "2024"},
     ]
-    allowed = structured_corpus._allowed_indices(chunks, ["000333"], {"2025"})
+    index = block_index.BlockIndex.__new__(block_index.BlockIndex)
+    index.blocks = chunks
+    allowed = index._allowed_indices([], {"2025"}, ["000333"])
     assert allowed == {0}
 
 
 def test_table_groups_cover_all_rows_and_columns():
-    row_groups = structured_corpus._row_groups(13)
+    row_groups = block_index.row_groups(13)
     assert row_groups[0] == list(range(6))
     assert row_groups[-1][-1] == 12
     assert set().union(*map(set, row_groups)) == set(range(13))
 
-    columns = structured_corpus._column_groups(20)
+    columns = block_index.column_groups(20)
     assert columns[0][0] == 0
     assert set().union(*map(set, columns)) == set(range(20))
     assert all(index in group for group in columns for index in [0])
 
 
 def test_document_chunks_keep_source_metadata_and_coordinates():
-    chunks = structured_corpus._document_chunks(_document())
+    chunks = block_index.build_document_blocks(_document())
     prose = [chunk for chunk in chunks if chunk["kind"] == "paragraph"]
     tables = [chunk for chunk in chunks if chunk["kind"] == "table_rows"]
 
@@ -153,6 +156,65 @@ async def test_answer_once_accepts_structured_corpus_without_changing_generation
     assert result["evidence"][0]["source_spans"][0]["source_id"] == "demo#t1"
     assert result["evidence"][0]["kind"] == "table_rows"
     assert result["citations"][0]["chunk_id"] == "demo#t1#rows#0#cols#1"
+
+
+def test_structured_corpus_search_delegates_to_shared_block_index(monkeypatch):
+    """结构 RAG 不能维护第二套检索：调用参数与返回顺序必须原样走 BlockIndex。"""
+    calls: dict = {}
+
+    class FakeIndex:
+        def search(self, query, top_k=8, doc_codes=None):
+            calls.update({"query": query, "top_k": top_k, "doc_codes": doc_codes})
+            return [
+                {"chunk_id": "doc#a", "content": "第一块", "score": 0.9},
+                {"chunk_id": "doc#b", "content": "第二块", "score": 0.5},
+            ]
+
+    monkeypatch.setattr(structured_corpus, "_block_index", lambda: FakeIndex())
+    hits = structured_corpus.search("营业收入", top_k=2, doc_codes=["000333"])
+
+    assert [hit["chunk_id"] for hit in hits] == ["doc#a", "doc#b"]
+    assert calls == {"query": "营业收入", "top_k": 2, "doc_codes": ["000333"]}
+
+
+def test_block_index_search_filters_period_and_preserves_rank_order(tmp_path, monkeypatch):
+    """检索验收要看有序结果：集合相同但顺序不同也会改变生成。"""
+    for doc_id, period in (("cninfo-000333-2024-annual", "2024"),
+                           ("cninfo-000333-2025-annual", "2025")):
+        document = {
+            "doc_id": doc_id,
+            "company": "美的集团",
+            "code": "000333",
+            "period": period,
+            "doc_type": "annual_report",
+            "sections": [{
+                "section_id": f"{doc_id}#s1",
+                "path": ["第三节", "经营情况"],
+                "page_start": 10,
+                "text": f"{period} 年营业收入为 1,234 万元。营业收入同比增长 10%。",
+            }],
+            "tables": [],
+        }
+        path = tmp_path / doc_id / "document.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+
+    index = block_index.BlockIndex(FinanceStore(tmp_path))
+    monkeypatch.setattr(index, "_dense_rank", lambda *args, **kwargs: [])
+    hits = index.search("美的集团 2025 年营业收入", top_k=5)
+
+    assert hits
+    assert all(hit["period"] == "2025" for hit in hits)
+    assert all(hit["company"] == "美的集团" for hit in hits)
+    scores = [hit["score"] for hit in hits]
+    assert scores == sorted(scores, reverse=True)
+
+    filtered = index.search("营业收入", top_k=5, doc_codes=["000333"])
+    assert filtered
+    assert all(hit["doc_code"] == "000333" for hit in filtered)
+
+    # 过滤条件一条都不匹配时必须是空结果，不能退化成全库检索。
+    assert index.search("比亚迪 2026 年第一季度营业收入", top_k=5) == []
 
 
 def test_citation_anchor_uses_all_window_sources(tmp_path):

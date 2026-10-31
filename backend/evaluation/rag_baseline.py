@@ -18,7 +18,12 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from app.agent.runner import _decide_status, _extract_citations
+from app.agent.runner import (
+    _decide_status,
+    _extract_citations,
+    _record_llm_call,
+    _usage_telemetry,
+)
 from app.services.deepseek import deepseek_client
 from evaluation import rag_corpus
 
@@ -113,6 +118,7 @@ async def answer_once(
     ]
 
     usage = {"steps": 1, "tokens_in": 0, "tokens_out": 0, "latency_ms": 0, "model_calls": 1}
+    llm_calls: list[dict] = []
     answer = ""
     failed = False
     final_meta: dict = {}
@@ -126,14 +132,25 @@ async def answer_once(
         },
     ]
     try:
+        llm_started_at = time.perf_counter()
         answer, _, call_usage = await model.chat(
             messages,
             temperature=0.1,
             max_tokens=MAX_ANSWER_TOKENS,
         )
+        llm_latency_ms = int((time.perf_counter() - llm_started_at) * 1000)
         final_meta = call_usage or {}
+        _record_llm_call(
+            llm_calls,
+            phase="rag_generate",
+            round_index=1,
+            messages=messages,
+            usage=final_meta,
+            latency_ms=llm_latency_ms,
+        )
         usage["tokens_in"] = int(final_meta.get("prompt_tokens") or 0)
         usage["tokens_out"] = int(final_meta.get("completion_tokens") or 0)
+        usage.update(_usage_telemetry(llm_calls))
     except Exception as exc:  # noqa: BLE001 - 崩溃要落成 error 而不是丢记录
         failed = True
         notes.append(f"run_error: {type(exc).__name__}: {exc}")
@@ -179,6 +196,7 @@ async def answer_once(
         "citations": citations,
         "trace": trace,
         "usage": usage,
+        "llm_calls": llm_calls,
         "evidence": evidence,
         "retrieved": [
             {"chunk_id": hit["chunk_id"], "source_id": hit["source_id"], "score": hit["score"]}

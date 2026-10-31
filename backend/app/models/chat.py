@@ -67,6 +67,20 @@ class AgentTraceStep(BaseModel):
     error_kind: Optional[str] = None
     args: Dict[str, Any] = Field(default_factory=dict)
     note: Optional[str] = None
+    # 结构化证据字段：让前端能直接显示“读了哪张表、哪些行列、新增多少证据”，
+    # 而不是从 note/args 里猜。旧客户端忽略这些字段即可。
+    result_ids: List[str] = Field(default_factory=list)
+    new_result_count: Optional[int] = None
+    truncated: bool = False
+    table_id: Optional[str] = None
+    row_indices: List[int] = Field(default_factory=list)
+    column_indices: List[int] = Field(default_factory=list)
+    result_chars: int = 0
+    payload_chars: int = 0
+    evidence_chars_added: int = 0
+    duplicate_skipped: int = 0
+    policy: Optional[str] = None
+    error_detail: Optional[str] = None
 
 
 class ChatSegment(BaseModel):
@@ -146,6 +160,9 @@ class ConversationTurn(BaseModel):
     query: str
     answer: str
     timestamp: float
+    # 金融查证的结构化结果（要点/引用坐标/计算/轨迹）。旧会话没有这个字段，
+    # 前端据此退回 Markdown 渲染；通用 RAG 轮次始终为 None。
+    payload: Optional[Dict[str, Any]] = None
 
 
 class ConversationSummary(BaseModel):

@@ -17,9 +17,7 @@
 
 import argparse
 import asyncio
-import hashlib
 import json
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +26,7 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+from evaluation._runner_common import load_tasks
 from evaluation.agent_checks import collect_checks
 from evaluation.agent_corpus import AGENT_CORPUS_VERSION, chunk_map
 from evaluation.agent_judge import judge_task
@@ -40,39 +39,17 @@ from evaluation.agent_report import (
     hard_gates,
     render_console,
 )
-from evaluation._runner_common import load_tasks
+from evaluation.provenance import git_provenance, sha256_file
 
 DEFAULT_TASKS = "evaluation/agent_tasks.jsonl"
 
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(65536), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _git_provenance() -> dict:
-    """记录代码版本：报告里的数字必须能对上某一次提交。
-
-    工作区脏时不能只写 commit——数字可能来自未提交的改动，所以 `dirty` 一起记。
-    """
-    try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=_BACKEND_DIR, capture_output=True, text=True, timeout=10,
-        )
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=_BACKEND_DIR, capture_output=True, text=True, timeout=10,
-        )
-        return {
-            "commit": (commit.stdout or "").strip() or None,
-            "dirty": bool((status.stdout or "").strip()),
-        }
-    except Exception:  # noqa: BLE001 - 取不到版本不该让判分失败
-        return {"commit": None, "dirty": None}
+PASS_CRITERIA = {
+    "unit": "task",
+    "pass": "verdict.outcome == 'pass'（确定性检查与 judge 均通过）",
+    "not_pass": "status=answered 只表示流程产出了答案，不等于任务正确",
+    "undefined": "na / invalid 不计入通过分母",
+    "score_key": "cross.pass_at_1（每任务 1 次）；跨多次运行才看 pass^k",
+}
 
 
 def build_verdict(
@@ -275,10 +252,10 @@ def main() -> int:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "variant": variant,
         "runs_file": str(runs_path),
-        "runs_sha256": _sha256_file(runs_path)[:16],
+        "runs_sha256": sha256_file(runs_path)[:16],
         "runs_per_task": payload.get("runs_per_task") or run_config.get("runs_per_task"),
         "tasks_file": str(tasks_path),
-        "tasks_sha256": _sha256_file(tasks_path)[:16],
+        "tasks_sha256": sha256_file(tasks_path)[:16],
         "corpus_version": corpus_version
         or ("finance" if args.corpus == "finance" else AGENT_CORPUS_VERSION),
         "corpus_hash": corpus_hash,
@@ -287,7 +264,10 @@ def main() -> int:
         "model": payload.get("model") or run_config.get("model"),
         "provider": payload.get("provider") or run_config.get("model_provider"),
         "agent_run_config": run_config or None,
-        "git": _git_provenance(),
+        "run_manifest": payload.get("manifest"),
+        "index_fingerprint": ((payload.get("manifest") or {}).get("index") or {}).get("fingerprint"),
+        "git": git_provenance(),
+        "pass_criteria": PASS_CRITERIA,
         "judge_enabled": not args.no_judge,
         "judge_reused_from": args.reuse_judgments or None,
         "judge_repeats": max(1, args.judge_repeats),
@@ -317,8 +297,7 @@ def main() -> int:
         badcase_path = Path(args.badcases)
         badcase_path.parent.mkdir(parents=True, exist_ok=True)
         with open(badcase_path, "w", encoding="utf-8") as handle:
-            for badcase in badcases:
-                handle.write(json.dumps(badcase, ensure_ascii=False) + "\n")
+            handle.writelines(json.dumps(badcase, ensure_ascii=False) + "\n" for badcase in badcases)
         print(f"badcase 已写入: {badcase_path}")
 
     return 0 if gates.get("overall_pass") else 1

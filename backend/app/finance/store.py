@@ -136,6 +136,10 @@ class FinanceStore:
     # 文档 / 章节 / 表格
     # ------------------------------------------------------------------
 
+    def documents(self) -> list[dict]:
+        """只读文档快照，供块索引/离线切片构建使用。"""
+        return list(self._documents.values())
+
     def list_documents(self) -> list[dict]:
         rows = []
         for document in self._documents.values():
@@ -163,6 +167,123 @@ class FinanceStore:
         if document is None:
             raise FinanceStoreError(f"未知 doc_id: {doc_id}")
         return document
+
+    def page_span(self, doc_id: str) -> dict:
+        """文档的解析页码范围。
+
+        不承诺 PDF 总页数：解析产物只记录了章节/表格出现的页码，
+        这里返回的是“可定位到的最早/最晚页”，不是 PDF 物理页数。
+        """
+        document = self.get_document(doc_id)
+        pages: list[int] = []
+        for section in document.get("sections") or []:
+            for key in ("page_start", "page_end"):
+                value = section.get(key)
+                if isinstance(value, int) and value > 0:
+                    pages.append(value)
+        for table in document.get("tables") or []:
+            for key in ("page", "page_end"):
+                value = table.get(key)
+                if isinstance(value, int) and value > 0:
+                    pages.append(value)
+        return {
+            "page_start": min(pages) if pages else None,
+            "page_end": max(pages) if pages else None,
+        }
+
+    def locate(self, anchor: str) -> dict:
+        """把证据锚点解析成可回查的坐标。
+
+        锚点有五种形态，前端不解析，统一由这里给：
+        - `section_id`
+        - `section_id#b000`（段落块）
+        - `table_id`
+        - `table_id#rows#1,2#cols#0,1`（行组块）
+        - `table_id#row#column`（单元格）
+
+        `table_id` / `section_id` 本身含 `#`（`doc#t0006`），所以不能直接
+        `split("#")`；用“已知 id 的最长前缀”匹配，避免把 doc 前缀当成 id。
+        """
+        text = str(anchor or "").strip()
+        if not text:
+            raise FinanceStoreError("锚点不能为空")
+
+        for table_id in self._tables:
+            if text == table_id:
+                document, table = self._tables[table_id]
+                return {
+                    "anchor": text,
+                    "kind": "table",
+                    "doc_id": document.get("doc_id"),
+                    "table_id": table_id,
+                    "section_id": table.get("section_id"),
+                    "row_indices": [],
+                    "column_indices": [],
+                }
+            if text.startswith(f"{table_id}#rows#"):
+                document, table = self._tables[table_id]
+                rest = text[len(table_id) + len("#rows#"):]
+                row_part, _, column_part = rest.partition("#cols#")
+                row_indices = self._indices(row_part)
+                column_indices = self._indices(column_part)
+                return {
+                    "anchor": text,
+                    "kind": "table_rows",
+                    "doc_id": document.get("doc_id"),
+                    "table_id": table_id,
+                    "section_id": table.get("section_id"),
+                    "row_indices": row_indices,
+                    "column_indices": column_indices,
+                }
+            if text.startswith(f"{table_id}#"):
+                document, table = self._tables[table_id]
+                rest = text[len(table_id) + 1:]
+                row_token, _, column_token = rest.partition("#")
+                if row_token and column_token:
+                    row_index = self._resolve_row(table.get("rows") or [], row_token)
+                    column_index = self._resolve_column(table.get("columns") or [], column_token)
+                    return {
+                        "anchor": text,
+                        "kind": "table_cell",
+                        "doc_id": document.get("doc_id"),
+                        "table_id": table_id,
+                        "section_id": table.get("section_id"),
+                        "row_indices": [row_index],
+                        "column_indices": [column_index],
+                    }
+
+        for section_id in self._sections:
+            if text == section_id:
+                document, section = self._sections[section_id]
+                return {
+                    "anchor": text,
+                    "kind": "section",
+                    "doc_id": document.get("doc_id"),
+                    "section_id": section_id,
+                    "row_indices": [],
+                    "column_indices": [],
+                }
+            if text.startswith(f"{section_id}#b"):
+                document, section = self._sections[section_id]
+                return {
+                    "anchor": text,
+                    "kind": "paragraph_block",
+                    "doc_id": document.get("doc_id"),
+                    "section_id": section_id,
+                    "row_indices": [],
+                    "column_indices": [],
+                }
+
+        raise FinanceStoreError(f"无法识别的证据锚点: {anchor}")
+
+    @staticmethod
+    def _indices(text: str) -> list[int]:
+        values: list[int] = []
+        for part in str(text or "").split(","):
+            part = part.strip()
+            if part.lstrip("-").isdigit():
+                values.append(int(part))
+        return values
 
     def read_section(self, section_id: str) -> dict:
         entry = self._sections.get(str(section_id))

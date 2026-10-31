@@ -7,6 +7,7 @@
     python -m evaluation.run_finance_eval --tasks evaluation/finance_tasks_stress.jsonl
 
 和 `run_agent_eval` 的差别只有一处：这里**自己构造 `FinanceToolset` 并复用同一个实例**。
+`--search-mode blocks` 会把 Agent 的检索入口切到结构块索引；默认 `sections` 保持旧口径。
 复用是为了省掉每次重读 7 份 document.json（约 1–2 秒 × 90 次）；代价是 `calcs`
 与调用计数会跨任务累积，所以 runner 每条任务开跑前会调 `toolset.prepare()` 清一次
 （`app/agent/runner.py` 里那三行注释说的就是这件事）。
@@ -29,12 +30,39 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from app.agent.runner import SUPPORTED_VARIANTS, run as run_agent
+from app.agent.runner import (
+    DEFAULT_MAX_STEPS,
+    FINAL_MAX_TOKENS,
+    IMPROVED_AUTO_RETRY_LIMIT,
+    IMPROVED_MAX_TOOL_ROUNDS,
+    IMPROVED_SELF_CHECK_LIMIT,
+    MAX_STEPS_CEILING,
+    REPAIR_ROUND_BUDGET,
+    SUPPORTED_VARIANTS,
+    TOOL_TEMPERATURE,
+)
+from app.agent.runner import (
+    run as run_agent,
+)
 from app.config import MODEL_CONFIG, MODEL_PROVIDER
+from app.finance.block_index import parameters as block_parameters
 from app.finance.store import FinanceStore
-from app.tools.finance_set import FinanceToolset
-from evaluation._runner_common import load_tasks, print_table, run_batch, sha256_file, summarize
+from app.tools.finance_set import (
+    MAX_CELL_CHARS,
+    MAX_SEARCH_CALLS,
+    MAX_SECTION_CHARS,
+    MAX_TABLE_CHARS,
+    FinanceToolset,
+)
+from evaluation._runner_common import (
+    load_tasks,
+    print_table,
+    run_batch,
+    sha256_file,
+    summarize,
+)
 from evaluation.finance_corpus import DOCUMENT_DIR, corpus_hash, doc_inventory
+from evaluation.provenance import build_run_manifest
 
 DEFAULT_TASKS = "evaluation/finance_tasks.jsonl"
 
@@ -53,6 +81,8 @@ def main() -> int:
         default="exclude",
         help="默认 exclude：日常跑不算留出集，最后验收显式用 only",
     )
+    parser.add_argument("--search-mode", choices=("sections", "blocks"), default="sections",
+                        help="Agent 检索入口：sections=原章节定位，blocks=结构块索引")
     parser.add_argument("--out", default="", help="结果 JSON 路径；空 = 不落盘")
     args = parser.parse_args()
 
@@ -72,7 +102,9 @@ def main() -> int:
         raise SystemExit("筛完没有任务可跑")
 
     store = FinanceStore(DOCUMENT_DIR)
-    toolset = FinanceToolset(store)
+    toolset = FinanceToolset(store, search_mode=args.search_mode)
+    inventory = doc_inventory()
+    block_index_stats = toolset.toolbox.block_index.stats()
 
     async def _call(task: dict, variant: str, run_index: int) -> dict:
         return await run_agent(task, variant=variant, run_index=run_index, toolset=toolset)
@@ -107,6 +139,43 @@ def main() -> int:
             print(f"  {key}: {problems}")
 
     if args.out:
+        manifest = build_run_manifest(
+            tasks_path=tasks_path,
+            corpus_hash=corpus_hash(),
+            corpus_stats={
+                "version": "finance-7docs-v1",
+                "documents": len(inventory),
+            },
+            index_snapshot={
+                "kind": "structured_blocks",
+                **block_index_stats,
+                "parameters": block_parameters(),
+            },
+            chunking=block_parameters(),
+            generation={
+                "temperature": TOOL_TEMPERATURE,
+                "final_max_tokens": FINAL_MAX_TOKENS,
+                "default_max_steps": DEFAULT_MAX_STEPS,
+                "max_steps_ceiling": MAX_STEPS_CEILING,
+                "improved_max_tool_rounds": IMPROVED_MAX_TOOL_ROUNDS,
+                "improved_auto_retry_limit": IMPROVED_AUTO_RETRY_LIMIT,
+                "improved_self_check_limit": IMPROVED_SELF_CHECK_LIMIT,
+                "repair_round_budget": REPAIR_ROUND_BUDGET,
+                "max_search_calls": MAX_SEARCH_CALLS,
+                "max_section_chars": MAX_SECTION_CHARS,
+                "max_table_chars": MAX_TABLE_CHARS,
+                "max_cell_chars": MAX_CELL_CHARS,
+            },
+            extra={
+                "arm": "agent",
+                "agent": {
+                    "variant": args.variant,
+                    "search_mode": toolset.search_mode,
+                    "runs_per_task": max(1, args.runs),
+                    "max_tool_rounds": toolset.max_tool_rounds,
+                },
+            },
+        )
         payload = {
             "schema": "finance_agent_runs/v1",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -114,6 +183,7 @@ def main() -> int:
                 "variant": args.variant,
                 "runs_per_task": max(1, args.runs),
                 "toolset": toolset.name,
+                "search_mode": toolset.search_mode,
                 "model": (MODEL_CONFIG.get("flash") or {}).get("model"),
                 "model_provider": MODEL_PROVIDER,
                 "corpus_version": "finance-7docs-v1",
@@ -123,7 +193,8 @@ def main() -> int:
                 "holdout": args.holdout,
                 "elapsed_seconds": round(elapsed, 1),
             },
-            "corpus": doc_inventory(),
+            "manifest": manifest,
+            "corpus": inventory,
             "summary": summary,
             "schema_problems": schema_problems,
             "results": results,

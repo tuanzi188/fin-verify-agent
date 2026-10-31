@@ -21,6 +21,18 @@ def _search_call(call_id: str = "c1", query: str = "出差住宿标准") -> dict
     return {"id": call_id, "name": "search_kb", "arguments": {"query": query}, "parse_error": None}
 
 
+def test_extract_citations_accepts_full_width_marker_with_metadata():
+    evidence = [
+        {"chunk_id": "d2_ch1"},
+        {"chunk_id": "d1#t1"},
+    ]
+    answer = "营业收入 299,927,239 千元【2，PDF 第 49 页，表 d1#t1】；住宿标准五百元 [1]。"
+    assert runner._extract_citations(answer, evidence) == [
+        {"marker": 2, "chunk_id": "d1#t1"},
+        {"marker": 1, "chunk_id": "d2_ch1"},
+    ]
+
+
 def _evidence_item() -> dict:
     return {
         "chunk_id": "d2_ch1",
@@ -70,6 +82,13 @@ async def test_answered_with_citation_and_valid_trace(monkeypatch):
     assert result["trace"][0]["result_ids"] == ["d2_ch1"]
     assert result["trace"][-1]["tool"] == "__final__"
     assert result["trace"][-1]["self_eval"] is None
+    assert result["usage"]["llm_calls"] == 2
+    assert [call["phase"] for call in result["llm_calls"]] == ["baseline_tools", "baseline_final"]
+    assert result["usage"]["final_context_tokens"] == 100
+    assert result["usage"]["max_messages_chars"] > 0
+    assert result["trace"][0]["result_chars"] > 0
+    assert result["trace"][0]["payload_chars"] > 0
+    assert result["usage"]["tool_result_chars"] > 0
     assert validate_result(result) == []
 
 
@@ -382,6 +401,12 @@ async def test_improved_auto_retries_after_empty_search(monkeypatch):
 
     assert result["usage"]["steps"] == 2
     assert result["usage"]["auto_retries"] == 1
+    assert result["usage"]["llm_calls"] == len(result["llm_calls"])
+    assert result["usage"]["llm_calls"] >= 3
+    assert result["usage"]["final_context_tokens"] == 100
+    assert "self_check" in [call["phase"] for call in result["llm_calls"]]
+    assert result["usage"]["tool_result_chars"] > 0
+    assert any(step.get("result_chars", 0) > 0 for step in result["trace"])
     assert result["trace"][1]["policy"] == "auto_retry"
     assert result["trace"][1]["result_ids"] == ["d2_ch1"]
     assert result["status"] == "answered"

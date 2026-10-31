@@ -25,17 +25,18 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from app.config import MODEL_CONFIG, MODEL_PROVIDER  # noqa: E402
-from evaluation import rag_corpus, structured_corpus  # noqa: E402
-from evaluation._runner_common import (  # noqa: E402
+from app.config import MODEL_CONFIG, MODEL_PROVIDER
+from evaluation import rag_corpus, structured_corpus
+from evaluation._runner_common import (
     load_tasks,
     print_table,
     run_batch,
     sha256_file,
     summarize,
 )
-from evaluation.finance_corpus import corpus_hash, doc_inventory  # noqa: E402
-from evaluation.rag_baseline import TOP_K, answer_once  # noqa: E402
+from evaluation.finance_corpus import corpus_hash, doc_inventory
+from evaluation.provenance import build_run_manifest, items_fingerprint
+from evaluation.rag_baseline import MAX_ANSWER_TOKENS, TOP_K, answer_once
 
 DEFAULT_TASKS = "evaluation/finance_tasks_complex.jsonl"
 
@@ -71,6 +72,25 @@ def main() -> int:
 
     corpus = rag_corpus if args.retrieval_mode == "fixed" else structured_corpus
     arm_variant = "rag" if args.retrieval_mode == "fixed" else "rag_structured"
+    inventory = doc_inventory()
+    if args.retrieval_mode == "fixed":
+        fixed_chunks = rag_corpus.rag_chunks()
+        index_snapshot = {
+            "kind": "fixed_window",
+            "chunks": len(fixed_chunks),
+            "documents": len({chunk["doc_id"] for chunk in fixed_chunks}),
+            "fingerprint": items_fingerprint(fixed_chunks),
+            "parameters": {
+                "chunk_size": rag_corpus.CHUNK_SIZE,
+                "chunk_overlap": rag_corpus.CHUNK_OVERLAP,
+                "top_k": args.top_k,
+                "rrf_k": rag_corpus.RRF_K,
+                "candidate_depth": rag_corpus.CANDIDATE_DEPTH,
+                "embed_model": rag_corpus.EMBED_MODEL_NAME,
+            },
+        }
+    else:
+        index_snapshot = structured_corpus.index_snapshot()
 
     async def _call(task: dict, variant: str, run_index: int) -> dict:
         return await answer_once(
@@ -108,6 +128,28 @@ def main() -> int:
     print(f"切片：{corpus.stats()}")
 
     if args.out:
+        manifest = build_run_manifest(
+            tasks_path=tasks_path,
+            corpus_hash=corpus_hash(),
+            corpus_stats=corpus.stats(),
+            index_snapshot=index_snapshot,
+            chunking={
+                **index_snapshot.get("parameters", {}),
+                "top_k": args.top_k,
+            },
+            generation={
+                "temperature": 0.1,
+                "max_answer_tokens": MAX_ANSWER_TOKENS,
+            },
+            extra={
+                "arm": "rag",
+                "rag": {
+                    "retrieval_mode": args.retrieval_mode,
+                    "top_k": args.top_k,
+                    "runs_per_task": max(1, args.runs),
+                },
+            },
+        )
         payload = {
             "schema": "finance_agent_runs/v1",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -134,7 +176,8 @@ def main() -> int:
                 "holdout": "exclude",
                 "elapsed_seconds": round(elapsed, 1),
             },
-            "corpus": doc_inventory(),
+            "manifest": manifest,
+            "corpus": inventory,
             "summary": summary,
             "schema_problems": schema_problems,
             "results": results,

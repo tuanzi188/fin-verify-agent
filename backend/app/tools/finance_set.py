@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -22,16 +23,19 @@ from app.agent.prompts import (
     FINANCE_FINAL_TEMPLATE,
     FINANCE_IMPROVED_SYSTEM,
 )
+from app.finance.block_index import BlockIndex
 from app.finance.store import FinanceStore
 from app.tools.finance import FINANCE_TOOL_SPECS, FinanceToolbox
 from app.tools.toolset import Injector, ToolOutcome, evidence_item
 
-MAX_SECTION_CHARS = 6000
-MAX_TABLE_CHARS = 3000
+MAX_SECTION_CHARS = 4000
+MAX_TABLE_CHARS = 1500
 MAX_CELL_CHARS = 400
 # 检索预算：超过这个次数后不再执行 search_sections，逼模型去读已定位的内容。
 # 2026-10-28 实测 CX-11 搜了 9 次、CX-12 搜了 7 次，token 全花在换关键词上。
 MAX_SEARCH_CALLS = 5
+#: 读取类工具的重复调用缓存；同一参数不重复回填正文。
+READ_CACHE_TOOLS = ("get_table", "get_rows", "get_cell", "read_section", "read_block")
 
 # 覆盖检查用的词表。只做"问题点名了哪些公司/年度/文档"的粗判，
 # 不做语义理解；判断结果只用于"要不要补读"，不用于判分。
@@ -70,10 +74,12 @@ def _cut_payload(name: str, data: Any) -> Any:
     保留 `table_ids` / `table_id` / `row` / `column` 是故意的：注入要逼出"重取"，
     而不是让模型连重取什么都找不到——找不到就成了考运气，不是考纠错。
     """
-    if name == "search_sections" and isinstance(data, list):
-        return [{**item, "snippet": _cut(item.get("snippet"))} for item in data]
+    if name in ("search_sections", "search_blocks") and isinstance(data, list):
+        return [{**item, "snippet": _cut(item.get("snippet") or item.get("content"))} for item in data]
     if name == "read_section" and isinstance(data, dict):
         return {**data, "text": _cut(data.get("text"))}
+    if name == "read_block" and isinstance(data, dict):
+        return {**data, "content": _cut(data.get("content"))}
     if name in ("get_table", "get_rows") and isinstance(data, dict):
         rows = data.get("rows") or []
         return {**data, "rows": rows[:1], "truncated": True}
@@ -123,20 +129,31 @@ class FinanceToolset:
     """金融文档工具集。接口与 `app.tools.mock.Toolbox` 一致。"""
 
     name = "finance"
-    search_tool = "search_sections"
     final_template = FINANCE_FINAL_TEMPLATE
     # 金融任务的动作链更长：定位 → 读章节 → 读表 → 取单元格 → 计算，
     # 3 轮装不下（实测 3 轮时模型只来得及做 4 次 search_sections 就被收口）。
     max_tool_rounds = 5
 
-    def __init__(self, store: FinanceStore, injections: Any = None):
-        self.toolbox = FinanceToolbox(store)
+    def __init__(
+        self,
+        store: FinanceStore,
+        injections: Any = None,
+        search_mode: str = "sections",
+        block_index: BlockIndex | None = None,
+    ):
+        if search_mode not in ("sections", "blocks"):
+            raise ValueError(f"未知 search_mode: {search_mode}")
+        self.search_mode = search_mode
+        self.search_tool = "search_blocks" if search_mode == "blocks" else "search_sections"
+        self.toolbox = FinanceToolbox(store, block_index=block_index)
         #: 每次 calculate 的 {formula, inputs, result}，供硬门禁与报告使用
         self.calcs: list[dict] = []
         self._injector = Injector(injections)
         #: 每个工具本条的调用次数，用于检索预算
         self._tool_calls: dict[str, int] = {}
-        #: search_sections 剩余预算；覆盖修复时由 runner 临时加
+        #: 已读取内容的缓存：同一表/单元格/块不重复回填正文
+        self._read_cache: dict[tuple[str, str], ToolOutcome] = {}
+        #: 检索工具剩余预算；覆盖修复时由 runner 临时加
         self._search_budget = MAX_SEARCH_CALLS
 
     # ------------------------------------------------------------------
@@ -152,6 +169,7 @@ class FinanceToolset:
         self.calcs = []
         self._injector = Injector(injections)
         self._tool_calls = {}
+        self._read_cache = {}
         self._search_budget = MAX_SEARCH_CALLS
 
     @property
@@ -274,32 +292,61 @@ class FinanceToolset:
     # ------------------------------------------------------------------
 
     def specs(self) -> list[dict]:
+        if self.search_mode == "blocks":
+            # 块模式只走结构索引；旧章节检索留着会出现两套定位结果互相干扰。
+            return [
+                spec
+                for spec in FINANCE_TOOL_SPECS
+                if spec["function"]["name"] != "search_sections"
+            ]
         return FINANCE_TOOL_SPECS
 
     def system_prompt(self, variant: str) -> str:
-        return FINANCE_IMPROVED_SYSTEM if variant == "improved" else FINANCE_BASELINE_SYSTEM
+        prompt = FINANCE_IMPROVED_SYSTEM if variant == "improved" else FINANCE_BASELINE_SYSTEM
+        if self.search_mode == "blocks":
+            prompt = prompt.replace(
+                "- search_sections(query, doc_id?, top_k?)：按关键词定位章节。"
+                "**它只负责定位，返回的是章节摘要，不是证据**\n",
+                "",
+            )
+            prompt += (
+                "\n\n本模式只提供 search_blocks，不提供 search_sections；"
+                "检索必须从 search_blocks 开始，拿到 block_id 后 read_block。"
+                "普通查数优先 get_rows，不要用 get_table 浏览整张表。"
+            )
+        return prompt
 
     async def call(self, name: str, arguments: dict) -> ToolOutcome:
         arguments = arguments or {}
         mode = self._injector.take()
         self._tool_calls[name] = self._tool_calls.get(name, 0) + 1
-        # 检索预算：只拦 search_sections，读原文/取单元格/计算都不限次。
+        # 检索预算：只拦检索工具，读原文/取单元格/计算都不限次。
         # 返回 ok=False 而不是空结果，是为了让 trace 能区分"预算用完"和"没搜到"。
-        if name == "search_sections":
+        if name in ("search_sections", "search_blocks"):
             if self._search_budget <= 0:
                 return ToolOutcome(
                     tool=name,
                     ok=False,
                     error_kind="unavailable",
                     error_detail=(
-                        "search_sections 的检索预算已用完；"
-                        "请改用 read_section / get_table / get_cell 读取已定位的内容，"
-                        "不要再用同义关键词检索"
+                        "检索预算已用完；请改用 read_block / read_section / get_rows / "
+                        "get_table / get_cell 读取已定位的内容，不要再用同义关键词检索"
                     ),
                 )
             self._search_budget -= 1
         if mode is not None:
             return await self._injected(name, arguments, mode)
+
+        cache_key = None
+        if name in READ_CACHE_TOOLS:
+            cache_key = (
+                name,
+                json.dumps(arguments, sort_keys=True, ensure_ascii=False),
+            )
+            cached = self._read_cache.get(cache_key)
+            if cached is not None:
+                # 回填的是同一份证据；runner 的 seen 集合会阻止重复编号。
+                return cached
 
         outcome = await self.toolbox.call(name, arguments)
         if not outcome.ok:
@@ -319,7 +366,10 @@ class FinanceToolset:
                 }
             )
         ids, count = self._summarize(name, data)
-        return ToolOutcome(tool=name, ok=True, data=data, result_ids=ids, result_count=count)
+        result = ToolOutcome(tool=name, ok=True, data=data, result_ids=ids, result_count=count)
+        if cache_key is not None:
+            self._read_cache[cache_key] = result
+        return result
 
     # ------------------------------------------------------------------
     # 故障注入
@@ -338,7 +388,7 @@ class FinanceToolset:
                 error_kind="upstream_error", error_detail="注入：上游 500",
             )
         if mode == "empty":
-            data: Any = [] if name in ("search_sections", "list_documents") else {}
+            data: Any = [] if name in ("search_sections", "search_blocks", "list_documents") else {}
             return ToolOutcome(tool=name, ok=True, data=data, injected="empty")
 
         # truncated：先真实执行，再把正文/单元格切短
@@ -365,6 +415,10 @@ class FinanceToolset:
             return [str(item.get("doc_id") or "") for item in data], len(data)
         if name == "search_sections" and isinstance(data, list):
             return [str(item.get("section_id") or "") for item in data], len(data)
+        if name == "search_blocks" and isinstance(data, list):
+            return [str(item.get("block_id") or "") for item in data], len(data)
+        if name == "read_block" and isinstance(data, dict):
+            return [str(data.get("block_id") or "")], 1
         if name == "read_section" and isinstance(data, dict):
             return [str(data.get("section_id") or "")], 1
         if name == "get_table" and isinstance(data, dict):
@@ -383,6 +437,59 @@ class FinanceToolset:
         return [], 0
 
     def to_evidence(self, name: str, data: Any) -> list[dict]:
+        if name == "search_blocks" and isinstance(data, list):
+            rows = []
+            for item in data:
+                if not isinstance(item, dict) or not item.get("block_id"):
+                    continue
+                block_kind = str(item.get("kind") or "block")
+                meta = (
+                    f"{item.get('title') or ''}｜{block_kind}｜PDF 第 {item.get('page')} 页"
+                )
+                if item.get("table_id"):
+                    meta += (
+                        f"｜表 {item.get('table_id')}｜行 {item.get('row_indices')}"
+                        f"｜列 {item.get('column_indices')}"
+                    )
+                rows.append(
+                    evidence_item(
+                        chunk_id=str(item.get("block_id")),
+                        title=meta,
+                        content=str(item.get("content") or "")[:400],
+                        kind="block_locator",
+                        page=item.get("page"),
+                        citable=False,
+                        block_kind=block_kind,
+                        doc_id=item.get("doc_id"),
+                        table_id=item.get("table_id"),
+                        section_id=item.get("section_id"),
+                        row_indices=item.get("row_indices"),
+                        column_indices=item.get("column_indices"),
+                    )
+                )
+            return rows
+
+        if name == "read_block" and isinstance(data, dict):
+            content = str(data.get("content") or "")
+            return [
+                evidence_item(
+                    chunk_id=str(data.get("block_id") or ""),
+                    title=f"{data.get('title') or ''}｜{data.get('kind') or 'block'}",
+                    content=content,
+                    kind=str(data.get("kind") or "block"),
+                    page=data.get("page"),
+                    table_id=data.get("table_id"),
+                    table_caption=data.get("table_caption"),
+                    unit=data.get("unit") or "",
+                    row_indices=data.get("row_indices"),
+                    column_indices=data.get("column_indices"),
+                    row_name="、".join(
+                        str(value) for value in data.get("row_indices") or []
+                    ),
+                    doc_id=data.get("doc_id"),
+                )
+            ]
+
         if name == "search_sections" and isinstance(data, list):
             return [
                 evidence_item(

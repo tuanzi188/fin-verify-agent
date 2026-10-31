@@ -74,7 +74,10 @@ VARIANT_CONFIG = {
     },
 }
 
-_MARKER_PATTERN = re.compile(r"\[(\d{1,2})\]")
+# 模型有时输出 [1]，有时输出【2，PDF 第 49 页，表 ...】。
+# 只取方括号后的第一个编号；不要匹配 t0011 这类标识符。
+_MARKER_PATTERN = re.compile(r"[\[【]\s*(\d{1,2})(?=[，,、\s\]】])")
+_MARKER_GROUP_PATTERN = re.compile(r"[\[【]\s*\d{1,2}(?:[，,、\s][^\]】]*)?[\]】]")
 _SENTENCE_BOUNDARY = re.compile(r"[。！？\n]")
 
 # 分情形作答的信号。只用于回答"首句里的'无法确定'是拒答还是分情形开场"，
@@ -140,6 +143,86 @@ def _leading_sentence(answer: str, limit: int = 80) -> str:
 
 def _elapsed_ms(started_at: float) -> int:
     return int((time.perf_counter() - started_at) * 1000)
+
+
+def _message_chars(messages: list[dict]) -> int:
+    """消息历史的字符量：区分“轮次多”与“单轮上下文大”。"""
+    total = 0
+    for message in messages or []:
+        content = message.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif content is not None:
+            total += len(json.dumps(content, ensure_ascii=False, default=str))
+        for key, value in message.items():
+            if key == "content":
+                continue
+            if isinstance(value, str):
+                total += len(value)
+    return total
+
+
+def _record_llm_call(
+    calls: list[dict],
+    *,
+    phase: str,
+    round_index: int,
+    messages: list[dict],
+    usage: dict | None,
+    latency_ms: int,
+    tools: list[dict] | None = None,
+    tool_choice: str | None = None,
+) -> dict:
+    """记录一次 LLM 调用。工具调用的 token 记在 LLM 调用上，不混进工具 step。"""
+    usage = usage or {}
+    tokens_in = int(usage.get("prompt_tokens") or 0)
+    tokens_out = int(usage.get("completion_tokens") or 0)
+    record = {
+        "phase": phase,
+        "round": round_index,
+        "messages": len(messages or []),
+        "messages_chars": _message_chars(messages),
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "total_tokens": int(usage.get("total_tokens") or (tokens_in + tokens_out)),
+        "latency_ms": latency_ms,
+        "provider": usage.get("provider"),
+        "model": usage.get("model"),
+        "finish_reason": usage.get("finish_reason"),
+        "has_reasoning": bool(usage.get("has_reasoning")),
+    }
+    if tools is not None:
+        record["tools"] = len(tools)
+    if tool_choice is not None:
+        record["tool_choice"] = tool_choice
+    calls.append(record)
+    return record
+
+
+def _usage_telemetry(
+    calls: list[dict],
+    *,
+    tool_result_chars: int = 0,
+    tool_payload_chars: int = 0,
+    duplicate_skipped: int = 0,
+    final_context_tokens: int | None = None,
+) -> dict:
+    """把逐轮调用折成 usage 里的可比较字段。
+
+    `final_context_tokens` 必须由调用方显式传“最终答案那次调用”的输入 token；
+    不能直接取 `calls[-1]`，因为覆盖自检发生在答案之后，会把它顶掉。
+    """
+    if final_context_tokens is None:
+        final_context_tokens = calls[-1]["tokens_in"] if calls else 0
+    return {
+        "llm_calls": len(calls),
+        "max_context_tokens": max((call["tokens_in"] for call in calls), default=0),
+        "final_context_tokens": final_context_tokens,
+        "max_messages_chars": max((call["messages_chars"] for call in calls), default=0),
+        "tool_result_chars": tool_result_chars,
+        "tool_payload_chars": tool_payload_chars,
+        "duplicate_skipped": duplicate_skipped,
+    }
 
 
 def _normalize_max_steps(raw: Any) -> int:
@@ -219,7 +302,7 @@ _TABLE_NUMBER_PATTERN = re.compile(
 
 def _numeric_leaks(answer: str) -> list[str]:
     """拒答文本里的具体数值。年份、页码、引用编号和 id 数字都不算。"""
-    text = _MARKER_PATTERN.sub("", answer or "")
+    text = _MARKER_GROUP_PATTERN.sub("", answer or "")
     text = _PAGE_REFERENCE_PATTERN.sub("", text)
     text = _IDENTIFIER_PATTERN.sub(" ", text)
     leaks: list[str] = []
@@ -515,6 +598,14 @@ async def _execute_tool_call(
     new_result_count = 0
     similarities: list[float] = []
     truncated = False
+    result_chars = 0
+    evidence_chars_added = 0
+    locator_chars_added = 0
+    duplicate_skipped = 0
+    try:
+        payload_chars = len(json.dumps(outcome.data, ensure_ascii=False, default=str))
+    except Exception:  # noqa: BLE001 - 统计失败不能影响工具结果
+        payload_chars = len(str(outcome.data or ""))
     if outcome.ok:
         # 「工具返回什么」由 toolset 决定；runner 只认 to_evidence 的契约。
         # 制度库把它变成 chunk，金融把它变成 section/table/cell，
@@ -524,6 +615,8 @@ async def _execute_tool_call(
                 continue
             if item.get("truncated"):
                 truncated = True
+            content_chars = len(str(item.get("content") or ""))
+            result_chars += content_chars
             chunk_id = str(item.get("chunk_id") or "")
             citable = item.get("citable", True)
             # 去重分两类：定位结果和原文共用同一个 id（`doc#s0003`），
@@ -531,6 +624,7 @@ async def _execute_tool_call(
             # 于是证据永远为空、模型只能拒答（2026-10-28 实测踩中）。
             bucket = seen_ids if citable else seen_locators
             if chunk_id and bucket is not None and chunk_id in bucket:
+                duplicate_skipped += 1
                 continue
             if chunk_id and bucket is not None:
                 bucket.add(chunk_id)
@@ -543,12 +637,15 @@ async def _execute_tool_call(
             # 2026-10-28 实测就是这样：查到 10 个章节，模型只看到"新增 10 条"，
             # 拿不到任何 id，最后直接拒答。
             if citable:
+                evidence_chars_added += content_chars
                 evidence.append(item)
                 if locators is not None and chunk_id:
                     # 原文已读到，把同名定位项撤掉，避免上下文里同一节出现两次
                     locators[:] = [one for one in locators if one.get("chunk_id") != chunk_id]
-            elif locators is not None:
-                locators.append(item)
+            else:
+                locator_chars_added += content_chars
+                if locators is not None:
+                    locators.append(item)
 
     record = {
         "step": step,
@@ -561,6 +658,13 @@ async def _execute_tool_call(
         "latency_ms": latency_ms,
         "tokens_in": 0,
         "tokens_out": 0,
+        # 工具结果成本：result_chars 是模型实际看到的证据字符，
+        # payload_chars 是工具原始返回（含结构字段），两者不能混用。
+        "result_chars": result_chars,
+        "payload_chars": payload_chars,
+        "evidence_chars_added": evidence_chars_added,
+        "locator_chars_added": locator_chars_added,
+        "duplicate_skipped": duplicate_skipped,
     }
     if name == toolbox.search_tool or new_result_count:
         record["new_result_count"] = new_result_count
@@ -619,7 +723,7 @@ def _format_locators(locators: list[dict], limit: int = 12) -> str:
 
     sections = [item for item in locators if item.get("kind") != "catalog"]
     if sections:
-        rows = ["可读取的章节（只是定位结果，**不是证据**；要引用必须先 read_section / get_table / get_cell）："]
+        rows = ["可读取的定位项（只是定位结果，**不是证据**；要引用必须先 read_section / read_block / get_rows / get_table / get_cell）："]
         for item in sections[:limit]:
             title = str(item.get("title") or "")
             page = item.get("page")
@@ -687,8 +791,8 @@ def _round_message(
     if not evidence and locators:
         evidence_text = (
             f"{evidence_text}\n\n"
-            "下一步：从上面挑 1-2 个最相关的章节 id，直接调用 read_section 读原文；"
-            "读到的章节若带 table_ids，再用 get_table / get_cell 取数字。不要再用同义关键词重复检索。"
+            "下一步：从上面挑 1-2 个最相关的定位项，直接调用 read_section / read_block 读原文；"
+            "读到的章节若带 table_ids，再用 get_rows / get_table / get_cell 取数字。不要再用同义关键词重复检索。"
         )
     return ROUND_EVIDENCE_TEMPLATE.format(
         evidence=evidence_text,
@@ -741,7 +845,12 @@ async def _coverage_check(question: str, evidence: list[dict]) -> tuple[Optional
         temperature=TOOL_TEMPERATURE,
         max_tokens=512,
     )
-    return _parse_self_check(text), usage or {}
+    usage = dict(usage or {})
+    # 自检调用发生在函数内部，外面拿不到 messages；把上下文规模一并带出去，
+    # 成本归因才能和普通回合放在同一张表里比较。
+    usage["messages_count"] = 1
+    usage["messages_chars"] = len(prompt)
+    return _parse_self_check(text), usage
 
 
 async def _run_improved(
@@ -771,6 +880,11 @@ async def _run_improved(
     seen_chunk_ids: set[str] = set()
     seen_locator_ids: set[str] = set()
     usage = {"steps": 0, "tokens_in": 0, "tokens_out": 0, "latency_ms": 0}
+    llm_calls: list[dict] = []
+    tool_result_chars = 0
+    tool_payload_chars = 0
+    duplicate_skipped = 0
+    final_context_tokens = 0
     notes: list[str] = []
 
     started_at = time.perf_counter()
@@ -820,14 +934,25 @@ async def _run_improved(
             round_tool_choice = (
                 "none" if (rounds >= max_rounds and not repair_pending) else None
             )
+            round_specs = toolbox.specs()
             text, tool_calls, _, round_usage = await model_provider.chat_with_tools(
                 messages,
-                toolbox.specs(),
+                round_specs,
                 tool_choice=round_tool_choice,
                 reasoning_mode="flash",
                 temperature=TOOL_TEMPERATURE,
             )
             final_latency_ms = _elapsed_ms(llm_started_at)
+            _record_llm_call(
+                llm_calls,
+                phase="tool_round",
+                round_index=rounds,
+                messages=messages,
+                usage=round_usage,
+                latency_ms=final_latency_ms,
+                tools=round_specs,
+                tool_choice=round_tool_choice,
+            )
             final_tokens_in, final_tokens_out = _accumulate_tokens(usage, round_usage)
             final_meta = round_usage or {}
 
@@ -853,6 +978,7 @@ async def _run_improved(
                     messages.append({"role": "user", "content": hint})
                     continue
                 answer = text
+                final_context_tokens = int((round_usage or {}).get("prompt_tokens") or 0)
                 break
 
             if executed >= max_steps:
@@ -872,6 +998,9 @@ async def _run_improved(
                 )
                 trace.append(step)
                 round_steps.append(step)
+                tool_result_chars += int(step.get("result_chars") or 0)
+                tool_payload_chars += int(step.get("payload_chars") or 0)
+                duplicate_skipped += int(step.get("duplicate_skipped") or 0)
 
             # 自动重试：只处理"这一轮有失败/空结果/截断"，不替模型做无限重试。
             round_problem = any(
@@ -907,6 +1036,9 @@ async def _run_improved(
                 )
                 trace.append(step)
                 round_steps.append(step)
+                tool_result_chars += int(step.get("result_chars") or 0)
+                tool_payload_chars += int(step.get("payload_chars") or 0)
+                duplicate_skipped += int(step.get("duplicate_skipped") or 0)
                 notes.append("auto_retry")
 
             messages.append({
@@ -945,9 +1077,18 @@ async def _run_improved(
                 max_tokens=FINAL_MAX_TOKENS,
             )
             final_latency_ms = _elapsed_ms(llm_started_at)
+            _record_llm_call(
+                llm_calls,
+                phase="fallback_final",
+                round_index=rounds,
+                messages=messages,
+                usage=final_usage,
+                latency_ms=final_latency_ms,
+            )
             final_tokens_in, final_tokens_out = _accumulate_tokens(usage, final_usage)
             final_meta = final_usage or {}
             answer = (text or "").strip()
+            final_context_tokens = int((final_usage or {}).get("prompt_tokens") or 0)
 
         # 后置闸门：回合用尽时 fallback 生成答案，这条路径没经过回合内闸门。
         # 这里补跑：文本类（期间不支持/拒答重写）直接重写；工具类（覆盖/补算/补单元格）
@@ -980,18 +1121,38 @@ async def _run_improved(
                     max_tokens=FINAL_MAX_TOKENS,
                 )
                 final_latency_ms = _elapsed_ms(llm_started_at)
+                _record_llm_call(
+                    llm_calls,
+                    phase=f"post_gate_text:{gate}",
+                    round_index=rounds,
+                    messages=messages,
+                    usage=post_usage,
+                    latency_ms=final_latency_ms,
+                )
                 final_tokens_in, final_tokens_out = _accumulate_tokens(usage, post_usage)
                 final_meta = post_usage or {}
                 answer = (text or "").strip()
+                final_context_tokens = int((post_usage or {}).get("prompt_tokens") or 0)
                 continue
 
             # 工具类修复：覆盖 / 补算 / 补单元格
+            repair_specs = toolbox.specs()
             llm_started_at = time.perf_counter()
             text, repair_calls, _, repair_usage = await model_provider.chat_with_tools(
                 messages,
-                toolbox.specs(),
+                repair_specs,
                 reasoning_mode="flash",
                 temperature=TOOL_TEMPERATURE,
+            )
+            repair_latency_ms = _elapsed_ms(llm_started_at)
+            _record_llm_call(
+                llm_calls,
+                phase=f"post_gate_tools:{gate}",
+                round_index=rounds,
+                messages=messages,
+                usage=repair_usage,
+                latency_ms=repair_latency_ms,
+                tools=repair_specs,
             )
             _accumulate_tokens(usage, repair_usage)
             allowed = {"calculate"} if gate == "calc_repair" else None
@@ -1006,6 +1167,9 @@ async def _run_improved(
                     locators, seen_locator_ids, policy=gate,
                 )
                 trace.append(step)
+                tool_result_chars += int(step.get("result_chars") or 0)
+                tool_payload_chars += int(step.get("payload_chars") or 0)
+                duplicate_skipped += int(step.get("duplicate_skipped") or 0)
             content = toolbox.final_template.format(evidence=_format_evidence(evidence))
             if gate == "calc_repair":
                 content += (
@@ -1022,9 +1186,18 @@ async def _run_improved(
                 max_tokens=FINAL_MAX_TOKENS,
             )
             final_latency_ms = _elapsed_ms(llm_started_at)
+            _record_llm_call(
+                llm_calls,
+                phase=f"post_gate_final:{gate}",
+                round_index=rounds,
+                messages=messages,
+                usage=post_usage,
+                latency_ms=final_latency_ms,
+            )
             final_tokens_in, final_tokens_out = _accumulate_tokens(usage, post_usage)
             final_meta = post_usage or {}
             answer = (text or "").strip()
+            final_context_tokens = int((post_usage or {}).get("prompt_tokens") or 0)
 
         # 覆盖自检：只在"有证据、有草稿、还有步数预算"时做一次。
         # 澄清任务（clarify_mode=ask）直接跳过——该问的时候不该被自检逼成硬答。
@@ -1032,7 +1205,20 @@ async def _run_improved(
             if executed < max_steps and self_checks < IMPROVED_SELF_CHECK_LIMIT:
                 self_checks += 1
                 try:
+                    check_started_at = time.perf_counter()
                     parsed, check_usage = await _coverage_check(question, evidence)
+                    check_latency_ms = _elapsed_ms(check_started_at)
+                    self_check_call = _record_llm_call(
+                        llm_calls,
+                        phase="self_check",
+                        round_index=rounds,
+                        messages=[],
+                        usage=check_usage,
+                        latency_ms=check_latency_ms,
+                    )
+                    # 自检 prompt 在函数内部构建，规模由 _coverage_check 回传。
+                    self_check_call["messages"] = int(check_usage.get("messages_count") or 1)
+                    self_check_call["messages_chars"] = int(check_usage.get("messages_chars") or 0)
                     _accumulate_tokens(usage, check_usage)
                 except Exception as exc:  # noqa: BLE001 - 自检失败不能把已生成的答案带走
                     parsed = None
@@ -1056,6 +1242,9 @@ async def _run_improved(
                         policy="self_check_supplement",
                     )
                     trace.append(step)
+                    tool_result_chars += int(step.get("result_chars") or 0)
+                    tool_payload_chars += int(step.get("payload_chars") or 0)
+                    duplicate_skipped += int(step.get("duplicate_skipped") or 0)
                     self_eval["supplemented"] = True
                     messages.append({"role": "assistant", "content": answer})
                     messages.append({
@@ -1073,9 +1262,18 @@ async def _run_improved(
                         max_tokens=FINAL_MAX_TOKENS,
                     )
                     final_latency_ms = _elapsed_ms(llm_started_at)
+                    _record_llm_call(
+                        llm_calls,
+                        phase="self_check_supplement",
+                        round_index=rounds,
+                        messages=messages,
+                        usage=final_usage,
+                        latency_ms=final_latency_ms,
+                    )
                     final_tokens_in, final_tokens_out = _accumulate_tokens(usage, final_usage)
                     final_meta = final_usage or {}
                     answer = (text or "").strip()
+                    final_context_tokens = int((final_usage or {}).get("prompt_tokens") or 0)
             else:
                 self_eval = {
                     "checked": False,
@@ -1134,6 +1332,15 @@ async def _run_improved(
     usage["self_checks"] = self_checks
     usage["repair_rounds"] = repair_rounds
     usage["latency_ms"] = _elapsed_ms(started_at)
+    usage.update(
+        _usage_telemetry(
+            llm_calls,
+            tool_result_chars=tool_result_chars,
+            tool_payload_chars=tool_payload_chars,
+            duplicate_skipped=duplicate_skipped,
+            final_context_tokens=final_context_tokens,
+        )
+    )
 
     final_step = {
         "step": executed + 1,
@@ -1164,6 +1371,7 @@ async def _run_improved(
         "citations": citations,
         "trace": trace,
         "usage": usage,
+        "llm_calls": llm_calls,
         "toolset": _toolset_name(toolbox),
         "evidence": _public_evidence(evidence),
         "calc": list(getattr(toolbox, "calcs", []) or []),
@@ -1237,6 +1445,11 @@ async def run(
     seen_chunk_ids: set[str] = set()
     seen_locator_ids: set[str] = set()
     usage = {"steps": 0, "tokens_in": 0, "tokens_out": 0, "latency_ms": 0}
+    llm_calls: list[dict] = []
+    tool_result_chars = 0
+    tool_payload_chars = 0
+    duplicate_skipped = 0
+    final_context_tokens = 0
     notes: list[str] = []
 
     started_at = time.perf_counter()
@@ -1251,10 +1464,20 @@ async def run(
 
     try:
         llm_started_at = time.perf_counter()
+        baseline_specs = toolbox.specs()
         text, tool_calls, _, round_usage = await model_provider.chat_with_tools(
-            messages, toolbox.specs(), reasoning_mode="flash", temperature=TOOL_TEMPERATURE
+            messages, baseline_specs, reasoning_mode="flash", temperature=TOOL_TEMPERATURE
         )
         final_latency_ms = _elapsed_ms(llm_started_at)
+        _record_llm_call(
+            llm_calls,
+            phase="baseline_tools",
+            round_index=1,
+            messages=messages,
+            usage=round_usage,
+            latency_ms=final_latency_ms,
+            tools=baseline_specs,
+        )
         final_tokens_in, final_tokens_out = _accumulate_tokens(usage, round_usage)
         final_meta = round_usage or {}
 
@@ -1265,11 +1488,13 @@ async def run(
                     budget_exceeded = True
                     break
                 executed += 1
-                trace.append(
-                    await _execute_tool_call(
-                        toolbox, call, executed, evidence, seen_chunk_ids, locators, seen_locator_ids
-                    )
+                step = await _execute_tool_call(
+                    toolbox, call, executed, evidence, seen_chunk_ids, locators, seen_locator_ids
                 )
+                trace.append(step)
+                tool_result_chars += int(step.get("result_chars") or 0)
+                tool_payload_chars += int(step.get("payload_chars") or 0)
+                duplicate_skipped += int(step.get("duplicate_skipped") or 0)
 
             if evidence:
                 content = toolbox.final_template.format(evidence=_format_evidence(evidence))
@@ -1301,11 +1526,21 @@ async def run(
                 max_tokens=FINAL_MAX_TOKENS,
             )
             final_latency_ms = _elapsed_ms(llm_started_at)
+            _record_llm_call(
+                llm_calls,
+                phase="baseline_final",
+                round_index=1,
+                messages=messages,
+                usage=final_usage,
+                latency_ms=final_latency_ms,
+            )
             final_tokens_in, final_tokens_out = _accumulate_tokens(usage, final_usage)
             final_meta = final_usage or {}
             answer = (final_text or "").strip()
+            final_context_tokens = int((final_usage or {}).get("prompt_tokens") or 0)
         else:
             answer = (text or "").strip()
+            final_context_tokens = int((round_usage or {}).get("prompt_tokens") or 0)
     except Exception as exc:  # noqa: BLE001 - 运行失败要落成 failed 而不是丢记录
         failed = True
         notes.append(f"run_error: {type(exc).__name__}: {exc}")
@@ -1346,6 +1581,15 @@ async def run(
 
     usage["steps"] = executed
     usage["latency_ms"] = _elapsed_ms(started_at)
+    usage.update(
+        _usage_telemetry(
+            llm_calls,
+            tool_result_chars=tool_result_chars,
+            tool_payload_chars=tool_payload_chars,
+            duplicate_skipped=duplicate_skipped,
+            final_context_tokens=final_context_tokens,
+        )
+    )
 
     final_step = {
         "step": executed + 1,
@@ -1380,6 +1624,7 @@ async def run(
         "citations": citations,
         "trace": trace,
         "usage": usage,
+        "llm_calls": llm_calls,
         "toolset": _toolset_name(toolbox),
         "evidence": _public_evidence(evidence),
         "calc": list(getattr(toolbox, "calcs", []) or []),
