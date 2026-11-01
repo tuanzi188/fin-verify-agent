@@ -14,6 +14,7 @@
 from typing import Optional
 
 from evaluation.agent_metrics import (
+    continuous_summary,
     count_by,
     fisher_exact_two_sided,
     fisher_min_split,
@@ -25,6 +26,7 @@ from evaluation.agent_metrics import (
     ratio,
     wilson_interval,
 )
+from evaluation import failure_taxonomy, numeric_audit, retrieval_metrics, trajectory_eval
 
 DIMENSIONS = ("检索与引用", "多步拆解", "拒答与边界", "澄清与追问", "恢复与纠错")
 
@@ -108,6 +110,21 @@ def _step_error_kinds(result: dict) -> list[str]:
         if step.get("error_kind"):
             kinds.append(str(step["error_kind"]))
     return kinds
+
+
+def _verdict_model_calls(verdict: dict) -> int:
+    """一次运行实际发了几次 LLM 调用。优先读逐轮轨迹，缺了才退回步数估算。"""
+    usage = verdict.get("usage") or {}
+    calls = usage.get("llm_calls")
+    if isinstance(calls, list):
+        return len(calls)
+    explicit = usage.get("model_calls")
+    if isinstance(explicit, int):
+        return explicit
+    rounds = usage.get("rounds")
+    if isinstance(rounds, int):
+        return rounds + 1 + int(usage.get("self_checks") or 0)
+    return int(usage.get("steps") or 0) + 1
 
 
 def classify_causes(task: dict, result: dict, checks: dict, judgment: Optional[dict]) -> list[str]:
@@ -305,8 +322,17 @@ def build_power_k(verdicts: list[dict], runs_per_task: int = 1) -> dict:
             "na": outcomes.count("na"),
             "invalid": outcomes.count("invalid"),
             "pass_at_1": ratio(passed, len(valid)),
+            # pass@k = 至少一次成功；pass^k = 全部成功。两个数一起报，
+            # 才能把"3 对 1 错"这种不稳定从"3/4 通过"的模糊说法里暴露出来。
+            "pass_at_k": (1.0 if passed >= 1 else 0.0) if complete else None,
             "pass_pow_k": (1.0 if passed >= k else 0.0) if complete else None,
             "complete": complete,
+            "outcomes": "".join(
+                {"pass": "P", "fail": "F", "na": "N", "invalid": "I"}.get(outcome, "?")
+                for outcome in outcomes
+            ),
+            "flaky": bool(complete and 0 < passed < len(valid)),
+            "always_fail": bool(complete and passed == 0),
         }
         task_rows.append(row)
         if not complete:
@@ -321,12 +347,19 @@ def build_power_k(verdicts: list[dict], runs_per_task: int = 1) -> dict:
         rates = [row["pass_at_1"] for row in rows if row["pass_at_1"] is not None]
         complete_rows = [row for row in rows if row["complete"]]
         stable = sum(1 for row in complete_rows if row["pass_pow_k"] == 1.0)
+        at_least_one = sum(1 for row in complete_rows if row["pass_at_k"] == 1.0)
+        flaky = sum(1 for row in complete_rows if row["flaky"])
+        always_fail = sum(1 for row in complete_rows if row["always_fail"])
         return {
             "tasks": len(rows),
             "complete_tasks": len(complete_rows),
             "pass_at_1": (sum(rates) / len(rates)) if rates else None,
+            "pass_at_k": ratio(at_least_one, len(complete_rows)),
             "pass_pow_k": ratio(stable, len(complete_rows)),
             "stable_tasks": stable,
+            "at_least_one_task": at_least_one,
+            "flaky_tasks": flaky,
+            "always_fail_tasks": always_fail,
             "task_rows": rows,
         }
 
@@ -341,19 +374,88 @@ def build_power_k(verdicts: list[dict], runs_per_task: int = 1) -> dict:
         "meets_minimum_runs": k >= PASS_K_MIN_RUNS,
         "definition": (
             "pass@1 = 各任务有效运行通过率的均值；"
-            f"pass^{k} = {k} 次有效运行全部通过的任务占比"
+            f"pass@{k} = {k} 次里至少一次通过的任务占比；"
+            f"pass^{k} = {k} 次有效运行全部通过的任务占比。"
+            "pass@k 与 pass^k 的差值就是不稳定任务（flaky）。"
         ),
         "overall": overall,
         "by_dimension": by_dimension,
         "tasks": task_rows,
         "excluded": excluded,
         "note": (
-            f"本报告每任务 {k} 次运行，pass^{k} 只在完整任务上计算；"
+            f"本报告每任务 {k} 次运行，pass@{k}/pass^{k} 只在完整任务上计算；"
             f"{len(excluded)} 条任务因有效运行不足被排除。"
             if k > 1
-            else "每任务只跑 1 次，pass^k 不成立；只有 pass@1 这一个数。"
+            else "每任务只跑 1 次，pass@k/pass^k 不成立；只有 pass@1 这一个数。"
         ),
     }
+
+
+#: 样本分组（2026-11-01 定稿）：三组各自计分，**不做跨组平均**。
+#: 恢复题是 mock 注入故障，分布与真实用户问题不同，混进核心总分会污染读数。
+POPULATIONS = (
+    ("core_financial_qa", "核心金融问答"),
+    ("refusal_clarification", "拒答与澄清"),
+    ("mock_recovery", "故障恢复 mock"),
+)
+
+
+def population_of(verdict: dict) -> str:
+    """一条运行属于哪个样本组。"""
+    if verdict.get("mock") or verdict.get("dimension") == "恢复与纠错":
+        return "mock_recovery"
+    if verdict.get("dimension") in ("拒答与边界", "澄清与追问"):
+        return "refusal_clarification"
+    return "core_financial_qa"
+
+
+def build_populations(
+    verdicts: list[dict],
+    judge_repeats: int = 1,
+    runs_per_task: int = 1,
+) -> dict:
+    """按样本组分别聚合。**不要在 aggregate 内部调用本函数**：
+    它对子集递归调用 aggregate，而 aggregate 内部若再分组就会无限递归。"""
+    populations: dict[str, dict] = {}
+    for name, _label in POPULATIONS:
+        subset = [verdict for verdict in verdicts if population_of(verdict) == name]
+        if not subset:
+            populations[name] = {"tasks": 0, "runs": 0, "note": "该组没有样本"}
+            continue
+        sub = aggregate(
+            subset, judge_repeats=judge_repeats, runs_per_task=runs_per_task
+        )
+        populations[name] = {
+            "tasks": len({verdict.get("task_id") for verdict in subset}),
+            "runs": len(subset),
+            "cross": sub["cross"],
+            "dimensions": sub["dimensions"],
+            "power_k": sub["power_k"],
+        }
+    return populations
+
+
+def _outcome_breakdown(verdicts: list[dict], key_of) -> dict[str, dict]:
+    """按任一元数据字段分组报通过率。只算 pass/fail 有效运行，na/invalid 不进分母。"""
+    groups: dict[str, list[dict]] = {}
+    for verdict in verdicts:
+        groups.setdefault(str(key_of(verdict)), []).append(verdict)
+    rows: dict[str, dict] = {}
+    for key, subset in sorted(groups.items()):
+        outcomes = [str(verdict.get("outcome") or "") for verdict in subset]
+        valid = [outcome for outcome in outcomes if outcome in ("pass", "fail")]
+        passed = sum(1 for outcome in valid if outcome == "pass")
+        low, high = wilson_interval(passed, len(valid))
+        rows[key] = {
+            "runs": len(subset),
+            "tasks": len({verdict.get("task_id") for verdict in subset}),
+            "passed": passed,
+            "denominator": len(valid),
+            "pass_rate": ratio(passed, len(valid)),
+            "wilson": [round(low, 4), round(high, 4)],
+            "label": format_interval(passed, len(valid)) if valid else "N/A",
+        }
+    return rows
 
 
 def aggregate(verdicts: list[dict], judge_repeats: int = 1, runs_per_task: int = 1) -> dict:
@@ -435,10 +537,18 @@ def aggregate(verdicts: list[dict], judge_repeats: int = 1, runs_per_task: int =
     power_k = build_power_k(verdicts, runs_per_task=runs_per_task)
     overall_power = power_k["overall"]
     pass_note = (
-        f"每任务 {power_k['k']} 次：pass@1 取任务均值，pass^{power_k['k']} 只计完整任务"
+        f"每任务 {power_k['k']} 次：pass@1 取任务均值，"
+        f"pass@{power_k['k']} 与 pass^{power_k['k']} 只计完整任务"
         if power_k["k"] > 1
-        else "每任务 1 次：只有 pass@1，pass^k 不成立"
+        else "每任务 1 次：只有 pass@1，pass@k/pass^k 不成立"
     )
+
+    token_totals = [
+        int((verdict.get("usage") or {}).get("tokens_in") or 0)
+        + int((verdict.get("usage") or {}).get("tokens_out") or 0)
+        for verdict in verdicts
+    ]
+    model_calls = [_verdict_model_calls(verdict) for verdict in verdicts]
 
     cross = {
         "avg_steps": round(sum(steps) / len(steps), 2) if steps else None,
@@ -447,6 +557,12 @@ def aggregate(verdicts: list[dict], judge_repeats: int = 1, runs_per_task: int =
         "p95_latency_ms": int(percentile(latencies, 0.95)) if latencies else None,
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
+        # 连续型指标统一报 均值 ± 标准差 + 中位数 + P95：
+        # 只报均值会把 CX-10 型长尾藏起来，只报最好一次会把不稳定藏起来。
+        "token_stats": continuous_summary(token_totals),
+        "step_stats": continuous_summary(steps),
+        "latency_stats": continuous_summary(latencies),
+        "calls_stats": continuous_summary(model_calls),
         "citation_precision": ratio(len(supported_points), len(cited_points)),
         "citation_precision_label": format_interval(len(supported_points), len(cited_points)),
         "grounded_rate": ratio(grounded_true, len(grounded_rows)),
@@ -456,6 +572,9 @@ def aggregate(verdicts: list[dict], judge_repeats: int = 1, runs_per_task: int =
         "recovery_success_rate": ratio(recovered, len(success_rows)),
         "recovery_success_label": format_interval(recovered, len(success_rows)),
         "pass_at_1": overall_power.get("pass_at_1"),
+        "pass_at_k": overall_power.get("pass_at_k"),
+        "pass_pow_k": overall_power.get("pass_pow_k"),
+        "flaky_tasks": overall_power.get("flaky_tasks"),
         # 字段名固定为 pass_pow_3：只有 k=3 及以上才有意义，k=2 时留空并写清原因。
         "pass_pow_3": (
             overall_power.get("pass_pow_k")
@@ -508,12 +627,59 @@ def aggregate(verdicts: list[dict], judge_repeats: int = 1, runs_per_task: int =
         if verdict.get("judge_agreement") is not None
     ]
 
+    # 三层评测：检索 / 轨迹 / 数值 / 失败自动归类。
+    # 都只消费 verdict 里已经算好的确定性结果，不额外调模型。
+    retrieval_rows = [
+        verdict["retrieval"]
+        for verdict in verdicts
+        if isinstance(verdict.get("retrieval"), dict) and verdict["retrieval"].get("first_search")
+    ]
+    trajectory_rows = [
+        verdict["trajectory"]
+        for verdict in verdicts
+        if isinstance(verdict.get("trajectory"), dict) and "ordered_ok" in verdict["trajectory"]
+    ]
+    numeric_rows = [
+        verdict["numeric"]
+        for verdict in verdicts
+        if isinstance(verdict.get("numeric"), dict) and "gold_points_checked" in verdict["numeric"]
+    ]
+
     return {
         "dimensions": dimensions,
         "cross": cross,
         "power_k": power_k,
         "failure_causes": failure_causes,
         "failure_cause_summary": failure_cause_summary,
+        # 元数据分栏（2026-11-01）：标注了 prompt_style / retrieval_hops 的任务集
+        # 必须分开读数——带约束题考的是"按指令执行"，混进开放题会把构造效度搅浑。
+        "prompt_style_breakdown": _outcome_breakdown(
+            verdicts, lambda verdict: verdict.get("prompt_style") or "未标注"
+        ),
+        "retrieval_hops_breakdown": _outcome_breakdown(
+            verdicts,
+            lambda verdict: (
+                str(verdict.get("retrieval_hops"))
+                if verdict.get("retrieval_hops") is not None
+                else "未标注"
+            ),
+        ),
+        "retrieval_layer": (
+            retrieval_metrics.aggregate(retrieval_rows)
+            if retrieval_rows
+            else {"tasks": 0, "note": "没有检索段数据（非金融语料或旧 runs）"}
+        ),
+        "trajectory_layer": (
+            trajectory_eval.aggregate(trajectory_rows)
+            if trajectory_rows
+            else {"tasks": 0, "note": "没有轨迹数据"}
+        ),
+        "numeric_layer": (
+            numeric_audit.aggregate(numeric_rows)
+            if numeric_rows
+            else {"tasks": 0, "note": "没有数值审计数据"}
+        ),
+        "failure_taxonomy": failure_taxonomy.distribution(verdicts),
         "judge": {
             # `calls` 是历史字段名，语义其实是"判过几条"；真实请求数 = 条数 × repeats。
             # 自检发现过一次口径错误：报告写"调用 30 次"，实际发了 60 次请求。
@@ -622,6 +788,7 @@ def build_badcases(verdicts: list[dict], limit: int = 100) -> list[dict]:
             "dimension": verdict.get("dimension"),
             "primary_cause": primary,
             "causes": causes,
+            "taxonomy": verdict.get("taxonomy"),
             "reasons": verdict.get("reasons") or [],
             "suggested_fix": CAUSE_HINTS.get(primary, ""),
             "answer_preview": str(verdict.get("answer") or "")[:200],
@@ -770,6 +937,16 @@ def render_console(report: dict) -> str:
     lines.append(f"  尝试恢复率 {cross.get('recovery_attempt_label')}    "
                  f"恢复成功率 {cross.get('recovery_success_label')}")
     lines.append(f"  token: 入 {cross.get('tokens_in')} / 出 {cross.get('tokens_out')}")
+    for label, key in (("token/次", "token_stats"), ("步数", "step_stats"), ("延迟ms", "latency_stats"), ("调用数", "calls_stats")):
+        stats = cross.get(key) or {}
+        if stats.get("n"):
+            std = stats.get("std")
+            std_text = f"± {std}" if std is not None else "± n/a"
+            lines.append(
+                f"  {label}：均值 {stats.get('mean')} {std_text}  "
+                f"中位 {stats.get('median')}  P95 {stats.get('p95')}  "
+                f"范围 [{stats.get('min')}, {stats.get('max')}]  n={stats.get('n')}"
+            )
     lines.append("")
 
     resolution = report.get("resolution") or {}
@@ -795,12 +972,19 @@ def render_console(report: dict) -> str:
         lines.append(f"pass^k（任务级稳定性，k={k}）：")
         lines.append(
             f"  整体 pass@1 {_format_rate(overall.get('pass_at_1'))}    "
+            f"pass@{k} {_format_rate(overall.get('pass_at_k'))}    "
             f"pass^{k} {_format_rate(overall.get('pass_pow_k'))}    "
             f"完整任务 {overall.get('complete_tasks')}/{overall.get('tasks')}"
+        )
+        lines.append(
+            f"  不稳定任务 {overall.get('flaky_tasks', 0)} 条"
+            f"（pass@{k} 与 pass^{k} 的差值）    "
+            f"从未通过 {overall.get('always_fail_tasks', 0)} 条"
         )
         for dimension, entry in (power_k.get("by_dimension") or {}).items():
             lines.append(
                 f"  {dimension:<10} pass@1 {_format_rate(entry.get('pass_at_1'))}    "
+                f"pass@{k} {_format_rate(entry.get('pass_at_k'))}    "
                 f"pass^{k} {_format_rate(entry.get('pass_pow_k'))}    "
                 f"完整 {entry.get('complete_tasks')}/{entry.get('tasks')}"
             )
@@ -840,6 +1024,58 @@ def render_console(report: dict) -> str:
             )
         lines.append("")
 
+    retrieval = report.get("retrieval_layer") or {}
+    if retrieval.get("tasks"):
+        k = str(retrieval.get("primary_k") or 5)
+        first = (retrieval.get("first_search") or {}).get(k) or {}
+        read = retrieval.get("read") or {}
+        lines.append(f"检索层（first_search@{k}，双臂同尺）：")
+        lines.append(
+            f"  要点命中 {first.get('point_hits')}/{first.get('point_total')} "
+            f"({_format_rate(first.get('point_hit_rate'))})    "
+            f"整题全中 {first.get('task_hit_all')}/{first.get('tasks')} "
+            f"({_format_rate(first.get('task_hit_all_rate'))})    "
+            f"MRR {first.get('mrr')}    "
+            f"ctx precision {_format_rate(first.get('context_precision'))}"
+        )
+        lines.append(
+            f"  read hit {read.get('points_read')}/{read.get('points_total')} "
+            f"({_format_rate(read.get('read_rate'))})    "
+            f"平均检索次数 {(retrieval.get('searches') or {}).get('mean')}"
+        )
+        lines.append("")
+
+    trajectory = report.get("trajectory_layer") or {}
+    if trajectory.get("tasks"):
+        lines.append("轨迹层：")
+        lines.append(
+            f"  通过 {_format_rate(trajectory.get('pass_rate'))}    "
+            f"按序匹配 {_format_rate(trajectory.get('ordered_rate'))}    "
+            f"关键工具 {_format_rate(trajectory.get('key_tools_rate'))}    "
+            f"无效循环 {trajectory.get('invalid_loop_tasks')} 条"
+        )
+        lines.append("")
+
+    numeric = report.get("numeric_layer") or {}
+    if numeric.get("tasks"):
+        lines.append("数值审计：")
+        lines.append(
+            f"  金标覆盖率 {_format_rate(numeric.get('gold_coverage'))} "
+            f"({numeric.get('gold_points_covered')}/{numeric.get('gold_points_checked')})    "
+            f"数值幻觉率 {_format_rate(numeric.get('hallucination_rate'))} "
+            f"({numeric.get('hallucination_events')}/{numeric.get('judge_passed_points')})    "
+            f"未溯源数值率 {_format_rate(numeric.get('unsourced_rate'))}"
+        )
+        lines.append("")
+
+    taxonomy = report.get("failure_taxonomy") or {}
+    if taxonomy.get("primary"):
+        lines.append("失败自动归类（主因 / 共现）：")
+        for category, count in taxonomy["primary"].items():
+            cooccurrence = (taxonomy.get("cooccurrence") or {}).get(category, count)
+            lines.append(f"  {category:<12} {count} / {cooccurrence}")
+        lines.append("")
+
     judge = report.get("judge") or {}
     lines.append(
         f"judge: 判 {judge.get('judged_tasks')} 条 × {judge.get('repeats')} 次"
@@ -849,6 +1085,42 @@ def render_console(report: dict) -> str:
         f"（基于 {judge.get('agreement_samples')} 条重复判分）"
     )
     lines.append(f"badcase: {report.get('badcase_count')} 条")
+
+    populations = report.get("populations") or {}
+    if populations:
+        power_k = report.get("power_k") or {}
+        k = power_k.get("k")
+        lines.append("")
+        lines.append("样本分组（不混合计分；mock 恢复不进核心总分）：")
+        for population_name, population_label in POPULATIONS:
+            population = populations.get(population_name) or {}
+            if not population.get("runs") and not population.get("tasks"):
+                continue
+            population_cross = population.get("cross") or {}
+            population_power = (population.get("power_k") or {}).get("overall") or {}
+            parts = [
+                f"{population.get('tasks', 0)} 题（{population.get('runs', 0)} 次运行）",
+                f"pass@1 {_format_rate(population_cross.get('pass_at_1'))}",
+            ]
+            if k and k > 1:
+                # k=1 时 pass@k/pass^k 与 pass@1 同值或无意义，不重复展示
+                parts.append(f"pass@{k} {_format_rate(population_power.get('pass_at_k'))}")
+                parts.append(f"pass^{k} {_format_rate(population_power.get('pass_pow_k'))}")
+            lines.append(f"  {population_label}：" + "，".join(parts))
+
+    style_breakdown = report.get("prompt_style_breakdown") or {}
+    if style_breakdown:
+        lines.append("")
+        lines.append("prompt_style 分栏（带约束题考指令执行，不混入开放场景能力）：")
+        for style, entry in style_breakdown.items():
+            lines.append(f"  {style:<18} {entry['label']}  (n={entry['denominator']})")
+
+    hops_breakdown = report.get("retrieval_hops_breakdown") or {}
+    if hops_breakdown:
+        lines.append("")
+        lines.append("retrieval_hops 分栏（1=单证据单元，2=跨证据单元，0=无金标位置）：")
+        for hops, entry in hops_breakdown.items():
+            lines.append(f"  hop {hops:<4} {entry['label']}  (n={entry['denominator']})")
 
     notes = report.get("construct_notes") or []
     if notes:

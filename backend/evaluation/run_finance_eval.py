@@ -73,6 +73,11 @@ def main() -> int:
     parser.add_argument("--variant", default="improved", choices=SUPPORTED_VARIANTS)
     parser.add_argument("--runs", type=int, default=1, help="每条任务跑几次（pass^k 需要 ≥3）")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument(
+        "--ids",
+        default="",
+        help="逗号分隔的 task id，只跑这些（4 题探针用，如 CX-01,CX-04,CX-07,CX-10）",
+    )
     parser.add_argument("--delay", type=float, default=0.0)
     parser.add_argument("--retry-errors", type=int, default=1)
     parser.add_argument(
@@ -93,6 +98,9 @@ def main() -> int:
         raise SystemExit(f"任务文件不存在: {tasks_path}")
 
     tasks = load_tasks(tasks_path)
+    if args.ids:
+        wanted = {part.strip() for part in args.ids.split(",") if part.strip()}
+        tasks = [task for task in tasks if str(task.get("id")) in wanted]
     if args.holdout != "include":
         keep = args.holdout == "only"
         tasks = [task for task in tasks if bool(task.get("holdout")) is keep]

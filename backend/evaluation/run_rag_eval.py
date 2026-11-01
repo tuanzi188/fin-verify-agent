@@ -46,8 +46,19 @@ def main() -> int:
     parser.add_argument("--tasks", default=DEFAULT_TASKS)
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument(
+        "--ids",
+        default="",
+        help="逗号分隔的 task id，只跑这些（4 题探针用，如 CX-01,CX-04,CX-07,CX-10）",
+    )
     parser.add_argument("--delay", type=float, default=0.0)
     parser.add_argument("--retry-errors", type=int, default=1)
+    parser.add_argument(
+        "--holdout",
+        choices=("include", "only", "exclude"),
+        default="exclude",
+        help="默认 exclude：调参不读复杂集留出；最终验收显式使用 only",
+    )
     parser.add_argument("--top-k", type=int, default=TOP_K)
     parser.add_argument(
         "--retrieval-mode",
@@ -65,6 +76,12 @@ def main() -> int:
         raise SystemExit(f"任务文件不存在: {tasks_path}")
 
     tasks = load_tasks(tasks_path)
+    if args.ids:
+        wanted = {part.strip() for part in args.ids.split(",") if part.strip()}
+        tasks = [task for task in tasks if str(task.get("id")) in wanted]
+    if args.holdout != "include":
+        keep = args.holdout == "only"
+        tasks = [task for task in tasks if bool(task.get("holdout")) is keep]
     if args.limit > 0:
         tasks = tasks[: args.limit]
     if not tasks:
@@ -173,7 +190,7 @@ def main() -> int:
                 "tasks_file": str(tasks_path),
                 "tasks_sha256": sha256_file(tasks_path),
                 "corpus_hash": corpus_hash(),
-                "holdout": "exclude",
+                "holdout": args.holdout,
                 "elapsed_seconds": round(elapsed, 1),
             },
             "manifest": manifest,

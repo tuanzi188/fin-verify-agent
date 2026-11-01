@@ -6,6 +6,7 @@
 """
 
 import math
+import statistics
 from math import comb
 from typing import Iterable, Optional, Sequence
 
@@ -109,6 +110,38 @@ def agreement(values: Sequence[object]) -> Optional[float]:
         return None
     counts = count_by(values, lambda value: value)
     return max(counts.values()) / len(values)
+
+
+def continuous_summary(values: Sequence[float]) -> dict:
+    """连续型指标的分布口径：均值 ± 标准差、中位数、P95、极值。
+
+    为什么不能只报均值：Agent 的 token/延迟是长尾分布，均值会被 CX-10 型
+    case 拉高；只报均值会让"尾部爆炸"看不见。P95 是尾部信号，std 是波动信号，
+    两个都要跟样本量一起报。
+
+    `std` 用样本标准差（n−1）；n<2 时返回 None——单个样本没有"波动"可言，
+    报 0 会被读成"很稳定"。
+    """
+    numbers = [float(value) for value in values if value is not None]
+    if not numbers:
+        return {
+            "n": 0,
+            "mean": None,
+            "std": None,
+            "median": None,
+            "p95": None,
+            "min": None,
+            "max": None,
+        }
+    return {
+        "n": len(numbers),
+        "mean": round(statistics.mean(numbers), 2),
+        "std": round(statistics.stdev(numbers), 2) if len(numbers) > 1 else None,
+        "median": round(statistics.median(numbers), 2),
+        "p95": round(percentile(numbers, 0.95), 2) if percentile(numbers, 0.95) is not None else None,
+        "min": round(min(numbers), 2),
+        "max": round(max(numbers), 2),
+    }
 
 
 # ---------------------------------------------------------------------------

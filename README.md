@@ -99,6 +99,33 @@ python -m evaluation.compare_agent_reports \
 准确表述是“恢复维度有可分辨改进，整卷显著性因只有 5 个不一致对而不成立”，
 不能写成“全卷显著提升”。数据见 `docs/evidence/agent_compare3_20261027.json`。
 
+### 三层评测（2026-10-31 升级）
+
+除答案层外，新增检索层、路由层与离线 Release Gate；全部零模型调用：
+
+```bash
+# 检索层：结构感知 RAG vs 固定窗，一次检索、同 K
+python -m evaluation.retrieval_metrics --tasks evaluation/finance_tasks_complex.jsonl \
+  --arm both --top-k 5 --out %TEMP%\retrieval.json
+# 路由层：router 选臂 vs 任务结构金标
+python -m evaluation.routing_metrics \
+  --tasks "evaluation/finance_tasks.jsonl,evaluation/finance_tasks_complex.jsonl,evaluation/finance_tasks_stress.jsonl" \
+  --out %TEMP%\routing.json
+# 五类闸门 + 三层报告（需先有 answer report / numeric / trajectory）
+python -m evaluation.release_gate --report %TEMP%\fin_report.json \
+  --retrieval %TEMP%\retrieval.json --routing %TEMP%\routing.json --out %TEMP%\gate.json
+python -m evaluation.eval_report --retrieval %TEMP%\retrieval.json \
+  --routing %TEMP%\routing.json --answer-report %TEMP%\fin_report.json \
+  --out-md %TEMP%\eval_report.md
+```
+
+- 检索层：`HitRate@K` / `MRR` / `context precision` / `context recall` / `read hit`；
+  `first_search` 双臂同尺，`any_search` 只作 Agent 诊断。
+- 路由层：准确率、混淆矩阵、Macro-F1、错分代价（简单题烧钱 / 复杂题拿差答案）。
+- 稳定性：`pass@k`（至少一次）与 `pass^k`（全部）分开报，连续型指标报均值 ± 标准差 + P95。
+- 闸门：金融两条红线——数值幻觉率 = 0、误拒率 ≤ 阈值；缺数据记 `insufficient_data`，不算通过。
+- 实施记录与首轮读数：`docs/EVAL_UPGRADE_IMPLEMENTATION.md`；等价规则：`docs/ANSWER_EQUIVALENCE_RUBRIC.md`。
+
 ---
 
 ## 技术栈

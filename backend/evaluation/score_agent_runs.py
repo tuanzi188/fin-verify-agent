@@ -26,6 +26,12 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+from evaluation import (
+    failure_taxonomy,
+    numeric_audit,
+    retrieval_metrics,
+    trajectory_eval,
+)
 from evaluation._runner_common import load_tasks
 from evaluation.agent_checks import collect_checks
 from evaluation.agent_corpus import AGENT_CORPUS_VERSION, chunk_map
@@ -34,11 +40,13 @@ from evaluation.agent_report import (
     aggregate,
     build_badcases,
     build_construct_notes,
+    build_populations,
     build_resolution,
     dimension_verdict,
     hard_gates,
     render_console,
 )
+from evaluation.calc_schema import calc_specs
 from evaluation.provenance import git_provenance, sha256_file
 
 DEFAULT_TASKS = "evaluation/agent_tasks.jsonl"
@@ -56,10 +64,51 @@ def build_verdict(
     task: dict,
     result: dict,
     judge_result: dict | None,
+    *,
+    chunks: dict[str, dict] | None = None,
+    routing: dict | None = None,
+    section_map: dict[str, list[str]] | None = None,
 ) -> dict:
     checks = collect_checks(task, result)
     judged = dimension_verdict(task, result, checks, judge_result)
     judgment = (judge_result or {}).get("judgment")
+
+    # 检索层：零模型调用，失败题先在这里分岔（miss vs hit-but-wrong）。
+    try:
+        retrieval = retrieval_metrics.score_task(
+            task, result, section_map=section_map
+        )
+    except Exception as exc:  # noqa: BLE001 - 量具失败不能把整条判分拖垮
+        retrieval = {"task_id": str(task.get("id")), "error": f"{type(exc).__name__}: {exc}"}
+
+    # 轨迹层：按序匹配 / 关键工具 / 无效循环。
+    try:
+        trajectory = trajectory_eval.evaluate(task, result)
+    except Exception as exc:  # noqa: BLE001
+        trajectory = {"task_id": str(task.get("id")), "error": f"{type(exc).__name__}: {exc}"}
+
+    # 数值审计：只在有金标数值的题上跑；没有 evidence 的制度库任务跳过。
+    numeric = None
+    has_numeric_gold = bool(calc_specs(task)) or any(
+        isinstance(point, dict) and isinstance(point.get("evidence"), dict) and point["evidence"].get("value") is not None
+        for point in task.get("answer_points") or []
+    )
+    if chunks is not None and has_numeric_gold:
+        try:
+            numeric = numeric_audit.audit_result(task, result, chunks, judgment=judgment)
+        except Exception as exc:  # noqa: BLE001
+            numeric = {"task_id": str(task.get("id")), "error": f"{type(exc).__name__}: {exc}"}
+
+    taxonomy = failure_taxonomy.classify(
+        task,
+        result,
+        checks,
+        judgment,
+        retrieval=retrieval,
+        routing=routing,
+        chunks=chunks,
+    )
+
     return {
         "task_id": str(task.get("id")),
         "run_index": int(result.get("run_index") or 1),
@@ -77,6 +126,17 @@ def build_verdict(
         # 这一条的正序/倒序判分记录：以后要比"forward vs reversed 的 pass 率差"
         # 直接从这里取，不用重跑
         "judge_orders": (judge_result or {}).get("orders"),
+        # 三层评测新增：检索段 / 轨迹 / 数值审计 / 失败自动归类
+        "retrieval": retrieval,
+        "trajectory": trajectory,
+        "numeric": numeric,
+        "taxonomy": taxonomy,
+        "routing": routing,
+        # 用途标注元数据（2026-11-01）：报告按 prompt_style / retrieval_hops 分栏、
+        # 按 mock 分组时从这里取；没标注的任务集这些字段是 None，分栏自动不渲染。
+        "route_target": task.get("route_target"),
+        "prompt_style": task.get("prompt_style"),
+        "retrieval_hops": task.get("retrieval_hops"),
         "answer": result.get("answer"),
         "citations": result.get("citations"),
         "trace": result.get("trace"),
@@ -93,6 +153,8 @@ async def score_all(
     judge_repeats: int,
     concurrency: int,
     reuse_judgments: dict[tuple[str, int], dict] | None = None,
+    routing_by_task: dict[str, dict] | None = None,
+    section_map: dict[str, list[str]] | None = None,
 ) -> list[dict]:
     semaphore = asyncio.Semaphore(max(1, concurrency))
 
@@ -136,7 +198,14 @@ async def score_all(
                 judge_result = await judge_task(
                     task, result, chunks, repeats=judge_repeats
                 )
-        return build_verdict(task, result, judge_result)
+        return build_verdict(
+            task,
+            result,
+            judge_result,
+            chunks=chunks,
+            routing=(routing_by_task or {}).get(task_id),
+            section_map=section_map,
+        )
 
     return await asyncio.gather(*(_score_one(result) for result in results))
 
@@ -167,6 +236,11 @@ def main() -> int:
         "--reuse-judgments",
         default="",
         help="复用旧报告的 judge 结论（只重算确定性检查时用），按 task_id+run_index 对齐",
+    )
+    parser.add_argument(
+        "--no-routing",
+        action="store_true",
+        help="不跑路由审计（省掉一次 FinanceStore 加载；默认金融语料会跑）",
     )
     args = parser.parse_args()
 
@@ -204,6 +278,30 @@ def main() -> int:
     else:
         chunks = chunk_map()
 
+    routing_by_task = None
+    # 制度库没有「章节包含哪些表」的结构，传空表避免误读金融语料的 section 映射。
+    section_map: dict[str, list[str]] = {}
+    if args.corpus == "finance" and not args.no_routing:
+        from app.finance.store import FinanceStore
+        from evaluation import routing_metrics
+        from evaluation.finance_corpus import DOCUMENT_DIR
+        from evaluation.retrieval_metrics import section_tables
+
+        store = FinanceStore(DOCUMENT_DIR)
+        routing_by_task = {}
+        for task in tasks:
+            task_id = str(task.get("id"))
+            expected, basis = routing_metrics.expected_arm(task)
+            decision = routing_metrics.route(task, store)
+            routing_by_task[task_id] = {
+                "expected_arm": expected,
+                "expected_basis": basis,
+                "actual_arm": decision["strategy"],
+                "route_reason": decision["reason"],
+                "misrouted": expected is not None and decision["strategy"] != expected,
+            }
+        section_map = section_tables()
+
     reuse_judgments = None
     if args.reuse_judgments:
         reuse_path = Path(args.reuse_judgments)
@@ -227,6 +325,8 @@ def main() -> int:
             judge_repeats=max(1, args.judge_repeats),
             concurrency=max(1, args.concurrency),
             reuse_judgments=reuse_judgments,
+            routing_by_task=routing_by_task,
+            section_map=section_map,
         )
     )
 
@@ -278,6 +378,19 @@ def main() -> int:
         "hard_gates": gates,
         "failure_causes": aggregated["failure_causes"],
         "failure_cause_summary": aggregated["failure_cause_summary"],
+        "failure_taxonomy": aggregated.get("failure_taxonomy"),
+        "retrieval_layer": aggregated.get("retrieval_layer"),
+        "trajectory_layer": aggregated.get("trajectory_layer"),
+        "numeric_layer": aggregated.get("numeric_layer"),
+        # 样本分组与元数据分栏（2026-11-01）：mock 恢复不进核心总分，
+        # prompt_style / retrieval_hops 各自分开读数。
+        "populations": build_populations(
+            verdicts,
+            judge_repeats=max(1, args.judge_repeats),
+            runs_per_task=runs_per_task,
+        ),
+        "prompt_style_breakdown": aggregated.get("prompt_style_breakdown"),
+        "retrieval_hops_breakdown": aggregated.get("retrieval_hops_breakdown"),
         "judge": aggregated["judge"],
         "construct_notes": build_construct_notes(variant, verdicts, runs_per_task=runs_per_task),
         "badcase_count": len(badcases),

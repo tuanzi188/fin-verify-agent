@@ -32,6 +32,7 @@ from typing import Any, Optional
 
 from app.services import model_provider
 from evaluation.agent_metrics import agreement
+from evaluation.equivalence import rubric_text
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ _JUDGE_TEMPLATE = """【用户问题】
 
 【判定任务】
 {points_block}
+{rubric_block}
 {forbidden_block}
 【澄清判定】
 {clarify_instruction}
@@ -205,6 +207,7 @@ def build_prompt(task: dict, result: dict, chunks: dict[str, dict], *, reverse: 
         answer=_truncate(str(result.get("answer") or "（空回答）"), 1200),
         citation_map=citation_map,
         points_block=points_block,
+        rubric_block=rubric_text(),
         forbidden_block=forbidden_block,
         clarify_instruction=clarify_instruction,
     )
