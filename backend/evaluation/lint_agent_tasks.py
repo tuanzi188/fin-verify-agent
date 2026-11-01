@@ -219,7 +219,9 @@ def lint(tasks: list[dict], chunks: dict[str, dict], profile: bool = True) -> tu
     #   答案只答了前半句：批 1 判 pass，批 2 判 fail，同一个答案两次结论相反。
     #   M2 要点「调整仅适用于 2026 年度及以后，历史年度按原制度执行」同样翻过。
     # 规则：一个 answer_point 只放一个可判定的事实，不出现句读分隔的第二个断言。
-    multi_fact_markers = ("，", "；", "。")
+    # 2026-11-01 金融集审计：CX-07/08/09 有 4 个要点用「、」捆绑两个数字事实
+    # （如「2025 年归母净利润 …元、营业收入 …元」），同样会让 judge 翻脸 ⇒ 纳入拦截。
+    multi_fact_markers = ("，", "；", "。", "、")
     for task in tasks:
         tag = task.get("id") or f"line{task['_line']}"
         for index, point in enumerate(task.get("answer_points") or []):

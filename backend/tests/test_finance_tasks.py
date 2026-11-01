@@ -308,19 +308,165 @@ def test_lint_complex_requires_twelve_and_four_buckets():
     assert any("缺少 cross_table" in error for error in errors), errors
 
     balanced = [_complex_task(index, kind) for index, kind in enumerate(COMPLEX_TYPES * 3, 1)]
+    for index in range(len(COMPLEX_TYPES)):
+        balanced[index]["holdout"] = True
     errors, _warnings = _lint_complex(balanced)
     assert errors == [], errors
 
 
-def test_lint_complex_rejects_tool_constraints_and_holdout():
+def test_lint_complex_requires_one_frozen_holdout_per_bucket():
     from evaluation.lint_finance_tasks import COMPLEX_TYPES, _lint_complex
 
     tasks = [_complex_task(index, kind) for index, kind in enumerate(COMPLEX_TYPES * 3, 1)]
     tasks[0]["tool_constraints"] = {"must_include": ["calculate"]}
-    tasks[1]["holdout"] = True
+    for index, kind in enumerate(COMPLEX_TYPES):
+        tasks[index]["holdout"] = True
     errors, _warnings = _lint_complex(tasks)
     assert any("不许写 tool_constraints" in error for error in errors), errors
-    assert any("不设留出" in error for error in errors), errors
+
+    tasks[1]["holdout"] = False
+    errors, _warnings = _lint_complex(tasks)
+    assert any("必须恰好 1 条冻结留出" in error for error in errors), errors
+
+
+def test_lint_case_schema_v2_accepts_route_and_question_metadata():
+    from evaluation.lint_finance_tasks import _lint_schema_v2
+
+    errors, warnings = _lint_schema_v2(
+        {
+            "id": "T-schema",
+            "route_target": "indeterminate",
+            "prompt_style": "open_question",
+            "retrieval_hops": 1,
+            "answer_operations": ["lookup", "cite"],
+        }
+    )
+    assert errors == []
+    assert warnings == []
+
+
+def test_lint_case_schema_v2_rejects_unknown_route_target():
+    from evaluation.lint_finance_tasks import _lint_schema_v2
+
+    errors, _warnings = _lint_schema_v2({"id": "T-schema-bad", "route_target": "guess"})
+    assert any("route_target 非法" in error for error in errors), errors
+
+
+def test_lint_schema_v2_flags_structured_target_with_multihop_or_calc():
+    from evaluation.lint_finance_tasks import _lint_schema_v2
+
+    errors, _warnings = _lint_schema_v2(
+        {"id": "T-a", "route_target": "structured_rag", "retrieval_hops": 2}
+    )
+    assert any("retrieval_hops" in error for error in errors), errors
+
+    errors, _warnings = _lint_schema_v2(
+        {
+            "id": "T-b",
+            "route_target": "structured_rag",
+            "retrieval_hops": 1,
+            "calc": {"formula": "a/b", "inputs": {"a": 1, "b": 2}, "expected": "0.5"},
+        }
+    )
+    assert any("calc/派生要点" in error for error in errors), errors
+
+    errors, _warnings = _lint_schema_v2(
+        {
+            "id": "T-c",
+            "route_target": "structured_rag",
+            "retrieval_hops": 1,
+            "answer_points": [{"text": "x", "derived": True, "chunk_ids": ["d#t1"]}],
+        }
+    )
+    assert any("calc/派生要点" in error for error in errors), errors
+
+
+def test_lint_schema_v2_errors_disclosed_value_labeled_calculate():
+    """FIN-04 型漂移：ROE 是披露值，calculate 是过度标注。
+
+    2026-11-01 审计 #5 起（answer_operations.calculate ⇔ calc/派生要点）
+    升为 error 级，双向互检：披露值不许标 calculate，带 calc/派生要点
+    也不许漏标。
+    """
+    from evaluation.lint_finance_tasks import _lint_schema_v2
+
+    errors, _warnings = _lint_schema_v2(
+        {
+            "id": "T-disclosed",
+            "route_target": "structured_rag",
+            "retrieval_hops": 1,
+            "answer_operations": ["lookup", "calculate", "cite"],
+        }
+    )
+    assert any(
+        "answer_operations 含 calculate 但无 calc/派生要点" in error for error in errors
+    ), errors
+
+    # 反向：带派生要点却漏标 calculate 同样报错
+    errors, _warnings = _lint_schema_v2(
+        {
+            "id": "T-missing-tag",
+            "route_target": "agent",
+            "retrieval_hops": 2,
+            "answer_points": [{"text": "x", "derived": True, "chunk_ids": ["d#t1"]}],
+            "answer_operations": ["lookup", "cite"],
+        }
+    )
+    assert any(
+        "answer_operations 缺 calculate" in error for error in errors
+    ), errors
+
+
+def test_lint_schema_v2_errors_abstain_hops_must_be_zero():
+    """审计 #4：纯拒答/澄清题（无金标位置）retrieval_hops 必须为 0。"""
+    from evaluation.lint_finance_tasks import _lint_schema_v2
+
+    errors, _warnings = _lint_schema_v2(
+        {
+            "id": "T-abstain-hops",
+            "should_abstain": True,
+            "retrieval_hops": 1,
+        }
+    )
+    assert any("retrieval_hops 应为 0" in error for error in errors), errors
+
+    # FIN-22 型：澄清后按假设作答、带着金标 chunk → hops=1 合法
+    errors, _warnings = _lint_schema_v2(
+        {
+            "id": "T-clarify-assume",
+            "clarify_mode": "assume",
+            "retrieval_hops": 1,
+            "relevant_chunk_ids": ["d#t1"],
+        }
+    )
+    assert not any("retrieval_hops 应为 0" in error for error in errors), errors
+
+
+def test_lint_schema_v2_warns_singlehop_agent_without_calc():
+    from evaluation.lint_finance_tasks import _lint_schema_v2
+
+    _errors, warnings = _lint_schema_v2(
+        {
+            "id": "T-loose-agent",
+            "route_target": "agent",
+            "retrieval_hops": 1,
+            "answer_operations": ["lookup", "cite"],
+        }
+    )
+    assert any("route_target=agent" in warning for warning in warnings), warnings
+
+
+def test_lint_schema_v2_warns_open_question_with_direct_phrase():
+    from evaluation.lint_finance_tasks import _lint_schema_v2
+
+    _errors, warnings = _lint_schema_v2(
+        {
+            "id": "T-style-drift",
+            "prompt_style": "open_question",
+            "question": "贵州茅台 2025 年营业收入是多少元？请注明该数字在 PDF 的第几页。",
+        }
+    )
+    assert any("direct_constraint" in warning for warning in warnings), warnings
 
 
 # ---------------------------------------------------------------------------
