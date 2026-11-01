@@ -63,11 +63,18 @@ def chunk_map() -> dict[str, dict]:
     chunks: dict[str, dict] = {}
     for path in sorted(DOCUMENT_DIR.glob("*/document.json")):
         document = json.loads(path.read_text(encoding="utf-8"))
+        # 解析产物把 company/period/doc_type 放在顶层；旧版本曾放在 metadata 下。
+        # 只读 metadata 会让所有标题变成「   ｜无标题表格」，judge 与失败归类都失去
+        # 公司/期间上下文——2026-10-31 由 failure_taxonomy 的误报暴露。
         metadata = document.get("metadata") or {}
-        doc_id = metadata.get("doc_id") or path.parent.name
-        company = metadata.get("company") or ""
-        period = metadata.get("period") or ""
-        doc_type = metadata.get("doc_type") or ""
+        doc_id = (
+            metadata.get("doc_id")
+            or document.get("doc_id")
+            or path.parent.name
+        )
+        company = metadata.get("company") or document.get("company") or ""
+        period = str(metadata.get("period") or document.get("period") or "")
+        doc_type = metadata.get("doc_type") or document.get("doc_type") or ""
         for section in document.get("sections") or []:
             section_id = str(section.get("section_id") or "")
             if not section_id:
@@ -125,10 +132,10 @@ def doc_inventory() -> list[dict]:
         metadata = document.get("metadata") or {}
         inventory.append(
             {
-                "doc_id": metadata.get("doc_id") or path.parent.name,
-                "company": metadata.get("company"),
-                "period": metadata.get("period"),
-                "doc_type": metadata.get("doc_type"),
+                "doc_id": metadata.get("doc_id") or document.get("doc_id") or path.parent.name,
+                "company": metadata.get("company") or document.get("company"),
+                "period": str(metadata.get("period") or document.get("period") or ""),
+                "doc_type": metadata.get("doc_type") or document.get("doc_type"),
                 "sections": len(document.get("sections") or []),
                 "tables": len(document.get("tables") or []),
             }

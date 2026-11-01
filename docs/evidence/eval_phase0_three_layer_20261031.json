@@ -1,0 +1,186 @@
+{
+ "kind": "eval_report_v2",
+ "generated_at": "2026-10-31T22:28:15",
+ "layers": {
+  "retrieval": {
+   "status": "ok",
+   "primary_k": "5",
+   "arms": {
+    "structured": {
+     "tasks": 12,
+     "point_hit_rate": 0.6976744186046512,
+     "point_hits": 30,
+     "point_total": 43,
+     "task_hit_all_rate": 0.3333333333333333,
+     "mrr": 0.4963,
+     "context_precision": 0.1778,
+     "any_search_point_hit_rate": 0.6976744186046512,
+     "read_rate": 0.0,
+     "mean_searches": 1.0
+    },
+    "fixed": {
+     "tasks": 12,
+     "point_hit_rate": 0.4186046511627907,
+     "point_hits": 18,
+     "point_total": 43,
+     "task_hit_all_rate": 0.1111111111111111,
+     "mrr": 0.2,
+     "context_precision": 0.1111,
+     "any_search_point_hit_rate": 0.4186046511627907,
+     "read_rate": 0.0,
+     "mean_searches": 1.0
+    }
+   },
+   "note": "first_search 为双臂同尺口径；any_search 只作 Agent 诊断。"
+  },
+  "routing": {
+   "status": "ok",
+   "basis": "task_metadata",
+   "tasks": 30,
+   "accuracy": 0.8,
+   "wilson": [
+    0.6269,
+    0.9049
+   ],
+   "macro_f1": 0.775,
+   "confusion": {
+    "structured_rag": {
+     "structured_rag": 7,
+     "agent": 5
+    },
+    "agent": {
+     "structured_rag": 1,
+     "agent": 17
+    }
+   },
+   "cost_breakdown": {
+    "simple_to_agent": 5,
+    "complex_to_rag": 1
+   },
+   "errors": [
+    {
+     "task_id": "FIN-01",
+     "expected": "structured_rag",
+     "actual": "agent",
+     "cost_type": "cost_waste:simple_to_agent",
+     "reason": "问题包含多个子问题，需要多步拆解"
+    },
+    {
+     "task_id": "FIN-02",
+     "expected": "structured_rag",
+     "actual": "agent",
+     "cost_type": "cost_waste:simple_to_agent",
+     "reason": "问题包含多个子问题，需要多步拆解"
+    },
+    {
+     "task_id": "FIN-03",
+     "expected": "structured_rag",
+     "actual": "agent",
+     "cost_type": "cost_waste:simple_to_agent",
+     "reason": "问题包含多个子问题，需要多步拆解"
+    },
+    {
+     "task_id": "FIN-S03",
+     "expected": "agent",
+     "actual": "structured_rag",
+     "cost_type": "quality_risk:complex_to_rag",
+     "reason": "单公司/单期间/单指标的查数，一次结构检索即可"
+    },
+    {
+     "task_id": "FIN-S04",
+     "expected": "structured_rag",
+     "actual": "agent",
+     "cost_type": "cost_waste:simple_to_agent",
+     "reason": "问题包含比较/计算信号：占营业"
+    },
+    {
+     "task_id": "FIN-S05",
+     "expected": "structured_rag",
+     "actual": "agent",
+     "cost_type": "cost_waste:simple_to_agent",
+     "reason": "问题包含比较/计算信号：同比"
+    }
+   ],
+   "excluded_count": 16
+  },
+  "answer": {
+   "status": "no_data",
+   "note": "没有答案层报告；先跑 evaluation.score_agent_runs"
+  },
+  "numeric": {
+   "status": "no_data",
+   "note": "没有数值审计；先跑 evaluation.numeric_audit"
+  },
+  "trajectory": {
+   "status": "no_data",
+   "note": "没有轨迹评测；先跑 evaluation.trajectory_eval"
+  },
+  "faithfulness": {
+   "status": "no_data",
+   "note": "没有忠实度；探针级可选并跑 evaluation.faithfulness"
+  },
+  "gate": {
+   "status": "ok",
+   "overall_pass": null,
+   "gate_status": "insufficient_data",
+   "blocking_failures": [],
+   "advisory_failures": [
+    "business.routing_accuracy"
+   ],
+   "red_lines": [
+    "safety.numeric_hallucination_rate",
+    "safety.fabrication",
+    "business.false_refusal_rate"
+   ],
+   "gates": {
+    "quality": {
+     "label": "质量",
+     "status": "no_data",
+     "blocking_failures": [],
+     "advisory_failures": []
+    },
+    "trajectory": {
+     "label": "轨迹",
+     "status": "no_data",
+     "blocking_failures": [],
+     "advisory_failures": []
+    },
+    "cost": {
+     "label": "成本",
+     "status": "no_data",
+     "blocking_failures": [],
+     "advisory_failures": []
+    },
+    "safety": {
+     "label": "安全/合规",
+     "status": "no_data",
+     "blocking_failures": [],
+     "advisory_failures": []
+    },
+    "business": {
+     "label": "业务可用性",
+     "status": "pass_with_advisory",
+     "blocking_failures": [],
+     "advisory_failures": [
+      "routing_accuracy"
+     ]
+    }
+   }
+  }
+ },
+ "diagnostics": {
+  "failure_split": {
+   "status": "no_data"
+  },
+  "false_refusal": {
+   "status": "no_data"
+  }
+ },
+ "reading_notes": [
+  "检索层 first_search 是双臂同尺口径；any_search 是 Agent 诊断口径，不能与一次检索的 RAG 直接比。",
+  "答案层的 pass@1 / pass@k / pass^k 只在完整任务上计算；Wilson 区间只反映样本量，不含 run-to-run 方差。",
+  "路由层的金标来自任务卡元数据；拒答/澄清/假设类不判更优臂，只报分流分布。",
+  "数值幻觉率只统计 judge 判 pass 但金标数值缺失的要点；未溯源数值是提示项，不直接当红线。",
+  "缺层的指标写 no_data，不拿 0 顶替；no_data 不等于通过。"
+ ]
+}
