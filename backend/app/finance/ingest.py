@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import fitz
+
 from app.finance.table_annotations import annotate_finance_tables
 
 from app.finance.tree import (
@@ -59,6 +60,14 @@ _CAPTION_MAX_CHARS = 60
 _CAPTION_MAX_GAP = 45.0
 # 行标签列的名字。财报里这一列通常没有表头，但 `get_cell(column=...)` 需要一个能寻址的名字。
 _ROW_LABEL_COLUMN = "项目"
+# 多行合并表头：首行空格由后续表头行补齐，最多再收 2 行（且至少给 body 留一行）。
+_HEADER_FILL_MAX_EXTRA = 2
+# 数字样内容（金额/纯数/百分比/年份/日期），匹配前先去掉空白。表头续行不允许
+# 出现这些——把数据行吃进表头，比留下 colN 空名糟糕得多。
+_NUMBERY_RE = re.compile(
+    r"^[（(]?-?(?:20\d{2}年?|\d{1,3}(?:,\d{3})+(?:\.\d+)?%?|\d+(?:\.\d+)?%?"
+    r"|\d{4}[-/.]\d{1,2}[-/.]\d{1,2})[）)]?$"
+)
 # 跨页表格合并：上一页表格底边距页脚 <150pt、下一页表格顶边距页眉 <150pt 且栏宽一致
 _CONTINUE_EDGE_MARGIN = 150.0
 _CONTINUE_X_TOLERANCE = 6.0
@@ -83,6 +92,38 @@ def _normalize_grid(raw_rows: list[list[Any]]) -> list[list[str]]:
     return rows
 
 
+def _is_header_continuation(row: list[str]) -> bool:
+    """表头续行：首格为空（数据行的行标签几乎总在首格），且不含数字样内容。"""
+    filled = [cell.replace(" ", "") for cell in row if cell]
+    if not filled or (row and row[0]):
+        return False
+    return not any(_NUMBERY_RE.match(cell) for cell in filled)
+
+
+def _fill_header_from_rows(
+    header: list[str], body: list[list[str]]
+) -> tuple[list[str], list[list[str]], int]:
+    """纵向/横向合并的多行表头：首行空格从后续表头行补齐。
+
+    中文年报的表头常跨两行（`参加董事会情况` 下挂 `亲自出席次数/委托出席次数`），
+    首行被合并的格子是空的，按单行表头处理只会得到 colN 空名，`get_cell` 按列名
+    取不到数。返回 (合并后表头, 剩余 body, 消费行数)；判定宁缺勿滥，
+    见 `_is_header_continuation`。
+    """
+    if not body or not any(not cell for cell in header):
+        return header, body, 0
+    merged = list(header)
+    used = 0
+    for row in body[:_HEADER_FILL_MAX_EXTRA]:
+        if len(body) - used <= 1:
+            break
+        if len(row) != len(merged) or not _is_header_continuation(row):
+            break
+        merged = [old or new for old, new in zip(merged, row)]
+        used += 1
+    return merged, body[used:], used
+
+
 def _split_header(rows: list[list[str]]) -> tuple[list[str], list[list[str]]]:
     """把首行当表头，并对齐到数据列。
 
@@ -90,17 +131,31 @@ def _split_header(rows: list[list[str]]) -> tuple[list[str], list[list[str]]]:
     直接按索引读会让 `get_cell(column='2024 年')` 拿到空字符串——
     美的、比亚迪的「主要会计数据」表都是这个形状，实测表头整体右移一列。
     所以先按"表头名该落在哪一列"做一次 ±1 的整体位移，再丢掉全空的数据列。
+    表头若跨多行（首行有空格），先从后续行补齐再对齐；补齐后对齐失败
+    （可能丢列）就退回单行表头——保证任何之前能出的表现在也出。
     """
     if len(rows) < _MIN_ROWS:
         return [], []
     header_index = 0
-    if sum(1 for cell in rows[0] if cell) < 2 and len(rows) > 2:
+    # 首行近空时第二行可能是真表头（`单位：元` 之类的横幅行），也可能是
+    # 第一条数据行（首行只有 `项目` 的无表头表）。数据行有两处以上金额，
+    # 把它升成表头会连行名带数值一起吃掉——旧 t0072 的 colN 就是这么来的。
+    if (
+        sum(1 for cell in rows[0] if cell) < 2
+        and len(rows) > 2
+        and sum(1 for cell in rows[1] if _is_amount(cell)) < 2
+    ):
         header_index = 1
     header = rows[header_index]
     body = rows[header_index + 1:]
     if not any(cell for cell in header):
         header = [""] * len(rows[0])
         body = rows[header_index:]
+    merged, filled_body, used = _fill_header_from_rows(header, body)
+    if used:
+        columns, body_rows = _align_columns(merged, filled_body)
+        if columns and body_rows:
+            return columns, body_rows
     return _align_columns(header, body)
 
 
@@ -252,8 +307,9 @@ def extract_tables(doc: "fitz.Document", lines: list[Line]) -> tuple[list[dict],
                 continue
             if not rebuilt:
                 # 重建表的 bbox 是页内首末词的包络，接近整页；把它当作"表格区域"
-                # 会把同页正文和小节标题一起剔除（比亚迪 2024 实测少 71 个小节、
-                # 10,509 字）。重建只负责"表能找到"，正文剔除保持原生识别口径。
+                # 会把同页正文和小节标题一起剔除（2026-11-02 备份实测：四份文档
+                # 少 111 节、丢正文 15.1 万字，其中比亚迪 2024 占 51 节/28,869 字）。
+                # 重建只负责"表能找到"，正文剔除保持原生识别口径。
                 boxes.setdefault(page_number, []).append(bbox)
             table = {
                 "table_id": "",

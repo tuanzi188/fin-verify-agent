@@ -13,7 +13,9 @@ fitz = pytest.importorskip("fitz")
 
 from app.finance.ingest import (  # noqa: E402
     _align_columns,
+    _is_header_continuation,
     _merge_continuations,
+    _split_header,
     ingest_pdf,
     summarize,
     write_document,
@@ -101,6 +103,48 @@ def test_align_columns_shifts_merged_header():
     assert columns == ["项目", "2025 年", "2024 年"]
     assert rows[0] == ["营业收入", "1,234", "1,000"]
     assert rows[1] == ["净利润", "120", "100"]
+
+
+def test_split_header_fills_merged_multiline_header():
+    """多行合并表头：首行空格由第二行子标签补齐，子标签行不再当数据行。
+
+    茅台「董事参会情况」的实表形状：`参加董事会情况` 下挂应参加/亲自出席/
+    委托出席等子列，首行被合并的格子是空的，单行表头只会得到 col4-col8。
+    """
+    rows = [
+        ["董事姓名", "是否独立董事", "参加董事会情况", "", "", "", "", "", "参加股东大会情况"],
+        ["", "", "应参加董事会次数", "亲自出席次数", "以通讯方式参加次数",
+         "委托出席次数", "缺席次数", "连续两次未亲自参加会议", ""],
+        ["张德芹", "否", "8", "8", "6", "0", "0", "否", "2"],
+    ]
+    columns, body = _split_header(rows)
+    assert "亲自出席次数" in columns
+    assert "缺席次数" in columns
+    assert not any(column.startswith("col") for column in columns)
+    assert body == [rows[2]]
+
+
+def test_split_header_refuses_numeric_continuation():
+    """续行含金额/纯数字 ⇒ 是数据行，不能吃进表头（宁可 colN 不可吞数据行）。"""
+    rows = [
+        ["项目", "", "", ""],
+        ["货币资金", "85,247,150", "710,717", "-"],
+        ["应收账款", "40,450,097", "37,004,685", ""],
+    ]
+    assert _is_header_continuation(rows[1]) is False
+    _columns, body = _split_header(rows)
+    assert body[0][0] == "货币资金"
+    assert len(body) == 2
+
+
+def test_split_header_never_consumes_whole_body():
+    """两行网格：第二行即使长得像表头续行也留在 body——表不能被吃空。"""
+    rows = [
+        ["项目", "", ""],
+        ["", "本年数", "上年数"],
+    ]
+    _, body = _split_header(rows)
+    assert body == [["本年数", "上年数"]]
 
 
 def test_merge_continuations_only_joins_fragments():
