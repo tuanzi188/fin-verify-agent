@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import fitz
+from app.finance.table_annotations import annotate_finance_tables
 
 from app.finance.tree import (
     Line,
@@ -230,9 +231,18 @@ def extract_tables(doc: "fitz.Document", lines: list[Line]) -> tuple[list[dict],
             found = page.find_tables()
         except Exception:  # noqa: BLE001 - 个别畸形页解析失败不应中断整份文档
             continue
-        for table in found.tables or []:
-            bbox = tuple(float(value) for value in table.bbox)
-            grid = _normalize_grid(table.extract())
+        candidates: list[tuple[tuple, list[list[str]], bool]] = [
+            (tuple(float(value) for value in table.bbox), _normalize_grid(table.extract()), False)
+            for table in found.tables or []
+        ]
+        # 矩形画线（rect）的 PDF，`lines` 策略识别率为 0：2026-11-02 实测美的 p132
+        # 有 28 个 rect、0 条线段，整张资产负债表丢失。这两家 PDF 的文本层坐标是
+        # 完整可用的，所以退回按坐标重建。只在官方策略一张表都没找到时启用。
+        if not candidates:
+            candidates = [
+                (bbox, grid, True) for bbox, grid in _rebuild_tables_from_words(page)
+            ]
+        for bbox, grid, rebuilt in candidates:
             if len(grid) < _MIN_ROWS:
                 continue
             if sum(1 for row in grid for cell in row if cell) < _MIN_FILLED_CELLS:
@@ -240,28 +250,200 @@ def extract_tables(doc: "fitz.Document", lines: list[Line]) -> tuple[list[dict],
             columns, rows = _split_header(grid)
             if not columns or not rows:
                 continue
-            boxes.setdefault(page_number, []).append(bbox)
-            tables.append(
-                {
-                    "table_id": "",
-                    "section_id": "",
-                    "page": page_number,
-                    "page_end": page_number,
-                    "caption": _caption_for(bbox, lines_by_page.get(page_number, []), repeated),
-                    "unit": _unit_for(
-                        bbox, lines_by_page.get(page_number, []), rows, repeated
-                    ),
-                    "footnote": "",
-                    "bbox": [round(value, 2) for value in bbox],
-                    "columns": columns,
-                    "rows": rows,
-                }
-            )
+            if not rebuilt:
+                # 重建表的 bbox 是页内首末词的包络，接近整页；把它当作"表格区域"
+                # 会把同页正文和小节标题一起剔除（比亚迪 2024 实测少 71 个小节、
+                # 10,509 字）。重建只负责"表能找到"，正文剔除保持原生识别口径。
+                boxes.setdefault(page_number, []).append(bbox)
+            table = {
+                "table_id": "",
+                "section_id": "",
+                "page": page_number,
+                "page_end": page_number,
+                "caption": _caption_for(bbox, lines_by_page.get(page_number, []), repeated),
+                "unit": _unit_for(bbox, lines_by_page.get(page_number, []), rows, repeated),
+                "footnote": "",
+                "bbox": [round(value, 2) for value in bbox],
+                "columns": columns,
+                "rows": rows,
+            }
+            if rebuilt:
+                # 重建表的列名是启发式（`2025 年`），和原生识别不是一回事，
+                # 标出来让 QC 与审计能区分来源。
+                table["rebuilt"] = True
+            tables.append(table)
 
     tables = _merge_continuations(tables, page_heights)
     for number, table in enumerate(tables, 1):
         table["table_id"] = f"t{number:04d}"
     return tables, boxes
+
+
+_AMOUNT_RE = re.compile(r"^[（(]?-?[\d,]{4,}(?:\.\d+)?%?[）)]?$")
+_YEAR_ONLY_RE = re.compile(r"^20\d{2}$")
+_YEAR_IN_TEXT = re.compile(r"(20\d{2})")
+_ROW_TOLERANCE = 4.0
+_COL_TOLERANCE = 12.0
+_COL_MERGE_GAP = 30.0
+_HEADER_MAX_ROWS = 3
+_REBUILD_MIN_ROWS = 6
+_REBUILD_MAX_COLS = 9
+
+
+def _is_amount(text: str) -> bool:
+    """金额型数值。表头里的 `2025` 不算，数据行的 `85,247,150` 算。"""
+    value = str(text or "").strip()
+    if not _AMOUNT_RE.match(value):
+        return False
+    return not _YEAR_ONLY_RE.match(value)
+
+
+def _cluster(values: list[float], tolerance: float) -> list[float]:
+    groups: list[list[float]] = []
+    for value in sorted(values):
+        if groups and value - groups[-1][-1] <= tolerance:
+            groups[-1].append(value)
+        else:
+            groups.append([value])
+    centers: list[float] = []
+    for group in groups:
+        center = sum(group) / len(group)
+        if centers and center - centers[-1] <= _COL_MERGE_GAP:
+            centers[-1] = (centers[-1] + center) / 2
+        else:
+            centers.append(center)
+    return centers
+
+
+def _rebuild_tables_from_words(page) -> list[tuple[tuple, list[list[str]]]]:
+    """`find_tables` 找不到表时的兜底：按字符坐标重建网格。
+
+    只认“像表”的页：>= 6 行、2–9 列、且至少两行含两个以上金额型数值。
+    正文页、目录页、签字页都在这里被筛掉。
+    """
+    try:
+        words = page.get_text("words")
+    except Exception:  # noqa: BLE001 - 单页取词失败不应中断整份文档
+        return []
+    result = _grid_from_words(words)
+    if not result:
+        return []
+    grid, bbox = result
+    return [(bbox, grid)]
+
+
+def _grid_from_words(words: list[tuple]) -> tuple[list[list[str]], tuple] | None:
+    """纯函数版重建：输入 PyMuPDF words，输出 (grid, bbox)，便于单测。
+
+    规则：
+    1. 按 y 聚类成行，丢掉词数 < 3 的行（标题、页眉、单位说明）；
+    2. 每行第一个词固定为行名，其余词按中心点聚成列；
+    3. 数据行 = 含 >= 2 个金额数值的行，向上最多收 3 行作表头；
+    4. 表头拼接后做年份规范化（`2025 年12 月31 日` → `2025 年`）。
+    """
+    if len(words) < 30:
+        return None
+
+    rows: list[dict] = []
+    for word in sorted(words, key=lambda item: (item[1], item[0])):
+        center = (word[1] + word[3]) / 2
+        for row in rows:
+            if abs(row["y"] - center) <= _ROW_TOLERANCE:
+                row["words"].append(word)
+                break
+        else:
+            rows.append({"y": center, "words": [word]})
+    rows.sort(key=lambda item: item["y"])
+
+    kept: list[dict] = []
+    for row in rows:
+        cells = sorted(row["words"], key=lambda item: item[0])
+        if len(cells) < 3:
+            continue
+        kept.append({"y": row["y"], "name": cells[0], "rest": cells[1:]})
+    if len(kept) < _REBUILD_MIN_ROWS:
+        return None
+
+    anchors = _cluster(
+        [(word[0] + word[2]) / 2 for row in kept for word in row["rest"]],
+        _COL_TOLERANCE,
+    )
+    if not (2 <= len(anchors) <= _REBUILD_MAX_COLS):
+        return None
+
+    def place(words_in_row: list[tuple]) -> list[str]:
+        cells = [""] * len(anchors)
+        for word in words_in_row:
+            center = (word[0] + word[2]) / 2
+            nearest = min(range(len(anchors)), key=lambda index: abs(anchors[index] - center))
+            cells[nearest] = (cells[nearest] + " " + word[4]).strip()
+        return cells
+
+    first_data = None
+    for index, row in enumerate(kept):
+        if sum(1 for word in row["rest"] if _is_amount(word[4])) >= 2:
+            first_data = index
+            break
+    if first_data is None or first_data < 1:
+        return None
+
+    start = first_data
+    while (
+        start > 0
+        and first_data - start < _HEADER_MAX_ROWS
+        and len(kept[start - 1]["rest"]) >= 2
+        and not any(_is_amount(word[4]) for word in kept[start - 1]["rest"])
+    ):
+        start -= 1
+
+    header_cells = [""] * len(anchors)
+    for row in kept[start:first_data]:
+        for index, cell in enumerate(place(row["rest"])):
+            if cell and cell not in header_cells[index]:
+                header_cells[index] = (header_cells[index] + " " + cell).strip()
+
+    columns = ["项目"]
+    for cell in header_cells:
+        name = (cell or "").strip()
+        match = _YEAR_IN_TEXT.search(name)
+        if match:
+            # 财报列名几乎都是「2025 年12 月31 日」这类日期，压成年份就够了，
+            # 也和老语料的列名（`2025 年`）保持一致。
+            name = f"{match.group(1)} 年"
+        columns.append(name or f"col{len(columns) + 1}")
+
+    # 表头被拆成两个 anchor 时（比亚迪：`2025 年12` 一列、`月31 日` 另一列），
+    # 年份落在没有数据的那列上，数值列反而只剩日期碎片。把年份传给右边第一个
+    # 真正有金额的列，否则 `get_cell(column="2025 年")` 永远找不到。
+    amount_hits = [0] * len(anchors)
+    for row in kept[first_data:]:
+        for index, cell in enumerate(place(row["rest"])):
+            if _is_amount(cell):
+                amount_hits[index] += 1
+    for index in range(len(anchors)):
+        match = _YEAR_IN_TEXT.search(columns[index + 1])
+        if not match or amount_hits[index] > 0:
+            continue
+        year = f"{match.group(1)} 年"
+        for target in range(index + 1, len(anchors)):
+            if amount_hits[target] == 0:
+                continue
+            if not _YEAR_IN_TEXT.search(columns[target + 1]):
+                columns[target + 1] = year
+            break
+
+    grid = [columns]
+    for row in kept[first_data:]:
+        grid.append([row["name"][4]] + place(row["rest"]))
+
+    every = [word for row in kept for word in [row["name"]] + row["rest"]]
+    bbox = (
+        min(word[0] for word in every),
+        kept[start]["y"] - 10,
+        max(word[2] for word in every),
+        kept[-1]["y"] + 10,
+    )
+    return grid, bbox
 
 
 def _merge_continuations(tables: list[dict], page_heights: dict[int, float]) -> list[dict]:
@@ -366,6 +548,7 @@ def ingest_pdf(pdf_path: str | Path, metadata: dict) -> dict:
         # 先抽表格：表格区域要同时用于「剔除正文」和「不参与标题判定」。
         # 放在标题之前是有意的——表格单元格里的 `一、` `1、` 会被误认成标题。
         tables, boxes = extract_tables(doc, lines)
+        tables = annotate_finance_tables(tables, lines)
         headings = extract_headings(lines, size, table_boxes=boxes)
         sections = build_sections(lines, headings, table_boxes=boxes)
 
