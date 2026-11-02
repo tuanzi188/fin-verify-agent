@@ -217,6 +217,40 @@ def test_block_index_search_filters_period_and_preserves_rank_order(tmp_path, mo
     assert index.search("比亚迪 2026 年第一季度营业收入", top_k=5) == []
 
 
+def test_block_index_quarter_filter_only_narrows_when_quarter_docs_exist(tmp_path, monkeypatch):
+    """语料没有季报时，季度问题不能被打空——年报「主要会计数据」自带分季度行。
+
+    FIN-09 实测（2026-11-03）：问 Q4 营业收入、金标在年报主要会计数据表
+    （11-01 检索 rank 1–2），季度过滤器把 allowed 清成空集后 hits=0。
+    「没有季报」的边界说明属于 API 层 prepare_finance_scope，检索层不越权。
+    """
+    for doc_id, period in (("cninfo-000333-2024-annual", "2024"),
+                           ("cninfo-000333-2025-annual", "2025")):
+        document = {
+            "doc_id": doc_id,
+            "company": "美的集团",
+            "code": "000333",
+            "period": period,
+            "doc_type": "annual_report",
+            "sections": [{
+                "section_id": f"{doc_id}#s1",
+                "path": ["第三节", "经营情况"],
+                "page_start": 10,
+                "text": f"{period} 年营业收入为 1,234 万元，其中第四季度营业收入为 300 万元。",
+            }],
+            "tables": [],
+        }
+        path = tmp_path / doc_id / "document.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+
+    index = block_index.BlockIndex(FinanceStore(tmp_path))
+    monkeypatch.setattr(index, "_dense_rank", lambda *args, **kwargs: [])
+    hits = index.search("美的集团 2025 年第四季度营业收入是多少", top_k=5)
+    assert hits
+    assert all(hit["period"] == "2025" for hit in hits)
+
+
 def test_citation_anchor_uses_all_window_sources(tmp_path):
     document = _document()
     path = tmp_path / "demo" / "document.json"

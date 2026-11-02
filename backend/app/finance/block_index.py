@@ -456,10 +456,15 @@ class BlockIndex:
                 str(document.get("doc_id")) for document in inventory
                 if scope_quarter(" ".join(str(document.get(field) or "") for field in ("period", "doc_type", "title"))) == requested_quarter
             }
-            allowed = {
-                index for index, block in enumerate(self.blocks)
-                if (allowed is None or index in allowed) and str(block.get("doc_id")) in quarter_doc_ids
-            }
+            # 只在语料里真有对应季报时收窄。年报的「主要会计数据」表本身就带
+            # 分季度行（FIN-09 实测：问 Q4 营业收入、金标在年报 t0007 rank 1–2），
+            # 语料只有年报时收窄会把 allowed 清空、整题打空。「没有季报」的
+            # 边界说明是 API 层 prepare_finance_scope 的职责，检索层不越权。
+            if quarter_doc_ids:
+                allowed = {
+                    index for index, block in enumerate(self.blocks)
+                    if (allowed is None or index in allowed) and str(block.get("doc_id")) in quarter_doc_ids
+                }
         if allowed is not None and not allowed:
             return []
         fused: dict[int, float] = {}
