@@ -52,37 +52,36 @@ export const TurnStrip: React.FC<TurnStripProps> = ({ turns, statuses, activeInd
 interface TurnQuestionProps {
   turn: TurnGroup
   index: number
-  status?: TurnStatus
   timestampLabel?: string
+}
+
+/** 查证范围：只取证据里明确给过的公司/期间，不猜指标。 */
+interface ScopeFinance {
+  citations?: Array<{ evidence?: { company?: string; period?: string } }>
+}
+
+function scopeLabel(finance?: ScopeFinance): string {
+  const evidence = finance?.citations?.[0]?.evidence
+  if (!evidence) return ''
+  return [evidence.company, evidence.period].filter(Boolean).join(' · ')
 }
 
 /** 当前查证的问题头：把“问什么”放在结论上方，而不是藏在气泡里。 */
 export const TurnQuestion: React.FC<TurnQuestionProps> = ({
   turn,
   index,
-  status,
   timestampLabel,
 }) => {
   const question = turn.question?.content?.trim()
-  const meta = status ? STATUS_META[status] : undefined
-  const strategy = turn.answer?.finance?.strategy
+  const scope = scopeLabel(turn.answer?.finance)
   return (
     <div className="question-head">
       <div className="question-meta">
-        <Tag style={{ margin: 0, fontSize: 11 }}>第 {index + 1} 次查证</Tag>
-        {meta && (
-          <Tag color={meta.color} style={{ margin: 0, fontSize: 11 }}>
-            {meta.label}
-          </Tag>
-        )}
-        {strategy && (
-          <Text className="question-meta-text">
-            {strategy === 'structured_rag' ? '结构检索' : '多步查证'}
-          </Text>
-        )}
+        <Text className="question-meta-text">第 {index + 1} 次查证</Text>
         {timestampLabel && <Text className="question-meta-text">{timestampLabel}</Text>}
       </div>
       <div className="question-title">{question || '（未记录问题）'}</div>
+      {scope && <div className="scope-line">{scope}</div>}
     </div>
   )
 }

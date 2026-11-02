@@ -45,6 +45,11 @@ interface EvidenceInspectorProps {
   onSelectEvidence?: (evidence: EvidenceRef) => void
   /** 当前轮落库时的语料版本与现在是否一致。 */
   corpusStatus?: CorpusStatus
+  /**
+   * 空态的原因，决定给用户看哪句解释：
+   * idle=还没提问；legacy=旧会话没保存证据；no_citation=这一轮确实没有可回查引用。
+   */
+  emptyReason?: 'idle' | 'legacy' | 'no_citation'
   /** 历史证据回查 404：父组件据此把该轮标成“需人工复核”。 */
   onVerificationIssue?: (evidenceId: string) => void
   open: boolean
@@ -87,7 +92,7 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
           {evidence.page && <Tag color="blue" style={{ margin: 0 }}>PDF P.{evidence.page}</Tag>}
           {evidence.unit && <Tag color="gold" style={{ margin: 0 }}>单位 {evidence.unit}</Tag>}
           <Tag color={evidence.verified ? 'green' : 'default'} style={{ margin: 0 }}>
-            {evidence.verified ? '表格坐标已验证' : '段落证据'}
+            {evidence.verified ? '表格坐标可回查' : '段落证据'}
           </Tag>
         </Space>
       </div>
@@ -135,6 +140,13 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
 
       {evidence.note && (
         <Text type="secondary" style={{ fontSize: 11 }}>{evidence.note}</Text>
+      )}
+      {evidence.source_url && /^https?:\/\//i.test(evidence.source_url) && (
+        <div style={{ marginTop: 8 }}>
+          <a href={`${evidence.source_url.split('#')[0]}${evidence.page ? `#page=${evidence.page}` : ''}`} target="_blank" rel="noopener noreferrer">
+            查看原始披露文件{evidence.page ? `（PDF 第 ${evidence.page} 页）` : ''}
+          </a>
+        </div>
       )}
     </div>
   )
@@ -513,6 +525,7 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
   evidenceList = [],
   onSelectEvidence,
   corpusStatus = 'unknown',
+  emptyReason = 'idle',
   onVerificationIssue,
   open,
   inline = false,
@@ -657,14 +670,72 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
           evidenceList.length > 0 ? (
             <EvidenceSet citations={evidenceList} onSelect={onSelectEvidence} />
           ) : (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                  本轮还没有引用证据。提问后，结论里的引用会出现在这里。
-                </span>
-              }
-            />
+            <div style={{ padding: '28px 20px 20px' }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  letterSpacing: 1,
+                  color: 'var(--color-text-secondary)',
+                  marginBottom: 10,
+                }}
+              >
+                {emptyReason === 'legacy'
+                  ? '这一轮没有保存证据'
+                  : emptyReason === 'no_citation'
+                    ? '这一轮没有可回查的引用'
+                    : '等待引用'}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.8,
+                  color: 'var(--color-text-secondary)',
+                  marginBottom: 18,
+                }}
+              >
+                {emptyReason === 'legacy'
+                  ? '这条记录来自旧版本会话，只保存了答案文字，引用坐标和表格预览没有落库。重新提问一次就能看到完整证据。'
+                  : emptyReason === 'no_citation'
+                    ? '结论没有附带引用，可能是资料不足、问题需要澄清，或这一轮生成失败。'
+                    : '点开结论里的引用胶囊，这里会显示它确实指向哪一格。'}
+              </div>
+              {[
+                ['原文', '章节路径、页码与上下文'],
+                ['表格', '目标行列高亮，单位与脚注'],
+                ['计算', '公式、输入与逐项复算'],
+                ['引用链', '这条结论引了哪几处证据'],
+              ].map(([title, desc]) => (
+                <div
+                  key={title}
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    padding: '10px 0',
+                    borderTop: '1px solid var(--color-border-light)',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 3,
+                      height: 14,
+                      marginTop: 3,
+                      borderRadius: 2,
+                      background: 'var(--color-primary)',
+                      opacity: 0.35,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>
+                      {title}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                      {desc}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )
         ) : (
           <Tabs
@@ -720,13 +791,15 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
     return (
       <aside
         style={{
-          width: 380,
-          minWidth: 380,
+          // 空态时不需要占满 380：检查器的宽度应该跟着"有没有证据"走。
+          width: evidenceList.length ? 372 : 300,
+          minWidth: evidenceList.length ? 372 : 300,
           borderLeft: '1px solid var(--color-border)',
           background: 'var(--color-bg-white)',
           display: 'flex',
           flexDirection: 'column',
           minHeight: 0,
+          transition: 'width var(--transition-normal), min-width var(--transition-normal)',
         }}
       >
         {body}

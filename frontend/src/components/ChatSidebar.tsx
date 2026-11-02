@@ -126,8 +126,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
         {coverage ? (
           <>
             <div className="meta-text" style={{ marginTop: 2 }}>
-              {coverage.documents} 份文档 · {coverage.companies} 家公司 · {coverage.tables} 张表 ·{' '}
-              {coverage.blocks} 结构块
+              {coverage.documents} 份文档 · {coverage.companies} 家公司 · {coverage.tables} 张表
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
               {coverage.company_names.slice(0, 4).map((company) => (
@@ -221,6 +220,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
             renderItem={(conv) => (
               <div
                 key={conv.conversation_id}
+                className="session-row"
                 onClick={() => {
                   onSelectConversation(conv.conversation_id)
                   if (compactHeader) onClose?.()
@@ -288,6 +288,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
                   <Button
                     type="text"
                     size="small"
+                    className="session-delete"
                     icon={<DeleteOutlined style={{ fontSize: 12 }} />}
                     aria-label="删除会话"
                     style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }}

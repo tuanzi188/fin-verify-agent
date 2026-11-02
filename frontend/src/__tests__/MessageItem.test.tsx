@@ -53,12 +53,28 @@ describe('MessageItem', () => {
 
   it('renders claims, citation descriptor and calc from the finance payload', () => {
     render(<MessageItem plain content="完整回答" finance={financePayload} />)
-    expect(screen.getByText('智能家居收入占比 65.71%')).toBeTruthy()
-    // 胶囊稳定显示文档、页码、表格与目标行列
-    expect(screen.getByText(/P\.58/)).toBeTruthy()
-    expect(screen.getByText(/t0013/)).toBeTruthy()
-    expect(screen.getByText(/行5/)).toBeTruthy()
-    expect(screen.getByText(/65\.7084/)).toBeTruthy()
+    // 结论要点里的数字被单独包裹（等宽强调），整行文本仍完整
+    const claimLine = screen.getByText(/智能家居收入占比/)
+    expect(claimLine.textContent).toContain('智能家居收入占比 65.71%')
+    expect(screen.getByText('65.71%').className).toBe('claim-number')
+    // 默认胶囊只给“文档 + 页码”，行列细节留在 hover
+    expect(screen.getByText(/美的集团 2025 年报 · P\.58/)).toBeTruthy()
+    // 计算默认收起，summary 先给结果；展开后才需要看公式
+    const summary = screen.getByText(/计算过程 · 65\.7084/)
+    expect(summary.closest('details')?.open).toBe(false)
+  })
+
+  it('keeps the default answer view free of strategy, counters and debug notes', () => {
+    render(
+      <MessageItem
+        plain
+        content="完整回答"
+        finance={{ ...financePayload, notes: ['structured_rag:top_k=6'] }}
+      />,
+    )
+    expect(screen.queryByText('结构检索')).toBeNull()
+    expect(screen.queryByText(/条要点/)).toBeNull()
+    expect(screen.queryByText(/top_k/)).toBeNull()
   })
 
   it('calls onCopy when copy button clicked', () => {

@@ -417,6 +417,30 @@ export interface components {
              * @default
              */
             note: string;
+            /**
+             * Calculation Id
+             * @default
+             */
+            calculation_id: string;
+            /**
+             * Result Scale
+             * @default 1
+             */
+            result_scale: string;
+            /** Input Sources */
+            input_sources?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Grounding Status
+             * @default unverified
+             */
+            grounding_status: string;
+            /**
+             * Recomputed
+             * @default false
+             */
+            recomputed: boolean;
         };
         /** Claim */
         Claim: {
@@ -554,6 +578,8 @@ export interface components {
             verified: boolean;
             /** Note */
             note?: string | null;
+            /** Source Url */
+            source_url?: string | null;
         };
         /** FinanceChatRequest */
         FinanceChatRequest: {
@@ -638,6 +664,15 @@ export interface components {
             } | null;
             /** Notes */
             notes?: string[];
+            /** Verification */
+            verification?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Resolved Query
+             * @default
+             */
+            resolved_query: string;
         };
         /** FinanceCitation */
         FinanceCitation: {

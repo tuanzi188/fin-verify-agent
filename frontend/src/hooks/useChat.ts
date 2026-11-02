@@ -7,6 +7,7 @@ import {
   extractErrorMessage,
 } from '../api/client'
 import { parseFinancePayload } from '../utils/financeHistory'
+import type { TurnStatus } from '../utils/status'
 
 /** 金融查证消息的结构化载荷；定义在 utils 里，历史会话与实时响应共用同一形状。 */
 export type { FinanceMessagePayload } from '../utils/financeHistory'
@@ -17,7 +18,8 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   model?: string
-  status?: AgentStatus
+  /** 展示状态。比 AgentStatus 多一个 legacy：旧会话有答案但没保存证据。 */
+  status?: TurnStatus
   trace?: AgentTraceStep[]
   finance?: FinanceMessagePayload
   timestamp: number
@@ -76,6 +78,10 @@ export function useChat(onConversationUpdate?: () => void): UseChatReturn {
           calc: result.calc || [],
           trace: result.trace || [],
           notes: result.notes || [],
+          verification: result.verification
+            ? (result.verification as FinanceMessagePayload['verification'])
+            : undefined,
+          resolved_query: result.resolved_query,
         },
         timestamp: Date.now(),
       }
@@ -129,6 +135,9 @@ export function useChat(onConversationUpdate?: () => void): UseChatReturn {
             id: `assistant-${index}`,
             role: 'assistant' as const,
             content: turn.answer,
+            // 旧会话没有结构化载荷：有答案，但引用和证据都没保存。
+            // 标成 legacy 而不是让 normalizeStatus 落到 error——那不是执行失败。
+            status: 'legacy',
             timestamp: timestampMs,
           }
       return [userMessage, assistantMessage]

@@ -4,6 +4,7 @@ import { CopyOutlined } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
 import type { AgentTraceStep, CalcRecord, EvidenceRef } from '../api/client'
 import type { FinanceMessagePayload } from '../hooks/useChat'
+import type { TurnStatus } from '../utils/status'
 import AgentTracePanel from './AgentTracePanel'
 import FinanceConclusion from './FinanceConclusion'
 
@@ -11,6 +12,11 @@ interface MessageItemProps {
   content: string
   trace?: AgentTraceStep[]
   finance?: FinanceMessagePayload
+  /**
+   * 轮次条的最终展示状态。结论卡必须和它对齐——否则语料变化时
+   * 顶部提示"需人工复核"、卡片仍是绿色"已回答"。
+   */
+  statusOverride?: TurnStatus
   /** 工作台模式：去掉外框；保留给非工作台场景兜底。 */
   plain?: boolean
   onEvidenceClick?: (evidence: EvidenceRef | null, calc?: CalcRecord | null) => void
@@ -115,6 +121,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
   content,
   trace,
   finance,
+  statusOverride,
   plain = false,
   onEvidenceClick,
   onCopy,
@@ -128,12 +135,18 @@ const MessageItem: React.FC<MessageItemProps> = ({
     }}
   >
     {finance && (
-      <FinanceConclusion finance={finance} onEvidenceClick={(evidence, calc) => onEvidenceClick?.(evidence, calc)} />
+      <FinanceConclusion
+        finance={finance}
+        statusOverride={statusOverride}
+        onEvidenceClick={(evidence, calc) => onEvidenceClick?.(evidence, calc)}
+      />
     )}
 
-    {/* 有结构化要点时，正文收进“完整回答”，避免同一段结论出现两遍。 */}
+    {/* 有结构化要点时，正文收进“完整回答”，避免同一段结论出现两遍。
+        异常轮次默认展开：口径和限定条件正是复核时要看的。 */}
     {finance && finance.claims.length > 0 ? (
       <details
+        open={statusOverride !== undefined && statusOverride !== 'answered'}
         style={{
           marginTop: 8,
           borderRadius: 'var(--radius-md)',
@@ -150,7 +163,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
             userSelect: 'none',
           }}
         >
-          完整回答（含口径与限定条件）
+          完整回答
         </summary>
         <div
           className="markdown-body"

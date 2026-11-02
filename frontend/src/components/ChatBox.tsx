@@ -262,6 +262,13 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
     if (!savedFingerprint || !currentFingerprint) return 'unknown' as const
     return savedFingerprint === currentFingerprint ? ('current' as const) : ('changed' as const)
   })()
+  // 证据检查器空着的原因要分清：没提问 / 旧会话没存证据 / 这一轮确实没引用。
+  const emptyReason: 'idle' | 'legacy' | 'no_citation' =
+    currentStatus === 'legacy'
+      ? 'legacy'
+      : currentStatus && currentCitations.length === 0
+        ? 'no_citation'
+        : 'idle'
 
   const handleVerificationIssue = useCallback((_evidenceId: string) => {
     // 回查 404：当前这一轮从“已回答”降级为“需人工复核”。
@@ -369,7 +376,6 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
                 <TurnQuestion
                   turn={currentTurn}
                   index={currentTurnIndex}
-                  status={currentStatus}
                   timestampLabel={
                     currentTurn.question ? formatClock(currentTurn.question.timestamp) : undefined
                   }
@@ -381,6 +387,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
                     content={currentAnswer.content}
                     trace={currentAnswer.trace}
                     finance={currentAnswer.finance}
+                    statusOverride={currentStatus}
                     onEvidenceClick={handleEvidenceClick}
                     onCopy={copyToClipboard}
                   />
@@ -433,6 +440,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
             evidenceList={currentCitations}
             onSelectEvidence={(ev) => handleEvidenceClick(ev)}
             corpusStatus={currentCorpusStatus}
+            emptyReason={emptyReason}
             onVerificationIssue={handleVerificationIssue}
             onClose={() => {
               setInspectorOpen(false)

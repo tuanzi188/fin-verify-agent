@@ -33,8 +33,12 @@ const App: React.FC = () => {
         theme={{
           algorithm: isDark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
           token: {
-            colorPrimary: isDark ? '#597ef7' : '#1677ff',
-            borderRadius: 8,
+            // 深墨蓝：查证台要的是"档案与印章"，不是 SaaS 亮蓝。
+            colorPrimary: isDark ? '#8fa8c8' : '#1f3a5f',
+            colorInfo: isDark ? '#8fa8c8' : '#1f3a5f',
+            borderRadius: 6,
+            fontFamily:
+              "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
           },
         }}
       >

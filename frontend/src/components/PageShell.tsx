@@ -65,17 +65,25 @@ const PageShell: React.FC<PageShellProps> = ({ children, isDark, onToggleTheme }
                 width: compact ? 30 : 36,
                 height: compact ? 30 : 36,
                 borderRadius: 'var(--radius-md)',
-                background: 'linear-gradient(135deg, #0f3b66 0%, #145a8a 100%)',
+                background: 'var(--color-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#fff',
-                fontSize: compact ? 15 : 18,
-                fontWeight: 700,
                 flexShrink: 0,
               }}
             >
-              F
+              {/* 与工作台同一个档案页标识，避免跨页出现两套 logo */}
+              <svg width="16" height="18" viewBox="0 0 18 20" fill="none" aria-hidden="true">
+                <path
+                  d="M2 1.6h9l5 5v11.2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2.6a1 1 0 0 1 1-1z"
+                  stroke="#fff" strokeWidth="1.3" strokeLinejoin="round"
+                />
+                <path d="M10.8 1.6V6.8h5" stroke="#fff" strokeWidth="1.3" strokeLinejoin="round" />
+                <path
+                  d="M4.4 10.6h6.2M4.4 13.4h4.2"
+                  stroke="#fff" strokeWidth="1.2" strokeLinecap="round" opacity="0.7"
+                />
+              </svg>
             </div>
             {!compact && (
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>

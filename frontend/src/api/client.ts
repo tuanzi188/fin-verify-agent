@@ -62,7 +62,7 @@ export type ConversationSummary = components['schemas']['ConversationSummary']
 export type ConversationDetail = components['schemas']['ConversationDetail']
 export type ConversationListResponse = components['schemas']['ConversationListResponse']
 
-export type AgentStatus = 'answered' | 'abstained' | 'clarified' | 'error'
+export type AgentStatus = 'answered' | 'abstained' | 'clarified' | 'needs_review' | 'error'
 
 export interface AgentTraceStep {
   step: number
@@ -156,6 +156,7 @@ export interface EvidenceRef {
   table_preview?: TablePreview | null
   verified: boolean
   note?: string | null
+  source_url?: string | null
 }
 
 export interface FinanceCitation {
@@ -170,6 +171,11 @@ export interface CalcRecord {
   unit?: string
   tolerance?: number | null
   note?: string
+  calculation_id?: string
+  result_scale?: string
+  input_sources?: Record<string, { evidence_id: string; table_id?: string; row?: number; column?: number; cell_text?: string; marker?: number }>
+  grounding_status?: string
+  recomputed?: boolean
 }
 
 export interface Claim {
@@ -195,6 +201,8 @@ export interface FinanceChatResponse {
   duration_ms: number
   token_usage?: Record<string, number> | null
   notes: string[]
+  verification?: Record<string, unknown>
+  resolved_query?: string
 }
 
 export interface FinanceStats {

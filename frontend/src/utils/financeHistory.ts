@@ -14,6 +14,22 @@ import type {
  * 与 `/finance/chat` 的响应同形，但引用里的 `content` / `table_preview`
  * 不落库，打开旧会话时按 `evidence_id` 回查。
  */
+export interface FinanceVerificationIssue {
+  claim_index?: number
+  reason?: string
+  marker?: number
+  value?: string
+  unit?: string
+}
+
+/** 后端确定性复核摘要；只用于「存在问题时显示复核原因」，不参与正常态展示。 */
+export interface FinanceVerification {
+  scope?: string
+  checked_numbers?: number
+  issues?: FinanceVerificationIssue[]
+  status?: string
+}
+
 export interface FinanceMessagePayload {
   status: AgentStatus
   strategy: 'structured_rag' | 'agent' | string
@@ -23,12 +39,14 @@ export interface FinanceMessagePayload {
   calc: CalcRecord[]
   trace: AgentTraceStep[]
   notes?: string[]
+  verification?: FinanceVerification
+  resolved_query?: string
   /** 落库时的块索引指纹；和 /finance/stats 对比可判断语料是否变化。 */
   corpus_fingerprint?: string
 }
 
 const EVIDENCE_KINDS: EvidenceKind[] = ['paragraph', 'table_rows', 'table_cell', 'document']
-const AGENT_STATUSES: AgentStatus[] = ['answered', 'abstained', 'clarified', 'error']
+const AGENT_STATUSES: AgentStatus[] = ['answered', 'abstained', 'clarified', 'needs_review', 'error']
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -48,6 +66,29 @@ function asNumberArray(value: unknown): number[] {
   return asArray<unknown>(value)
     .map((item) => (typeof item === 'number' ? item : Number(item)))
     .filter((item) => Number.isFinite(item))
+}
+
+function normalizeVerification(raw: unknown): FinanceVerification | undefined {
+  const data = asRecord(raw)
+  if (!data) return undefined
+  const issues: FinanceVerificationIssue[] = []
+  for (const item of asArray<unknown>(data.issues)) {
+    const issue = asRecord(item)
+    if (!issue) continue
+    issues.push({
+      claim_index: typeof issue.claim_index === 'number' ? issue.claim_index : undefined,
+      reason: asString(issue.reason) || undefined,
+      marker: typeof issue.marker === 'number' ? issue.marker : undefined,
+      value: issue.value === undefined || issue.value === null ? undefined : String(issue.value),
+      unit: asString(issue.unit) || undefined,
+    })
+  }
+  return {
+    scope: asString(data.scope) || undefined,
+    checked_numbers: typeof data.checked_numbers === 'number' ? data.checked_numbers : undefined,
+    issues,
+    status: asString(data.status) || undefined,
+  }
 }
 
 /** 历史载荷只有坐标，没有正文和表格预览；缺失字段在这里补默认值，避免渲染时 undefined。 */
@@ -87,6 +128,7 @@ export function normalizeEvidence(raw: unknown): EvidenceRef | null {
     table_preview: (data.table_preview as EvidenceRef['table_preview']) ?? null,
     verified: data.verified === true,
     note: asString(data.note) || null,
+    source_url: asString(data.source_url) || null,
   }
 }
 
@@ -121,6 +163,8 @@ export function parseFinancePayload(raw: unknown): FinanceMessagePayload | undef
     calc: asArray<CalcRecord>(data.calc),
     trace: asArray<AgentTraceStep>(data.trace),
     notes: asArray<string>(data.notes),
+    verification: normalizeVerification(data.verification),
+    resolved_query: asString(data.resolved_query) || undefined,
     corpus_fingerprint: asString(data.corpus_fingerprint) || undefined,
   }
 }

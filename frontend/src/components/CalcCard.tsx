@@ -103,6 +103,9 @@ const CalcCard: React.FC<CalcCardProps> = ({
           {inputs.map(([key, value]) => (
             <div key={key} style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
               {key} = {String(value)}
+              {calc.input_sources?.[key] && (
+                <span> · 来源 [{calc.input_sources[key].marker}] 行 {calc.input_sources[key].row} 列 {calc.input_sources[key].column}</span>
+              )}
             </div>
           ))}
         </div>
@@ -120,6 +123,11 @@ const CalcCard: React.FC<CalcCardProps> = ({
         {calc.unit ? ` ${calc.unit}` : ''}
       </div>
 
+      {calc.result_scale && calc.result_scale !== '1' && (
+        <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+          展示结果 = 公式原始结果 × {calc.result_scale}
+        </div>
+      )}
       {calc.note && (
         <div
           className={compact ? 'meta-text' : undefined}

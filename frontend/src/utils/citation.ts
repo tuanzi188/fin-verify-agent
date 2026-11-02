@@ -7,6 +7,24 @@ export function shortTableId(tableId?: string | null): string {
   return parts[parts.length - 1] || tableId
 }
 
+const DOC_TYPE_LABELS: Record<string, string> = {
+  annual_report: '年报',
+  quarterly_report: '季报',
+  prospectus: '募集说明书',
+  audit_report: '审计报告',
+  fund_report: '基金报告',
+  announcement: '公告',
+}
+
+/**
+ * 文档类型 → 用户能读的标签。
+ * 不在这里写死"年报"：加债券 / 基金 / 公告时只补一行映射，模板不用动。
+ */
+export function docTypeLabel(docType?: string | null): string {
+  if (!docType) return ''
+  return DOC_TYPE_LABELS[docType] || docType
+}
+
 export function shortDocTitle(evidence: EvidenceRef, limit = 14): string {
   const title = evidence.doc_title || evidence.doc_id
   if (!title) return '未命名文档'
@@ -51,4 +69,20 @@ export function citationParts(evidence: EvidenceRef, options: { includeDoc?: boo
 export function citationDescriptor(evidence: EvidenceRef, options: { includeDoc?: boolean } = {}): string {
   const parts = citationParts(evidence, options)
   return parts.join(' · ') || evidence.evidence_id
+}
+
+/**
+ * 默认态引用胶囊只回答“哪份文档、哪一页”：
+ * `美的集团 2025 年报 · P.20`。行列与表名留在 hover 里，避免一条结论挂三行胶囊。
+ */
+export function citationShortDescriptor(evidence: EvidenceRef): string {
+  const parts: string[] = []
+  const company = evidence.company || shortDocTitle(evidence, 10)
+  if (company) parts.push(company)
+  if (evidence.period) parts.push(evidence.period)
+  const type = docTypeLabel(evidence.doc_type)
+  if (type) parts.push(type)
+  else if (evidence.doc_title) parts.push(shortDocTitle(evidence, 12))
+  if (evidence.page) parts.push(`· P.${evidence.page}`)
+  return parts.join(' ') || evidence.evidence_id
 }

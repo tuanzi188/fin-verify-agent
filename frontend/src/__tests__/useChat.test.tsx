@@ -147,5 +147,7 @@ describe('useChat finance mode', () => {
     expect(restored.finance?.citations[0].evidence.table_id).toBe('doc#t0013')
     expect(restored.finance?.calc[0].unit).toBe('%')
     expect(result.current.messages[3].finance).toBeUndefined()
+    // 旧格式没有证据：标成 legacy，不能落到 error 显示"执行失败"
+    expect(result.current.messages[3].status).toBe('legacy')
   })
 })

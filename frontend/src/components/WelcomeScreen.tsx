@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { Button, Modal, Typography, Steps, Tag } from 'antd'
+﻿import React, { useState, useEffect } from 'react'
+import { Button, Modal, Typography, Steps } from 'antd'
 import {
   SearchOutlined,
   FileTextOutlined,
@@ -53,33 +53,6 @@ const exampleQuestions: ExampleQuestion[] = [
   },
 ]
 
-const CoverageChip: React.FC<{ label: string; value: number | string | null | undefined }> = ({
-  label,
-  value,
-}) => (
-  <div
-    style={{
-      minWidth: 96,
-      padding: '10px 12px',
-      borderRadius: 'var(--radius-md)',
-      border: '1px solid var(--color-border)',
-      background: 'var(--color-bg-white)',
-    }}
-  >
-    <div
-      style={{
-        fontSize: 18,
-        fontWeight: 700,
-        color: 'var(--color-text)',
-        fontVariantNumeric: 'tabular-nums',
-      }}
-    >
-      {value ?? '—'}
-    </div>
-    <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{label}</div>
-  </div>
-)
-
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   hasDocuments = false,
   stats = null,
@@ -99,33 +72,30 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     localStorage.setItem('km_onboarding_dismissed', 'true')
   }
 
-  const BrainIcon = () => (
-    <svg width="52" height="52" viewBox="0 0 56 56" fill="none" style={{ opacity: 0.9 }}>
+  const BookIcon = ({ size = 52 }: { size?: number }) => (
+    <svg
+      width={size}
+      height={size * 1.1}
+      viewBox="0 0 18 20"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
-        d="M28 6C18 6 10 14 10 24c0 5 2 9 5 12-2 3-3 7-2 10 2 5 7 8 12 6 2 0 4-1 5-2 3 1 6 2 9 1 4-1 7-4 8-8 1-3 0-6-2-9 3-3 5-7 5-12 0-10-8-18-18-18z"
+        d="M2 1.6h9l5 5v11.2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2.6a1 1 0 0 1 1-1z"
         stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
+        strokeWidth="1.1"
         strokeLinejoin="round"
       />
+      <path d="M10.8 1.6V6.8h5" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
       <path
-        d="M18 22c1-2 3-3 5-3M22 16c2-1 4-1 6 0M33 16c2-1 4-1 6 0M38 22c1-2 3-3 5-3M18 28c2 2 4 2 6 1M33 28c2 2 4 2 6 1"
+        d="M4.4 10.6h6.2M4.4 13.4h4.2"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1"
         strokeLinecap="round"
+        opacity="0.65"
       />
-      <path d="M28 20v12M26 26h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   )
-
-  const coverage = stats
-    ? [
-        { label: '文档', value: stats.documents },
-        { label: '章节', value: stats.sections },
-        { label: '表格', value: stats.tables },
-        { label: '结构块', value: stats.blocks },
-      ]
-    : []
 
   const periodText = stats?.periods?.length ? stats.periods.join(' / ') : '报告期待加载'
   const companyText = stats?.companies ? `${stats.companies} 家公司` : '语料待加载'
@@ -139,7 +109,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 24 }}>
             <div style={{ color: 'var(--color-primary)', marginTop: 2 }}>
-              <BrainIcon />
+              <BookIcon />
             </div>
             <div style={{ minWidth: 0 }}>
               <Title level={3} style={{ margin: '0 0 6px', color: 'var(--color-text)' }}>
@@ -149,10 +119,31 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 {companyText} · {periodText}
                 {stats ? ` · ${stats.documents} 份文档` : ''}
               </Text>
-              <div style={{ marginTop: 8 }}>
-                <Tag color="cyan" style={{ margin: 0 }}>简单查数走结构检索</Tag>
-                <Tag color="blue" style={{ marginLeft: 6 }}>复杂查证走多步</Tag>
-                <Tag color="gold" style={{ marginLeft: 6 }}>表格/计算可定位</Tag>
+              <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {[
+                  { text: '单点读数 · 结构检索', tone: 'primary' },
+                  { text: '跨表计算 · 多步查证', tone: 'primary' },
+                  { text: '表格 / 计算可定位', tone: 'muted' },
+                ].map((item) => (
+                  <span
+                    key={item.text}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--color-border)',
+                      background:
+                        item.tone === 'primary' ? 'var(--color-primary-light)' : 'transparent',
+                      color:
+                        item.tone === 'primary'
+                          ? 'var(--color-primary)'
+                          : 'var(--color-text-secondary)',
+                      fontSize: 11,
+                      letterSpacing: 0.2,
+                    }}
+                  >
+                    {item.text}
+                  </span>
+                ))}
               </div>
               <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1.7 }}>
                 系统会自动选择路径：单点读数一次结构检索；跨表计算、跨文档核对和拒答边界交给多步查证。
@@ -169,13 +160,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 marginBottom: 8,
               }}
             >
-              查证范围
+              可定位范围
             </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {coverage.map((item) => (
-                <CoverageChip key={item.label} label={item.label} value={item.value} />
-              ))}
-              {!stats && <CoverageChip label="语料" value="待加载" />}
+            {/* 只报“范围”：文档/公司/期间决定能不能查。
+                章节数、表格数属实现指标，压成一行脚注；结构块数是索引内部细节，不展示。 */}
+            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>
+              {stats
+                ? `${stats.tables.toLocaleString()} 张表 · ${stats.sections.toLocaleString()} 个章节，每个数字都能回查页码与行列`
+                : '语料待加载'}
             </div>
             {stats?.index_version && (
               <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
@@ -213,7 +205,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 12,
-                    padding: '10px 12px',
+                    padding: '8px 12px',
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--color-border)',
                     background: 'var(--color-bg-white)',
@@ -245,7 +237,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </div>
         </div>
 
-        <OnboardingModal open={onboardingOpen} onClose={dismissOnboarding} icon={<BrainIcon />} hasDocuments />
+        <OnboardingModal open={onboardingOpen} onClose={dismissOnboarding} icon={<BookIcon />} hasDocuments />
       </>
     )
   }
@@ -258,7 +250,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       >
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <div style={{ color: 'var(--color-primary)', marginBottom: 14 }}>
-            <BrainIcon />
+            <BookIcon />
           </div>
           <Title level={3} style={{ margin: '0 0 8px', color: 'var(--color-text)' }}>
             金融查证台
@@ -298,7 +290,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         </div>
       </div>
 
-      <OnboardingModal open={onboardingOpen} onClose={dismissOnboarding} icon={<BrainIcon />} />
+      <OnboardingModal open={onboardingOpen} onClose={dismissOnboarding} icon={<BookIcon />} />
     </>
   )
 }

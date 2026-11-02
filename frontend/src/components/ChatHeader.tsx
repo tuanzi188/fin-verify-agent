@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import { Button, Dropdown, Badge, Tooltip, Modal, Typography, Tag } from 'antd'
 import {
   UserOutlined,
@@ -148,16 +148,28 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     }
 
     if (connectionState === 'connected') {
+      // 连上了不需要喊一声：只留一个静默的绿点，把注意力留给查证本身。
       return (
         <Tooltip title="后端服务已连接">
-          <div style={{
-            ...baseBadgeStyle,
-            background: 'rgba(82, 196, 26, 0.12)',
-            color: 'var(--color-success)',
-            border: '1px solid rgba(82, 196, 26, 0.25)',
-          }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--color-success)', flexShrink: 0 }} />
-            {!compact && <span>已连接</span>}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: compact ? '4px 2px' : '5px 4px',
+              cursor: 'default',
+              userSelect: 'none',
+            }}
+          >
+            <div
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'var(--color-success)',
+                opacity: 0.75,
+                flexShrink: 0,
+              }}
+            />
           </div>
         </Tooltip>
       )
@@ -169,9 +181,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           onClick={onReconnect}
           style={{
             ...baseBadgeStyle,
-            background: 'rgba(255, 77, 79, 0.12)',
+            background: 'var(--color-error-bg)',
             color: 'var(--color-error)',
-            border: '1px solid rgba(255, 77, 79, 0.25)',
+            border: '1px solid var(--color-border)',
             cursor: 'pointer',
           }}
         >
@@ -224,12 +236,23 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             width: mobile ? 30 : 34,
             height: mobile ? 30 : 34,
             borderRadius: 'var(--radius-md)',
-            background: 'linear-gradient(135deg, #0f3b66 0%, #145a8a 100%)',
+            background: 'var(--color-primary)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: mobile ? 15 : 17, fontWeight: 700, flexShrink: 0,
+            flexShrink: 0,
           }}
         >
-          F
+          {/* 档案页 + 折角 + 核对线：查证台的标识应该是"文件"，不是"大脑" */}
+          <svg width="17" height="19" viewBox="0 0 18 20" fill="none" aria-hidden="true">
+            <path
+              d="M2 1.6h9l5 5v11.2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2.6a1 1 0 0 1 1-1z"
+              stroke="#fff" strokeWidth="1.3" strokeLinejoin="round"
+            />
+            <path d="M10.8 1.6V6.8h5" stroke="#fff" strokeWidth="1.3" strokeLinejoin="round" />
+            <path
+              d="M4.4 10.6h6.2M4.4 13.4h4.2"
+              stroke="#fff" strokeWidth="1.2" strokeLinecap="round" opacity="0.7"
+            />
+          </svg>
         </div>
         <div style={{ lineHeight: 1.25, minWidth: 0 }}>
           <div

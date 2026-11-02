@@ -46,6 +46,17 @@ describe('parseFinancePayload', () => {
     expect(payload?.calc[0].unit).toBe('%')
   })
 
+  it('恢复后端复核状态及计算输入来源', () => {
+    const payload = parseFinancePayload({
+      ...compactPayload,
+      status: 'needs_review',
+      calc: [{ formula: 'a-b', inputs: { a: '30%', b: '20%' }, result: '10', unit: 'pp', result_scale: '100', grounding_status: 'partial', input_sources: { a: { evidence_id: 'doc#t1#0#1', row: 0, column: 1, marker: 1 } } }],
+    })
+    expect(payload?.status).toBe('needs_review')
+    expect(payload?.calc[0].result_scale).toBe('100')
+    expect(payload?.calc[0].input_sources?.a.row).toBe(0)
+  })
+
   it('fills defaults for fields the compact payload does not store', () => {
     const evidence = parseFinancePayload(compactPayload)?.citations[0].evidence
     expect(evidence?.content).toBe('')
