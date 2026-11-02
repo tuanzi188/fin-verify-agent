@@ -5,13 +5,13 @@ import {
   CloseCircleOutlined,
   ExclamationCircleOutlined,
   FileTextOutlined,
-  CalculatorOutlined,
   TableOutlined,
 } from '@ant-design/icons'
 import type { CalcRecord, EvidenceRef, FinanceCitation } from '../api/client'
 import type { FinanceMessagePayload } from '../hooks/useChat'
 import { citationDescriptor, shortTableId } from '../utils/citation'
 import { normalizeStatus, STATUS_META, type TurnStatus } from '../utils/status'
+import CalcCard from './CalcCard'
 
 const { Text, Paragraph } = Typography
 
@@ -108,7 +108,7 @@ const CitationPill: React.FC<{
           margin: '0 3px',
           verticalAlign: 'text-top',
           cursor: 'pointer',
-          border: '1px solid rgba(22, 119, 255, 0.25)',
+          border: '1px solid var(--color-primary-border)',
           userSelect: 'none',
         }}
       >
@@ -122,68 +122,6 @@ const CitationPill: React.FC<{
         </span>
       </span>
     </Popover>
-  )
-}
-
-const CalcCard: React.FC<{
-  calc: CalcRecord
-  index: number
-  onClick?: () => void
-}> = ({ calc, index, onClick }) => {
-  const inputs = Object.entries(calc.inputs || {})
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onClick?.()
-        }
-      }}
-      style={{
-        marginTop: 8,
-        padding: '10px 12px',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid rgba(82, 196, 26, 0.35)',
-        background: 'rgba(82, 196, 26, 0.06)',
-        cursor: 'pointer',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <CalculatorOutlined style={{ color: 'var(--color-success)' }} />
-        <Text strong style={{ fontSize: 12 }}>计算 {index + 1}</Text>
-        {calc.unit && <Tag color="green" style={{ margin: 0, fontSize: 10 }}>{calc.unit}</Tag>}
-        <Text type="secondary" style={{ fontSize: 10 }}>
-          点击核对输入
-        </Text>
-      </div>
-      <div
-        style={{
-          fontSize: 12,
-          color: 'var(--color-text)',
-          fontFamily: 'Consolas, Monaco, monospace',
-          lineHeight: 1.7,
-          wordBreak: 'break-all',
-        }}
-      >
-        {calc.formula}
-      </div>
-      {inputs.length > 0 && (
-        <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-          {inputs.map(([key, value]) => `${key}=${String(value)}`).join(' · ')}
-        </div>
-      )}
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-success)', marginTop: 4 }}>
-        = {String(calc.result)}{calc.unit ? ` ${calc.unit}` : ''}
-      </div>
-      {calc.note && (
-        <div className="meta-text" style={{ marginTop: 2 }}>
-          口径：{calc.note}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -296,6 +234,10 @@ const FinanceConclusion: React.FC<FinanceConclusionProps> = ({
                   <CalcCard
                     calc={finance.calc[claim.calc_index]}
                     index={claim.calc_index}
+                    tone="success"
+                    compact
+                    hint="点击核对输入"
+                    notePrefix="口径："
                     onClick={() =>
                       onEvidenceClick(
                         finance.citations[0]?.evidence || null,
@@ -313,12 +255,16 @@ const FinanceConclusion: React.FC<FinanceConclusionProps> = ({
       {claims.length === 0 && finance.calc.length > 0 && (
         <div>
           {finance.calc.map((calc, index) => (
-            <CalcCard
-              key={index}
-              calc={calc}
-              index={index}
-              onClick={() => onEvidenceClick(finance.citations[0]?.evidence || null, calc)}
-            />
+              <CalcCard
+                key={index}
+                calc={calc}
+                index={index}
+                tone="success"
+                compact
+                hint="点击核对输入"
+                notePrefix="口径："
+                onClick={() => onEvidenceClick(finance.citations[0]?.evidence || null, calc)}
+              />
           ))}
         </div>
       )}
@@ -329,11 +275,11 @@ const FinanceConclusion: React.FC<FinanceConclusionProps> = ({
             marginTop: 10,
             padding: '8px 10px',
             borderRadius: 'var(--radius-md)',
-            background: 'rgba(250, 173, 20, 0.08)',
-            border: '1px solid rgba(250, 173, 20, 0.30)',
+            background: 'var(--color-warning-soft)',
+            border: '1px solid var(--color-warning-border)',
           }}
         >
-          <Text strong style={{ fontSize: 11, color: '#ad6800' }}>不确定性</Text>
+          <Text strong style={{ fontSize: 11, color: 'var(--color-warning-text)' }}>不确定性</Text>
           <Paragraph style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
             {uncertainties.map((claim) => claim.uncertainty).filter(Boolean).join('；')}
           </Paragraph>

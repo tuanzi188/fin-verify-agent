@@ -75,7 +75,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           border: `1.5px solid ${focused ? 'var(--color-primary)' : 'var(--color-border)'}`,
           background: 'var(--color-bg)',
           transition: 'border-color var(--transition-fast), box-shadow var(--transition-fast)',
-          boxShadow: focused ? '0 0 0 3px rgba(22, 119, 255, 0.08)' : 'none',
+          boxShadow: focused ? '0 0 0 3px var(--color-focus-ring)' : 'none',
         }}
       >
         {/* 左侧快捷功能栏 */}

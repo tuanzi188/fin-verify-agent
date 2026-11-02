@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Drawer, Empty, Space, Spin, Tabs, Tag, Tooltip, Typography, message } from 'antd'
 import {
   ApartmentOutlined,
-  CalculatorOutlined,
   CheckOutlined,
   CloseOutlined,
   CopyOutlined,
@@ -18,6 +17,7 @@ import {
 } from '../api/client'
 import { citationDescriptor } from '../utils/citation'
 import { traceStepResult, traceStepTarget, traceToolLabel } from '../utils/trace'
+import CalcCard from './CalcCard'
 
 const { Text, Title, Paragraph } = Typography
 
@@ -212,7 +212,7 @@ const EvidenceTable: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
                       top: 0,
                       left: columnIndex === 0 ? 0 : undefined,
                       zIndex: columnIndex === 0 ? 3 : 2,
-                      background: isHighlight ? 'rgba(22, 119, 255, 0.14)' : 'var(--color-bg)',
+                      background: isHighlight ? 'var(--color-highlight-header)' : 'var(--color-bg)',
                       border: '1px solid var(--color-border)',
                       padding: '6px 8px',
                       textAlign: columnIndex === 0 ? 'left' : 'right',
@@ -233,7 +233,7 @@ const EvidenceTable: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
               return (
                 <tr
                   key={row.row}
-                  style={{ background: rowHighlight ? 'rgba(22, 119, 255, 0.06)' : undefined }}
+                  style={{ background: rowHighlight ? 'var(--color-highlight-soft)' : undefined }}
                 >
                   {table.column_indices.map((columnIndex) => {
                     const value = cellsByRow.get(row.row)?.get(columnIndex)
@@ -253,12 +253,12 @@ const EvidenceTable: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
                           left: columnIndex === 0 ? 0 : undefined,
                           zIndex: columnIndex === 0 ? 1 : undefined,
                           background: isTargetCell
-                            ? 'rgba(82, 196, 26, 0.22)'
+                            ? 'var(--color-highlight-cell)'
                             : columnHighlight
-                              ? 'rgba(22, 119, 255, 0.05)'
+                              ? 'var(--color-highlight-soft)'
                               : columnIndex === 0
                                 ? rowHighlight
-                                  ? 'rgba(22, 119, 255, 0.09)'
+                                  ? 'var(--color-highlight-corner)'
                                   : 'var(--color-bg-white)'
                                 : undefined,
                           fontWeight: rowHighlight && columnIndex === 0 ? 600 : 400,
@@ -329,52 +329,23 @@ const CalcDetail: React.FC<{
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {records.map((item, index) => (
-        <div
+        <CalcCard
           key={`${item.formula}-${index}`}
-          style={{
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '10px 12px',
-            background: 'var(--color-bg)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <CalculatorOutlined style={{ color: 'var(--color-success)' }} />
-            <Text strong style={{ fontSize: 12 }}>计算 {index + 1}</Text>
-            {item.unit && <Tag color="green" style={{ margin: 0 }}>{item.unit}</Tag>}
-          </div>
-          <div
-            style={{
-              fontFamily: 'Consolas, Monaco, monospace',
-              fontSize: 12,
-              lineHeight: 1.7,
-              wordBreak: 'break-all',
-              color: 'var(--color-text)',
-            }}
-          >
-            {item.formula}
-          </div>
-          <div style={{ marginTop: 6 }}>
-            {Object.entries(item.inputs || {}).map(([key, value]) => (
-              <div key={key} style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
-                {key} = {String(value)}
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 6, fontSize: 14, fontWeight: 700, color: 'var(--color-success)' }}>
-            = {String(item.result)}{item.unit ? ` ${item.unit}` : ''}
-          </div>
-          {item.note && (
-            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-              {item.note}
-            </div>
-          )}
-          {!calc && calcRecords.length > 1 && onSelectCalc && (
-            <Button size="small" type="link" style={{ padding: 0, marginTop: 4 }} onClick={() => onSelectCalc(item)}>
-              只看这一条
-            </Button>
-          )}
-        </div>
+          calc={item}
+          index={index}
+          footer={
+            !calc && calcRecords.length > 1 && onSelectCalc ? (
+              <Button
+                size="small"
+                type="link"
+                style={{ padding: 0, marginTop: 4 }}
+                onClick={() => onSelectCalc(item)}
+              >
+                只看这一条
+              </Button>
+            ) : undefined
+          }
+        />
       ))}
     </div>
   )
