@@ -21,6 +21,7 @@ import re
 
 from app.config import DATA_DIR, EMBEDDING_CONFIG
 from app.finance.store import FinanceStore, _tokenize
+from app.finance.query_scope import scope_companies, scope_quarter, scope_years, unknown_scope_company
 
 BODY_MIN_CHARS = 400
 BODY_MAX_CHARS = 800
@@ -284,7 +285,7 @@ def fingerprint(blocks: list[dict]) -> str:
 
 
 def periods_for_question(question: str) -> set[str] | None:
-    years = set(_YEAR_PATTERN.findall(str(question or "")))
+    years = scope_years(question)
     return years or None
 
 
@@ -351,7 +352,7 @@ class BlockIndex:
             index
             for index, block in enumerate(self.blocks)
             if (not companies or block.get("company") in companies)
-            and (not periods or str(block.get("period")) in periods)
+            and (not periods or bool(scope_years(str(block.get("period"))) & periods))
             and (
                 not doc_codes
                 or any(
@@ -443,9 +444,24 @@ class BlockIndex:
         top_k: int = 8,
         doc_codes: list[str] | None = None,
     ) -> list[dict]:
-        companies = companies_for_question(query)
+        inventory = self.store.list_documents()
+        if unknown_scope_company(query, inventory):
+            return []
+        companies = scope_companies(query, inventory) or companies_for_question(query)
         periods = periods_for_question(query)
         allowed = self._allowed_indices(companies, periods, doc_codes)
+        requested_quarter = scope_quarter(query)
+        if requested_quarter:
+            quarter_doc_ids = {
+                str(document.get("doc_id")) for document in inventory
+                if scope_quarter(" ".join(str(document.get(field) or "") for field in ("period", "doc_type", "title"))) == requested_quarter
+            }
+            allowed = {
+                index for index, block in enumerate(self.blocks)
+                if (allowed is None or index in allowed) and str(block.get("doc_id")) in quarter_doc_ids
+            }
+        if allowed is not None and not allowed:
+            return []
         fused: dict[int, float] = {}
         for ranked in (
             self._dense_rank(query, allowed, CANDIDATE_DEPTH),

@@ -25,6 +25,8 @@ from app.services.finance_corpus import get_block_index, get_finance_store
 from app.services.finance_entry import build_claims, build_evidence
 from app.services.finance_history import build_history_payload
 from app.tools.contract import ABSTAIN_KEYWORDS
+from app.finance.references import reference_markers
+from app.services.finance_validation import validate_finance_response
 
 logger = logging.getLogger(__name__)
 
@@ -85,17 +87,17 @@ def _leading_line(answer: str) -> str:
 def _decide_status(answer: str, citations: list[FinanceCitation]) -> str:
     if not answer.strip():
         return "error"
-    if not citations:
-        return "abstained"
     if any(keyword in _leading_line(answer) for keyword in ABSTAIN_KEYWORDS):
         return "abstained"
+    if "？" in answer or "?" in answer:
+        return "clarified"
+    if not citations:
+        return "needs_review"
     return "answered"
 
 
 def _used_citations(answer: str, citations: list[FinanceCitation]) -> list[FinanceCitation]:
-    used = {int(value) for value in _MARKER_PATTERN.findall(answer or "")}
-    if not used:
-        return citations
+    used = set(reference_markers(answer))
     return [citation for citation in citations if citation.marker in used]
 
 
@@ -106,8 +108,14 @@ async def run_structured_rag(
     user_context=None,
     route_reason: str = "",
     corpus_fingerprint: str = "",
+    original_query: str | None = None,
+    persist: bool = True,
 ) -> FinanceChatResponse:
-    """简单查数：一次结构检索 + 一次生成。"""
+    """简单查数：一次结构检索 + 一次生成。
+
+    `persist=False` 时由调用方决定要不要把这一轮写进历史——用于"失败后升级
+    Agent"的场景，避免半成品和最终答案各写一条。
+    """
     store = get_finance_store()
     started_at = time.perf_counter()
 
@@ -169,7 +177,7 @@ async def run_structured_rag(
         # 拒答也要进历史：重新打开时能看到“查过但没证据”，而不是一条空回答。
         await conversation_memory.add_turn(
             conversation_id,
-            query,
+            original_query if original_query is not None else query,
             response.answer,
             payload=build_history_payload(response, corpus_fingerprint=corpus_fingerprint),
         )
@@ -248,11 +256,15 @@ async def run_structured_rag(
             "final_context_tokens": tokens_in,
         },
         notes=["structured_rag:top_k=6"],
+        resolved_query=query,
     )
-    if status != "error" and answer:
+    validate_finance_response(response)
+    # `persist=False` 给上层留出"先看结果再决定要不要升级"的余地：
+    # 结构检索失败会被升级到 Agent，这条半成品不该先写进会话历史。
+    if persist and status != "error" and answer:
         await conversation_memory.add_turn(
             conversation_id,
-            query,
+            original_query if original_query is not None else query,
             answer,
             payload=build_history_payload(response, corpus_fingerprint=corpus_fingerprint),
         )

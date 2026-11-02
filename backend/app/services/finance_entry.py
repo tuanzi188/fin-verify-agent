@@ -20,6 +20,10 @@ from app.agent.runner import run as run_agent
 from app.config import MODEL_CONFIG
 from app.core.user_context import UserContext
 from app.finance.store import FinanceStore, FinanceStoreError
+from app.finance.calculation_records import (
+    build_calculation_records, calculation_display_unit, claim_calculation_index,
+)
+from app.finance.references import reference_markers, remap_references, strip_references
 from app.models.finance import (
     CalcRecord,
     Claim,
@@ -80,6 +84,7 @@ def _document_meta(store: FinanceStore, doc_id: str) -> dict:
         "period": period,
         "doc_type": doc_type,
         "unit": _as_text(document.get("unit")),
+        "source_url": _as_text(document.get("source_url")),
     }
 
 
@@ -363,6 +368,7 @@ def _table_evidence(
         table_preview=preview,
         verified=True,
         note="表格坐标来自解析产物；页码为 PDF 解析页码，不是原版截图。",
+        source_url=meta.get("source_url") or None,
     )
 
 
@@ -422,6 +428,7 @@ def _section_evidence(
         source_spans=spans,
         verified=False,
         note="章节段落证据；页码为 PDF 解析页码。",
+        source_url=meta.get("source_url") or None,
     )
 
 
@@ -453,37 +460,16 @@ def build_evidence(
         kind=EvidenceKind.document,
         content=_as_text(raw.get("content")),
         verified=False,
+        source_url=meta.get("source_url") or None,
     )
 
 
 def _calc_unit(formula: str, inputs: dict) -> str:
-    compact = str(formula or "").replace(" ", "")
-    values = [_as_text(value).strip() for value in (inputs or {}).values()]
-    has_percent_input = any(value.endswith("%") for value in values)
-    if has_percent_input and "*" not in compact and "/" not in compact:
-        return "pp"
-    if "*100" in compact:
-        return "%"
-    return ""
+    return calculation_display_unit(formula, inputs)[0]
 
 
-def _build_calcs(raw_calcs: list[dict]) -> list[CalcRecord]:
-    records: list[CalcRecord] = []
-    for item in raw_calcs or []:
-        if not isinstance(item, dict):
-            continue
-        inputs = item.get("inputs") if isinstance(item.get("inputs"), dict) else {}
-        formula = _as_text(item.get("formula"))
-        records.append(
-            CalcRecord(
-                formula=formula,
-                inputs=inputs,
-                result=item.get("result"),
-                unit=_calc_unit(formula, inputs),
-                note="由受限计算器 calculate 生成；可按 formula + inputs 复算。",
-            )
-        )
-    return records
+def _build_calcs(raw_calcs: list[dict], citations: Optional[list[FinanceCitation]] = None) -> list[CalcRecord]:
+    return build_calculation_records(raw_calcs, citations or [])
 
 
 def _clean_claim_line(line: str) -> str:
@@ -508,29 +494,14 @@ def build_claims(answer: str, citations: list[FinanceCitation], calcs: list[Calc
             continue
         if re.fullmatch(r"[\s|:\-]+", text):
             continue
-        found = [int(value) for value in _MARKER_PATTERN.findall(text)]
+        found = reference_markers(text)
         found = [value for value in dict.fromkeys(found) if value in markers]
         # 没有引用也没有数字的行（标题、过渡句）不单独成为要点。
         if not found and not re.search(r"\d", text):
             continue
-        normalized = text.replace(",", "").replace("，", "")
-        calc_index = None
-        for index, calc in enumerate(calcs):
-            result = _as_text(calc.result).replace(",", "").strip()
-            if not result:
-                continue
-            variants = {result}
-            try:
-                numeric = float(result.rstrip("%"))
-                variants.add(f"{numeric:.2f}")
-                variants.add(f"{numeric:.4f}")
-            except ValueError:
-                pass
-            if any(variant and variant in normalized for variant in variants):
-                calc_index = index
-                break
+        calc_index = claim_calculation_index(text, calcs)
         # 引用标记已经渲染成胶囊，正文里不再保留 [1] / 【2，PDF...】 这种原始角标。
-        text = _MARKER_GROUP_PATTERN.sub("", text).strip()
+        text = strip_references(text).strip()
         if len(text) < 2:
             continue
         claims.append(
@@ -552,7 +523,7 @@ def build_claims(answer: str, citations: list[FinanceCitation], calcs: list[Calc
         claims.append(
             Claim(
                 text=answer.strip()[:500],
-                citation_markers=markers,
+                citation_markers=[],
             )
         )
     return claims
@@ -578,6 +549,7 @@ async def run_finance_query(
     variant: str = "improved",
     route_reason: str = "",
     corpus_fingerprint: str = "",
+    original_query: Optional[str] = None,
 ) -> FinanceChatResponse:
     store = get_finance_store()
     block_index = get_block_index() if search_mode == "blocks" else None
@@ -624,17 +596,20 @@ async def run_finance_query(
     # 模型常对同一段证据重复标 [1][3][4]；界面按“每个锚点一条胶囊”展示，
     # 否则同一张表会在一条要点后面排四遍。保留第一次出现的 marker。
     deduped: list[FinanceCitation] = []
-    seen_evidence: set[str] = set()
+    seen_evidence: dict[str, int] = {}
+    marker_mapping: dict[int, int] = {}
     for citation in citations:
         key = citation.evidence.evidence_id
         if key in seen_evidence:
+            marker_mapping[citation.marker] = seen_evidence[key]
             continue
-        seen_evidence.add(key)
+        seen_evidence[key] = citation.marker
+        marker_mapping[citation.marker] = citation.marker
         deduped.append(citation)
     citations = deduped
 
-    calcs = _build_calcs(result.get("calc") or [])
-    answer = _as_text(result.get("answer"))
+    calcs = _build_calcs(result.get("calc") or [], citations)
+    answer = remap_references(_as_text(result.get("answer")), marker_mapping)
     status = _as_text(result.get("status") or "error")
 
     usage = result.get("usage") or {}
@@ -660,11 +635,15 @@ async def run_finance_query(
             "final_context_tokens": int(usage.get("final_context_tokens") or 0),
         },
         notes=notes,
+        resolved_query=query,
     )
+    from app.services.finance_validation import validate_finance_response
+
+    validate_finance_response(response)
     if status != "error" and answer:
         await conversation_memory.add_turn(
             conversation_id,
-            query,
+            original_query if original_query is not None else query,
             answer,
             payload=build_history_payload(
                 response, corpus_fingerprint=corpus_fingerprint

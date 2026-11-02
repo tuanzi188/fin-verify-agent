@@ -36,6 +36,7 @@ from app.services import model_provider
 from app.tools.contract import ABSTAIN_KEYWORDS
 from app.tools.mock import Toolbox
 from app.tools.toolset import ToolOutcome
+from app.finance.references import reference_markers
 
 logger = logging.getLogger(__name__)
 
@@ -324,8 +325,7 @@ def needs_cell_repair(answer: str, evidence: list[dict]) -> bool:
     if not answer or not evidence:
         return False
     markers: list[int] = []
-    for raw in _MARKER_PATTERN.findall(answer):
-        marker = int(raw)
+    for marker in reference_markers(answer):
         if 1 <= marker <= len(evidence) and marker not in markers:
             markers.append(marker)
     if not markers:

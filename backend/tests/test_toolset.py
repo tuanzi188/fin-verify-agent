@@ -253,7 +253,8 @@ async def test_runner_uses_finance_toolset(tmp_path, monkeypatch):
     assert "section_locator" not in kinds
     assert "cell" in kinds
     # calc 有公式、输入、结果，硬门禁要的三样都在
-    assert result["calc"] and set(result["calc"][0]) == {"formula", "inputs", "result"}
+    assert result["calc"] and {"formula", "inputs", "result"} <= set(result["calc"][0])
+    assert result["calc"][0]["calculation_id"] == "calc-1"
     # 引用能回到单元格锚点
     assert result["citations"][0]["chunk_id"].startswith(f"{TABLE_ID}#")
     assert validate_result(result) == []

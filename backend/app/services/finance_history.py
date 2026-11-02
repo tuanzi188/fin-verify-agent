@@ -45,6 +45,7 @@ def _compact_citation(citation: FinanceCitation) -> dict[str, Any]:
             "footnote": evidence.footnote,
             "verified": evidence.verified,
             "note": evidence.note,
+            "source_url": evidence.source_url,
         },
     }
 
@@ -86,4 +87,6 @@ def build_history_payload(
         "calc": [record.model_dump(mode="json") for record in response.calc],
         "trace": _compact_trace(response),
         "notes": list(response.notes),
+        "verification": response.verification,
+        "resolved_query": response.resolved_query,
     }

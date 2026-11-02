@@ -38,9 +38,40 @@ from app.services.finance_corpus import (
 from app.services.finance_entry import build_evidence, run_finance_query
 from app.services.finance_rag import run_structured_rag
 from app.services.finance_router import decide_strategy
+from app.finance.claim_consistency import check_response
+from app.finance.query_scope import prepare_finance_scope
+from app.services.conversation_memory import conversation_memory
+from app.services.finance_history import build_history_payload
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+#: 结构检索失败后是否升级到多步查证。产品默认开；关掉退回纯二选一（对照用）。
+ESCALATE_ON_STRUCTURED_FAILURE = True
+
+
+def _escalation_reason(response: FinanceChatResponse) -> Optional[str]:
+    """结构检索的结果够不够格直接交付；够就返回 None。
+
+    两条判据，按代价从小到大：
+
+    1. 没拿到可用证据（检索为空 / 执行失败）—— 一定升级，否则用户看到的是
+       "资料不足"，而资料其实在库里（实测：资产总计块在块检索里排第 18 位）。
+    2. 答了，但结论里的数字对不上它引用的单元格 —— 复用绑定级一致性校验器；
+       不升级等于把"有页码的错误数字"直接交付，这是查证类产品最坏的失败形态。
+    """
+    if response.status == "error":
+        return "结构检索执行失败"
+    if response.status == "abstained" and not response.citations:
+        return "结构检索没有取得可用证据"
+    report = check_response(response)
+    if report.get("mismatched"):
+        detail = next(
+            (row for row in report.get("details") or [] if row.get("result") == "mismatch"),
+            {},
+        )
+        return f"结论与引用不一致（{detail.get('raw') or '数值'}）"
+    return None
 
 
 def _parse_values(raw: Optional[str], *, numeric: bool = True) -> list[int | str]:
@@ -70,24 +101,81 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
     route_reason = ""
 
     try:
-        if strategy == "auto":
-            strategy, route_reason = decide_strategy(body.query, get_finance_store())
+        previous_query = ""
+        if body.conversation_id:
+            previous = await conversation_memory.get_conversation(scoped_conversation_id)
+            if previous and previous.get("turns"):
+                last_turn = previous["turns"][-1]
+                previous_query = str((last_turn.get("payload") or {}).get("resolved_query") or last_turn.get("query") or "")
+        scope = prepare_finance_scope(body.query, get_finance_store().list_documents(), previous_query)
+        if scope.blocked_reason:
+            response = FinanceChatResponse(
+                status="clarified" if scope.clarify else "abstained",
+                answer=scope.blocked_reason,
+                conversation_id=scoped_conversation_id,
+                strategy="structured_rag" if strategy == "auto" else strategy,
+                route_reason="检索前检查主体、期间与追问条件",
+                resolved_query=scope.resolved_query,
+                notes=["请核对本地语料覆盖范围及本轮查询条件。"],
+            )
+            await conversation_memory.add_turn(
+                scoped_conversation_id, body.query, response.answer,
+                payload=build_history_payload(response, corpus_fingerprint=index_fingerprint()),
+            )
+        elif strategy == "auto":
+            strategy, route_reason = decide_strategy(scope.resolved_query, get_finance_store())
         elif strategy == "structured_rag":
             route_reason = "显式指定结构检索"
         else:
             route_reason = "显式指定多步查证"
 
-        if strategy == "structured_rag":
+        if response is not None:
+            pass
+        elif strategy == "structured_rag":
             response = await run_structured_rag(
-                query=body.query,
+                query=scope.resolved_query,
+                original_query=body.query,
                 conversation_id=scoped_conversation_id,
                 user_context=user_context,
                 route_reason=route_reason,
                 corpus_fingerprint=index_fingerprint(),
+                # 升级判断要用到 citations 里的单元格，所以先不落库；
+                # 决定交付这一次结果后再补写，保证一轮会话只有一条记录。
+                persist=False,
             )
+            escalation = (
+                _escalation_reason(response)
+                if ESCALATE_ON_STRUCTURED_FAILURE and body.strategy == "auto"
+                else None
+            )
+            if escalation:
+                escalated = await run_finance_query(
+                    query=scope.resolved_query,
+                    original_query=body.query,
+                    conversation_id=scoped_conversation_id,
+                    user_context=user_context,
+                    max_steps=body.max_steps,
+                    search_mode=body.search_mode,
+                    route_reason=f"{route_reason}；{escalation}，升级多步查证",
+                    corpus_fingerprint=index_fingerprint(),
+                )
+                escalated.notes = list(escalated.notes or []) + [
+                    f"escalated_from_structured_rag:{escalation}"
+                ]
+                response = escalated
+            elif response.status != "error" and response.answer:
+                await conversation_memory.add_turn(
+                    scoped_conversation_id,
+                    body.query,
+                    response.answer,
+                    payload=build_history_payload(
+                        response, corpus_fingerprint=index_fingerprint()
+                    ),
+                )
         else:
             response = await run_finance_query(
-                query=body.query,
+                query=scope.resolved_query,
+                original_query=body.query,
                 conversation_id=scoped_conversation_id,
                 user_context=user_context,
                 max_steps=body.max_steps,

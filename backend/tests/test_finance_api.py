@@ -20,7 +20,13 @@ from app.api import lab as lab_api
 from app.core import auth
 from app.core.conversation_scope import ConversationNamespace
 from app.finance.store import FinanceStore
-from app.models.finance import FinanceChatResponse
+from app.models.finance import (
+    Claim,
+    EvidenceKind,
+    EvidenceRef,
+    FinanceChatResponse,
+    FinanceCitation,
+)
 from app.services import finance_entry, finance_router
 
 _ALICE = {"Authorization": "Bearer " + "a" * 32}
@@ -220,7 +226,9 @@ async def test_run_finance_query_maps_claims_citations_and_calc(demo_store, monk
         search_mode="sections",
     )
 
-    assert response.status == "answered"
+    # 上年值 10.00 未包含在引用列中；计算可复算，但来源不全必须复核。
+    assert response.status == "needs_review"
+    assert response.calc[0].grounding_status == "partial"
     assert response.citations[0].marker == 1
     assert response.citations[0].evidence.table_id == "demo#t1"
     assert response.citations[0].evidence.row_indices == [0, 1]
@@ -324,13 +332,61 @@ async def test_finance_chat_auto_routes_simple_query_to_structured(api_app, demo
         response = await client.post(
             "/finance/chat",
             headers=_ALICE,
-            json={"query": "美的 2025 年营业收入是多少？", "strategy": "auto"},
+            json={"query": "XX股份 2025 年营业收入是多少？", "strategy": "auto"},
         )
 
     assert response.status_code == 200
     assert response.json()["strategy"] == "structured_rag"
-    assert captured["query"] == "美的 2025 年营业收入是多少？"
+    assert captured["query"] == "XX股份 2025 年营业收入是多少？"
     assert "结构检索" in captured["route_reason"]
+
+
+@pytest.mark.asyncio
+async def test_finance_api_followup_uses_scoped_previous_question(api_app, demo_store, monkeypatch):
+    captured_followup = {}
+    memory_followup = AsyncMock()
+    memory_followup.get_conversation.return_value = {
+        "turns": [{"query": "XX股份2025年营业收入是多少？", "payload": {"resolved_query": "XX股份2025年营业收入是多少？"}}]
+    }
+
+    async def followup_structured_stub(**kwargs):
+        captured_followup.update(kwargs)
+        return FinanceChatResponse(status="answered", answer="上一年数值", conversation_id=kwargs["conversation_id"])
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-followup")
+    monkeypatch.setattr(finance_api, "conversation_memory", memory_followup)
+    monkeypatch.setattr(finance_api, "run_structured_rag", followup_structured_stub)
+    public_followup_id = str(uuid.uuid4())
+    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
+        result_followup = await client.post("/finance/chat", headers=_ALICE, json={"query": "那上一年呢？", "conversation_id": public_followup_id})
+    assert result_followup.status_code == 200
+    assert "2024 年" in captured_followup["query"]
+    assert "XX股份" in captured_followup["query"]
+    assert "营业收入" in captured_followup["query"]
+    assert captured_followup["original_query"] == "那上一年呢？"
+    memory_followup.get_conversation.assert_awaited_once_with(captured_followup["conversation_id"])
+    assert captured_followup["conversation_id"] != public_followup_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary_query", ["宁德时代2025年营业收入是多少？", "XX股份2025Q1营业收入是多少？"])
+async def test_finance_api_scope_boundary_skips_generation(api_app, demo_store, monkeypatch, boundary_query):
+    boundary_agent = AsyncMock()
+    boundary_rag = AsyncMock()
+    boundary_memory = AsyncMock()
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-boundary")
+    monkeypatch.setattr(finance_api, "run_finance_query", boundary_agent)
+    monkeypatch.setattr(finance_api, "run_structured_rag", boundary_rag)
+    monkeypatch.setattr(finance_api, "conversation_memory", boundary_memory)
+    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
+        boundary_result = await client.post("/finance/chat", headers=_ALICE, json={"query": boundary_query})
+    assert boundary_result.status_code == 200
+    assert boundary_result.json()["status"] == "abstained"
+    boundary_agent.assert_not_awaited()
+    boundary_rag.assert_not_awaited()
+    boundary_memory.add_turn.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -504,3 +560,168 @@ async def test_lab_runs_keeps_fixed_rag_as_optional_baseline(api_app, tmp_path, 
     assert body["arms"] == []
     assert body["optional_baseline"]["label"] == "固定窗 RAG"
     assert "可选辅助基线" in body["message"]
+
+
+# ---------------------------------------------------------------------------
+# 结构检索失败 → 升级多步查证
+# ---------------------------------------------------------------------------
+
+
+def _rag_answer(conversation_id: str, *, claim_text: str, cell_value: str) -> FinanceChatResponse:
+    """构造一条"答了但数字对不上引用单元格"的结构检索结果。"""
+    evidence = EvidenceRef(
+        evidence_id="demo#t1#r0c1",
+        doc_id="demo",
+        kind=EvidenceKind.table_cell,
+        table_id="demo#t1",
+        row_name="营业收入",
+        column="2025",
+        cell_text=cell_value,
+        unit="千元",
+        verified=True,
+    )
+    return FinanceChatResponse(
+        status="answered",
+        answer=claim_text,
+        claims=[Claim(text=claim_text, citation_markers=[1])],
+        citations=[FinanceCitation(marker=1, evidence=evidence)],
+        strategy="structured_rag",
+        conversation_id=conversation_id,
+    )
+
+
+def _agent_answer(conversation_id: str, route_reason: str) -> FinanceChatResponse:
+    return FinanceChatResponse(
+        status="answered",
+        answer="12.34 千元",
+        strategy="agent",
+        conversation_id=conversation_id,
+        route_reason=route_reason,
+    )
+
+
+async def _post(api_app, body: dict) -> dict:
+    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
+        response = await client.post("/finance/chat", headers=_ALICE, json=body)
+    assert response.status_code == 200
+    return response.json()
+
+
+@pytest.mark.asyncio
+async def test_empty_structured_retrieval_escalates_to_agent(api_app, demo_store, monkeypatch):
+    calls = {"agent": 0}
+
+    async def fake_structured(**kwargs):
+        return FinanceChatResponse(
+            status="abstained",
+            answer="根据现有资料无法确定：本次结构检索没有找到可用证据。",
+            citations=[],
+            strategy="structured_rag",
+            conversation_id=kwargs["conversation_id"],
+            route_reason=kwargs["route_reason"],
+        )
+
+    async def fake_agent(**kwargs):
+        calls["agent"] += 1
+        return _agent_answer(kwargs["conversation_id"], kwargs["route_reason"])
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-test")
+    monkeypatch.setattr(finance_api, "run_structured_rag", fake_structured)
+    monkeypatch.setattr(finance_api, "run_finance_query", fake_agent)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "XX股份 2025 年营业收入是多少？", "strategy": "auto"})
+
+    assert calls["agent"] == 1
+    assert body["strategy"] == "agent"
+    assert "升级多步查证" in body["route_reason"]
+    assert any(note.startswith("escalated_from_structured_rag:") for note in body["notes"])
+
+
+@pytest.mark.asyncio
+async def test_number_mismatch_escalates_to_agent(api_app, demo_store, monkeypatch):
+    calls = {"agent": 0}
+
+    async def fake_structured(**kwargs):
+        return _rag_answer(
+            kwargs["conversation_id"],
+            claim_text="营业收入 200 千元[1]",
+            cell_value="100",
+        )
+
+    async def fake_agent(**kwargs):
+        calls["agent"] += 1
+        return _agent_answer(kwargs["conversation_id"], kwargs["route_reason"])
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-test")
+    monkeypatch.setattr(finance_api, "run_structured_rag", fake_structured)
+    monkeypatch.setattr(finance_api, "run_finance_query", fake_agent)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "XX股份 2025 年营业收入是多少？", "strategy": "auto"})
+
+    assert calls["agent"] == 1
+    assert body["strategy"] == "agent"
+    assert "不一致" in body["route_reason"]
+
+
+@pytest.mark.asyncio
+async def test_consistent_structured_answer_is_kept(api_app, demo_store, monkeypatch):
+    calls = {"agent": 0}
+    memory = AsyncMock()
+
+    async def fake_structured(**kwargs):
+        return _rag_answer(
+            kwargs["conversation_id"],
+            claim_text="营业收入 12.34 千元[1]",
+            cell_value="12.34",
+        )
+
+    async def fake_agent(**kwargs):
+        calls["agent"] += 1
+        return _agent_answer(kwargs["conversation_id"], kwargs["route_reason"])
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-test")
+    monkeypatch.setattr(finance_api, "run_structured_rag", fake_structured)
+    monkeypatch.setattr(finance_api, "run_finance_query", fake_agent)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", memory)
+
+    body = await _post(api_app, {"query": "XX股份 2025 年营业收入是多少？", "strategy": "auto"})
+
+    assert calls["agent"] == 0
+    assert body["strategy"] == "structured_rag"
+    # 只有交付的那一次才写历史
+    assert memory.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_explicit_structured_strategy_never_escalates(api_app, demo_store, monkeypatch):
+    calls = {"agent": 0}
+
+    async def fake_structured(**kwargs):
+        return FinanceChatResponse(
+            status="abstained",
+            answer="资料不足",
+            citations=[],
+            strategy="structured_rag",
+            conversation_id=kwargs["conversation_id"],
+            route_reason=kwargs["route_reason"],
+        )
+
+    async def fake_agent(**kwargs):
+        calls["agent"] += 1
+        return _agent_answer(kwargs["conversation_id"], kwargs["route_reason"])
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-test")
+    monkeypatch.setattr(finance_api, "run_structured_rag", fake_structured)
+    monkeypatch.setattr(finance_api, "run_finance_query", fake_agent)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "XX股份 2025 年营业收入是多少？", "strategy": "structured_rag"})
+
+    assert calls["agent"] == 0
+    assert body["strategy"] == "structured_rag"

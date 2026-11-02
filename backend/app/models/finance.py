@@ -93,6 +93,7 @@ class EvidenceRef(BaseModel):
     # verified=True 只表示“坐标来自解析表格/单元格”，不表示模型结论正确。
     verified: bool = False
     note: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class FinanceCitation(BaseModel):
@@ -107,6 +108,11 @@ class CalcRecord(BaseModel):
     unit: str = ""
     tolerance: Optional[float] = None
     note: str = ""
+    calculation_id: str = ""
+    result_scale: str = "1"
+    input_sources: Dict[str, Any] = Field(default_factory=dict)
+    grounding_status: str = "unverified"
+    recomputed: bool = False
 
 
 class Claim(BaseModel):
@@ -145,6 +151,8 @@ class FinanceChatResponse(BaseModel):
     duration_ms: int = 0
     token_usage: Optional[dict] = None
     notes: List[str] = Field(default_factory=list)
+    verification: Dict[str, Any] = Field(default_factory=dict)
+    resolved_query: str = ""
 
 
 class FinanceDocumentInfo(BaseModel):

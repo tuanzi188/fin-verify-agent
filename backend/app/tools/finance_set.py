@@ -303,6 +303,11 @@ class FinanceToolset:
 
     def system_prompt(self, variant: str) -> str:
         prompt = FINANCE_IMPROVED_SYSTEM if variant == "improved" else FINANCE_BASELINE_SYSTEM
+        prompt += (
+            "\n计算结果的结论必须同时引用原始证据 [n] 和对应计算 [计算1]、[计算2]。"
+            "计算编号按 calculate 成功调用顺序排列；每个计算输入必须先读取对应单元格。"
+            "百分数相减后用百分点表示时，原始小数差必须乘以 100，例如 30%-20%=10 个百分点。"
+        )
         if self.search_mode == "blocks":
             prompt = prompt.replace(
                 "- search_sections(query, doc_id?, top_k?)：按关键词定位章节。"
@@ -358,11 +363,13 @@ class FinanceToolset:
             )
         data = outcome.data
         if name == "calculate":
+            data = dict(data, calculation_id=f"calc-{len(self.calcs) + 1}")
             self.calcs.append(
                 {
                     "formula": data.get("formula"),
                     "inputs": data.get("inputs"),
                     "result": data.get("result"),
+                    "calculation_id": data["calculation_id"],
                 }
             )
         ids, count = self._summarize(name, data)

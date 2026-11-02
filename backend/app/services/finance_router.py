@@ -14,6 +14,7 @@ import re
 
 from app.finance.block_index import companies_for_question
 from app.finance.store import FinanceStore
+from app.finance.query_scope import scope_companies, scope_years
 
 #: 需要多步/计算的信号。命中任一就升级到 Agent。
 COMPLEX_SIGNALS = (
@@ -58,7 +59,7 @@ def decide_strategy(query: str, store: FinanceStore) -> tuple[str, str]:
     if not text:
         return "structured_rag", "空问题按一次结构检索处理"
 
-    years = sorted({int(value) for value in _YEAR_PATTERN.findall(text)})
+    years = sorted(int(value) for value in scope_years(text))
     available = sorted(
         {
             int(str(item.get("period")))
@@ -72,7 +73,7 @@ def decide_strategy(query: str, store: FinanceStore) -> tuple[str, str]:
             f"问题点名了本地未覆盖的期间（本地最新 {max(available)} 年），需要拒答边界",
         )
 
-    companies = companies_for_question(text)
+    companies = scope_companies(text, store.list_documents()) or companies_for_question(text)
     if len(companies) >= 2:
         return "agent", "问题涉及多家公司，需要跨文档核对"
 
