@@ -1024,3 +1024,76 @@ async def test_answer_truncated_note_when_final_hits_max_tokens(monkeypatch):
     assert "answer_truncated" in result["trace"][-1]["note"]
     # 正常收尾（finish_reason 缺失或 stop）不得误标
     assert result["status"] == "answered"
+
+
+async def test_tool_round_passes_max_tokens_and_fallback_forbids_markup(monkeypatch):
+    """工具轮必须传 max_tokens（不传就落默认 2048，长答案截断）；
+    兜底轮必须明说"没有工具、禁止输出调用标记"。"""
+    seen = {"max_tokens": [], "fallback": []}
+
+    async def fake_chat_with_tools(messages, tools, tool_choice=None, reasoning_mode="flash",
+                                   temperature=0.1, max_tokens=None):
+        seen["max_tokens"].append(max_tokens)
+        return "", [_search_call()], None, _usage()
+
+    async def fake_chat(messages, reasoning_mode="flash", temperature=0.1, max_tokens=None):
+        seen["fallback"].append(messages[-1]["content"])
+        return "住宿标准为每晚不超过五百元 [1]。", None, _usage()
+
+    monkeypatch.setattr("app.services.model_provider.chat_with_tools", fake_chat_with_tools)
+    monkeypatch.setattr("app.services.model_provider.chat", fake_chat)
+    _patch_dispatch(monkeypatch, [_evidence_item()])
+
+    await run(_TASK)
+
+    assert seen["max_tokens"] == [4096]
+    assert any("禁止输出工具调用格式" in content for content in seen["fallback"])
+
+
+def test_round_message_reports_calculate_result():
+    """calculate 的结果必须回填到下一轮：只报"返回 1 条"等于结果不可见。"""
+    message = runner._round_message(
+        [{"chunk_id": "d1#t1", "title": "制度", "content": "正文"}],
+        [
+            {
+                "tool": "calculate",
+                "ok": True,
+                "result_count": 1,
+                "calc": {"formula": "a / b", "inputs": {"a": 1, "b": 2}, "result": "0.5"},
+            }
+        ],
+        [],
+        "search_kb",
+    )
+    assert "calculate 结果" in message
+    assert "a / b" in message and "0.5" in message
+
+
+def test_strip_tool_markup_removes_leaked_calls():
+    cleaned, hit = runner._strip_tool_markup('去查 <tool_call>{"name": "get_rows"}</tool_call> 一下')
+    assert hit is True
+    assert "tool_call" not in cleaned and "get_rows" not in cleaned
+
+    cleaned, hit = runner._strip_tool_markup("<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name=\"calculate\">")
+    assert hit is True
+    assert cleaned == ""
+
+    cleaned, hit = runner._strip_tool_markup("营业收入 12.34 万元 [1]")
+    assert hit is False
+    assert cleaned == "营业收入 12.34 万元 [1]"
+
+
+async def test_tool_markup_leak_is_stripped_and_noted(monkeypatch):
+    """兜底答案里残留的裸工具调用必须剥掉并留痕（2026-11-03 FIN-04 / CX-05）。"""
+    _patch_llm(
+        monkeypatch,
+        tool_calls=[_search_call()],
+        text="",
+        final_answer='<tool_call>{"name": "get_rows"}</tool_call>',
+    )
+    _patch_dispatch(monkeypatch, [_evidence_item()])
+
+    result = await run(_TASK)
+
+    assert "tool_markup_stripped" in result["trace"][-1]["note"]
+    assert "<tool_call>" not in result["answer"]

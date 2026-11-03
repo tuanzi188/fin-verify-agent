@@ -56,6 +56,16 @@ FINAL_MAX_TOKENS = 4096
 TOOL_TEMPERATURE = 0.1
 SUPPORTED_VARIANTS = ("baseline", "improved")
 
+#: 收口轮 / 兜底轮不带工具定义，必须明确告知模型。否则它会把调用意图当正文
+#: 吐出来（2026-11-03 全量：FIN-04 输出 DSML 标记、CX-05 输出 <tool_call>），
+#: 或者反过来声称"当前可用工具里没有 calculate"（FIN-20）。
+FINAL_NO_TOOL_HINT = (
+    "\n\n注意：本轮不再提供任何工具（包括 calculate），工具调用已经结束。"
+    "禁止输出工具调用格式（如 <tool_call>、</tool_call>、<｜｜DSML｜｜> 等标记），"
+    "也不要声称缺少某个工具。请直接基于已读到的证据给出最终回答；"
+    "需要派生数值但没有计算记录时，只引用表格原值并说明这一点，不要手算。"
+)
+
 # improved 的三个机制参数。它们必须能被复现，所以运行时一起写进 run_config：
 # - 多轮：最多 3 个"模型回合"（每回合可发多条工具调用），受 max_steps 进一步约束；
 # - 空/错自动重试：整条任务最多 1 次，避免在坏工具上反复烧 token；
@@ -274,6 +284,23 @@ def _format_calcs(calcs: list[dict]) -> str:
             f"result: {item.get('result')}"
         )
     return "\n".join(lines) or "（没有计算记录）"
+
+
+#: 模型偶尔把工具调用标记当正文输出（2026-11-03 全量：FIN-04 的 DSML、
+#: CX-05 的 <tool_call>）。这些标记不是答案，必须剥掉并留痕；
+#: 剥离后为空或只剩过程话术时，由状态判定把它们降级，不能当有效回答。
+_TOOL_MARKUP_PATTERN = re.compile(
+    r"<tool_call>.*?</tool_call>"
+    r"|<｜｜DSML｜｜[^>]*>"
+    r"|</｜｜DSML｜｜[^>]*>"
+    r"|<\|[^|]*\|>",
+    re.DOTALL,
+)
+
+
+def _strip_tool_markup(answer: str) -> tuple[str, bool]:
+    cleaned = _TOOL_MARKUP_PATTERN.sub("", answer or "")
+    return cleaned.strip(), cleaned != (answer or "")
 
 
 # 修复回合预算：闸门发现"该做没做"时，最多追加 3 个模型回合。
@@ -656,6 +683,8 @@ async def _execute_tool_call(
         "ok": outcome.ok,
         "result_ids": list(outcome.result_ids),
         "result_count": outcome.result_count,
+        # calculate 的返回不进证据池，但必须原样带回给下一轮（见 _round_message）。
+        "calc": outcome.data if (name == "calculate" and outcome.ok) else None,
         "injected": outcome.injected,
         "latency_ms": latency_ms,
         "tokens_in": 0,
@@ -762,6 +791,10 @@ def _round_message(
                 if step.get("truncated"):
                     extra += "，内容被截断"
             status_lines.append(f"- {step.get('tool')} 成功，返回 {step.get('result_count', 0)} 条{extra}")
+            # 计算不是证据，但结果必须让模型看见：否则它要么手算，要么在答案里
+            # 写"工具没有返回结果"（2026-11-03 全量 FIN-S04 实测）。
+            if step.get("calc"):
+                status_lines.append(f"- calculate 结果：{_format_calcs([step['calc']])}")
         else:
             status_lines.append(
                 f"- {step.get('tool')} 失败：{step.get('error_kind')} {step.get('error_detail') or ''}".strip()
@@ -943,6 +976,9 @@ async def _run_improved(
                 tool_choice=round_tool_choice,
                 reasoning_mode="flash",
                 temperature=TOOL_TEMPERATURE,
+                # 不传就落 model_cfg 默认 2048；带工具的轮次也会直接输出长答案，
+                # 2026-11-03 全量 FIN-S01 就是这样半句截断的。
+                max_tokens=FINAL_MAX_TOKENS,
             )
             final_latency_ms = _elapsed_ms(llm_started_at)
             _record_llm_call(
@@ -1070,6 +1106,12 @@ async def _run_improved(
                 )
             else:
                 content = "本次没有检索到可用段落。请据此回答：资料不足时直接说明无法确定，不要猜测。"
+            # 这一轮不带工具定义：必须明说，否则模型会把调用意图当正文吐出来
+            # （2026-11-03 全量：FIN-04 输出 DSML 标记、CX-05 输出 <tool_call>、
+            # FIN-20 声称"当前可用工具里没有 calculate"）。
+            content += FINAL_NO_TOOL_HINT
+            if calcs := getattr(toolbox, "calcs", None):
+                content += f"\n\n本轮 calculate 记录（重写时以此为准）：\n{_format_calcs(calcs)}"
             messages.append({"role": "user", "content": content})
             llm_started_at = time.perf_counter()
             text, _, final_usage = await model_provider.chat(
@@ -1145,6 +1187,7 @@ async def _run_improved(
                 repair_specs,
                 reasoning_mode="flash",
                 temperature=TOOL_TEMPERATURE,
+                max_tokens=FINAL_MAX_TOKENS,
             )
             repair_latency_ms = _elapsed_ms(llm_started_at)
             _record_llm_call(
@@ -1320,6 +1363,9 @@ async def _run_improved(
             f"injection_not_triggered:{fired}/{planned}"
         )
 
+    answer, markup_stripped = _strip_tool_markup(answer)
+    if markup_stripped:
+        notes.append("tool_markup_stripped")
     citations = _extract_citations(answer, evidence)
     clarify_signal = bool(answer) and any(signal in answer for signal in CLARIFY_SIGNALS)
     status = _decide_status(
@@ -1471,7 +1517,8 @@ async def run(
         llm_started_at = time.perf_counter()
         baseline_specs = toolbox.specs()
         text, tool_calls, _, round_usage = await model_provider.chat_with_tools(
-            messages, baseline_specs, reasoning_mode="flash", temperature=TOOL_TEMPERATURE
+            messages, baseline_specs, reasoning_mode="flash", temperature=TOOL_TEMPERATURE,
+            max_tokens=FINAL_MAX_TOKENS,
         )
         final_latency_ms = _elapsed_ms(llm_started_at)
         _record_llm_call(
@@ -1507,6 +1554,9 @@ async def run(
                 # 只给摘要不给原文，正好对应"chunk RAG 只能看到检索片段"这个对照组设定。
                 if locators:
                     content = f"{content}\n\n{_format_locators(locators)}"
+                if calcs := getattr(toolbox, "calcs", None):
+                    content = f"{content}\n\n本轮 calculate 记录：\n{_format_calcs(calcs)}"
+                content += FINAL_NO_TOOL_HINT
                 messages.append({"role": "user", "content": content})
             elif locators:
                 messages.append({
@@ -1576,6 +1626,9 @@ async def run(
             f"injection_not_triggered:{fired}/{planned}"
         )
 
+    answer, markup_stripped = _strip_tool_markup(answer)
+    if markup_stripped:
+        notes.append("tool_markup_stripped")
     citations = _extract_citations(answer, evidence)
     clarify_signal = bool(answer) and any(signal in answer for signal in CLARIFY_SIGNALS)
     status = _decide_status(
