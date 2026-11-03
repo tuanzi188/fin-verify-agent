@@ -994,3 +994,33 @@ async def test_forced_final_round_then_repair_round_allows_tools(monkeypatch):
     assert choices[5] == "none"
     assert "cell_repair" in result["trace"][-1]["note"]
     assert result["citations"] == [{"marker": 2, "chunk_id": "d1#t1#0#2025 年"}]
+
+
+async def test_answer_truncated_note_when_final_hits_max_tokens(monkeypatch):
+    """答案非空但终轮 finish_reason=length：必须留痕（2026-11-03 FIN-09 半句截断）。"""
+
+    async def fake_chat_with_tools(messages, tools, tool_choice=None, reasoning_mode="flash",
+                                   temperature=0.1, max_tokens=None):
+        return "", [_search_call()], None, _usage()
+
+    async def fake_chat(messages, reasoning_mode="flash", temperature=0.1, max_tokens=None):
+        return (
+            "住宿标准为每晚不超过五百元 [1]，一线",
+            None,
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 4096,
+                "finish_reason": "length",
+                "has_reasoning": True,
+            },
+        )
+
+    monkeypatch.setattr("app.services.model_provider.chat_with_tools", fake_chat_with_tools)
+    monkeypatch.setattr("app.services.model_provider.chat", fake_chat)
+    _patch_dispatch(monkeypatch, [_evidence_item()])
+
+    result = await run(_TASK)
+
+    assert "answer_truncated" in result["trace"][-1]["note"]
+    # 正常收尾（finish_reason 缺失或 stop）不得误标
+    assert result["status"] == "answered"

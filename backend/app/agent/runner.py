@@ -48,7 +48,9 @@ DEFAULT_MAX_STEPS = 3
 MAX_STEPS_CEILING = 20
 # 1024 在实测里不够：模型偶尔把预算全花在生成前的推理上，content 回来是空的。
 # 提到 2048 并把 finish_reason 记进 trace，真撞上限时能一眼看出来。
-FINAL_MAX_TOKENS = 2048
+# 2026-11-03 探针再撞：FIN-09 的最终调用 finish_reason=length、2048 全被 reasoning
+# 吃掉，答案在中间硬断（表格题）。提到 4096——它只是上限，短答案的实耗不变。
+FINAL_MAX_TOKENS = 4096
 # 显式传温度，不靠客户端默认值：跑批结果必须能被别人按同一组参数复现。
 # `run_agent_eval` 会把这个值写进 runs 的 `run_config`，报告才能自证口径。
 TOOL_TEMPERATURE = 0.1
@@ -1295,6 +1297,9 @@ async def _run_improved(
             notes.append("empty_final_answer:reasoning_only")
         else:
             notes.append("empty_final_answer")
+    elif not failed and final_meta.get("finish_reason") == "length":
+        # 正文非空但撞上限：答案可能在半句处断掉，完整性不可信（2026-11-03 FIN-09）。
+        notes.append("answer_truncated")
     # 闸门没修干净也要留痕：报告里能直接区分"没触发"和"触发了但没改成"。
     if not failed:
         if clarify_mode != "ask":
@@ -1559,6 +1564,9 @@ async def run(
             notes.append("empty_final_answer:reasoning_only")
         else:
             notes.append("empty_final_answer")
+    elif not failed and final_meta.get("finish_reason") == "length":
+        # 正文非空但撞上限：答案可能在半句处断掉，完整性不可信（2026-11-03 FIN-09）。
+        notes.append("answer_truncated")
     # 注入没打中（比如计划第 2 次调用故障，但这次只查了 1 次）：这一轮不能算恢复题的
     # 有效样本，必须显式标出来，否则恢复率会被"没触发"的运行稀释。
     planned = getattr(toolbox, "planned_injections", 0)

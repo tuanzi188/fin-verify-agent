@@ -441,6 +441,12 @@ class FinanceToolset:
         if name == "get_cell" and isinstance(data, dict):
             anchor = f"{data.get('table_id')}#{data.get('row')}#{data.get('column')}"
             return [anchor], 1
+        # 计算不是证据，但也不能报 0 条：2026-11-03 探针里 FIN-22 两次 calculate
+        # 都成功，模型却在答案里写"均返回 0 条、无法产出计算记录"——因为这里落到
+        # 默认值，runner 的步骤摘要就成了"calculate 成功，返回 0 条"。计算编号
+        # 只进 trace，不会混进证据池（证据只走 to_evidence）。
+        if name == "calculate" and isinstance(data, dict):
+            return [str(data.get("calculation_id") or "")], 1
         return [], 0
 
     def to_evidence(self, name: str, data: Any) -> list[dict]:

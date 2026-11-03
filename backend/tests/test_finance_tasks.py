@@ -204,6 +204,18 @@ def test_runner_applies_injection_through_toolset(tmp_path, monkeypatch):
     assert result["status"] != "error"
 
 
+def test_calculate_outcome_reports_one_result(tmp_path):
+    """calculate 成功必须报 1 条：落默认 0 会让模型以为计算器不可用（2026-11-03 FIN-22）。"""
+    write_store(tmp_path)
+    toolset = FinanceToolset(FinanceStore(tmp_path))
+    outcome = asyncio.run(
+        toolset.call("calculate", {"expression": "a + b", "inputs": {"a": "1", "b": "2"}})
+    )
+    assert outcome.ok is True
+    assert outcome.result_count == 1
+    assert outcome.result_ids == ["calc-1"]
+
+
 # ---------------------------------------------------------------------------
 # lint：任务卡数字必须对得回表格
 # ---------------------------------------------------------------------------
