@@ -1,7 +1,11 @@
-import React, { useEffect, useState } from 'react'
-import { Alert, Card, Space, Spin, Table, Typography } from 'antd'
-import { FolderOpenOutlined } from '@ant-design/icons'
-import { FinanceDocumentInfo, getFinanceDocuments } from '../api/client'
+import React, { useCallback, useEffect, useState } from 'react'
+import { Alert, Button, Card, Input, Space, Spin, Table, Typography, Upload, message } from 'antd'
+import { FolderOpenOutlined, UploadOutlined } from '@ant-design/icons'
+import {
+  FinanceDocumentInfo,
+  getFinanceDocuments,
+  uploadFinanceDocument,
+} from '../api/client'
 
 const { Title, Paragraph } = Typography
 
@@ -51,13 +55,50 @@ const FinanceDocuments: React.FC = () => {
   const [documents, setDocuments] = useState<FinanceDocumentInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [company, setCompany] = useState('')
+  const [period, setPeriod] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadDocuments = useCallback(() => {
+    setLoading(true)
     getFinanceDocuments()
-      .then((data) => setDocuments(data.documents || []))
+      .then((data) => {
+        setDocuments(data.documents || [])
+        setError(null)
+      })
       .catch((err) => setError(err?.response?.data?.detail || err?.message || '加载失败'))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    loadDocuments()
+  }, [loadDocuments])
+
+  const handleUpload = async (file: File) => {
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const result = await uploadFinanceDocument(file, { company, period })
+      if (result.warnings?.length) {
+        message.warning(`${result.status}：${result.warnings.join('；')}`)
+      } else {
+        message.success(`${result.status}：${result.tables} 张表 / ${result.sections} 个章节`)
+      }
+      setCompany('')
+      setPeriod('')
+      loadDocuments()
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        (err as Error)?.message ||
+        '上传失败'
+      setUploadError(detail)
+      message.error(detail)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const sections = documents.reduce((sum, doc) => sum + (doc.sections || 0), 0)
   const tables = documents.reduce((sum, doc) => sum + (doc.tables || 0), 0)
@@ -134,8 +175,47 @@ const FinanceDocuments: React.FC = () => {
         <Title level={3} style={{ margin: 0 }}>语料覆盖</Title>
       </div>
       <Paragraph type="secondary" style={{ marginTop: 6, fontSize: 13 }}>
-        金融语料是固定的本地文档库。展开任意一行可以看到文档 ID、披露来源和解析器版本。
+        官方语料是固定的本地文档库；你也可以上传 PDF 临时扩大可查范围。展开任意一行可以看到文档
+        ID、披露来源和解析器版本。
       </Paragraph>
+
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <Space wrap>
+          <Input
+            placeholder="公司（可选）"
+            value={company}
+            onChange={(event) => setCompany(event.target.value)}
+            style={{ width: 160 }}
+            disabled={uploading}
+          />
+          <Input
+            placeholder="报告期，如 2025（可选）"
+            value={period}
+            onChange={(event) => setPeriod(event.target.value)}
+            style={{ width: 180 }}
+            disabled={uploading}
+          />
+          <Upload
+            accept=".pdf"
+            showUploadList={false}
+            disabled={uploading}
+            beforeUpload={(file) => {
+              void handleUpload(file as File)
+              return false
+            }}
+          >
+            <Button icon={<UploadOutlined />} loading={uploading}>
+              上传 PDF
+            </Button>
+          </Upload>
+          <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            仅支持文字版 PDF；扫描件暂不支持
+          </span>
+        </Space>
+        {uploadError ? (
+          <Alert type="error" showIcon message={uploadError} style={{ marginTop: 8 }} />
+        ) : null}
+      </Card>
 
       {loading ? (
         <div style={{ padding: 48, textAlign: 'center' }}><Spin /></div>
@@ -169,6 +249,8 @@ const FinanceDocuments: React.FC = () => {
                       文档 ID：<span style={{ fontFamily: 'var(--font-numeric)' }}>{row.doc_id}</span>
                     </div>
                     <div>章节数：{row.sections ?? '—'}</div>
+                    <div>来源：{row.origin === 'upload' ? '用户上传' : '官方语料'}</div>
+                    <div>解析版本：{row.pipeline_version || '—'}</div>
                     {row.source_url ? (
                       <div>
                         原始披露：

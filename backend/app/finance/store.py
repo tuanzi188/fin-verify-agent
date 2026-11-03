@@ -75,8 +75,11 @@ class FinanceStoreError(ValueError):
 
 
 class FinanceStore:
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, extra_roots: list[str | Path] | None = None):
         self.root = Path(root)
+        # 额外根目录：用户上传的文档与官方语料分开放（评测只读官方语料），
+        # 运行时把两边合成一个命名空间。额外根不存在时跳过，不影响主库。
+        self.extra_roots = [Path(item) for item in (extra_roots or [])]
         self._documents: dict[str, dict] = {}
         self._sections: dict[str, tuple[dict, dict]] = {}
         self._tables: dict[str, tuple[dict, dict]] = {}
@@ -87,15 +90,27 @@ class FinanceStore:
     # 加载
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _document_paths(root: Path) -> list[Path]:
+        return [root] if root.is_file() else sorted(root.glob("*/document.json"))
+
     def _load(self) -> None:
         if not self.root.exists():
             raise FinanceStoreError(f"文档库不存在: {self.root}")
 
-        paths = [self.root] if self.root.is_file() else sorted(self.root.glob("*/document.json"))
+        paths = self._document_paths(self.root)
         if not paths:
             raise FinanceStoreError(f"文档库里没有 document.json: {self.root}")
+        for extra in self.extra_roots:
+            if extra.exists():
+                paths.extend(self._document_paths(extra))
 
+        seen: set[Path] = set()
         for path in paths:
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
             try:
                 document = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -157,6 +172,8 @@ class FinanceStore:
                 "scope": document.get("scope"),
                 "restated": document.get("restated"),
                 "source_url": document.get("source_url"),
+                "origin": document.get("origin") or "corpus",
+                "pipeline_version": document.get("pipeline_version") or "",
                 "sections": len(document.get("sections") or []),
                 "tables": len(document.get("tables") or []),
             })
@@ -330,6 +347,8 @@ class FinanceStore:
             "caption": table.get("caption") or "",
             "unit": unit,
             "unit_source": unit_source,
+            "statement_scope": table.get("statement_scope") or "",
+            "statement_type": table.get("statement_type") or "",
             "footnote": table.get("footnote") or "",
             "bbox": table.get("bbox"),
             "columns": list(table.get("columns") or []),
@@ -358,8 +377,10 @@ class FinanceStore:
             "table_caption": table["caption"],
             "unit": table.get("unit", ""),
             "unit_source": table.get("unit_source", ""),
+            "statement_scope": table.get("statement_scope") or "",
+            "statement_type": table.get("statement_type") or "",
             "row": row_index,
-            "row_name": str(rows[row_index][0]) if rows[row_index] else "",
+            "row_name": self._row_label(rows[row_index]),
             "column": columns[column_index],
             "column_index": column_index,
             "value": value,
@@ -427,7 +448,7 @@ class FinanceStore:
             output_rows.append(
                 {
                     "row": index,
-                    "row_name": str(values[0]) if values else "",
+                    "row_name": self._row_label(values),
                     "values": [
                         values[column_index] if column_index < len(values) else None
                         for column_index in column_indices
@@ -446,6 +467,8 @@ class FinanceStore:
             "table_caption": table["caption"],
             "unit": table.get("unit", ""),
             "unit_source": table.get("unit_source", ""),
+            "statement_scope": table.get("statement_scope") or "",
+            "statement_type": table.get("statement_type") or "",
             "footnote": table.get("footnote") or "",
             "columns": [all_columns[index] for index in column_indices],
             "column_indices": column_indices,
@@ -453,6 +476,15 @@ class FinanceStore:
             "row_indices": row_indices,
             "total_rows": len(all_rows),
         }
+
+    @staticmethod
+    def _row_label(values: list[str]) -> str:
+        """行名：首列优先；首列为空时取第二列（合并单元格表常见）。"""
+        for cell in values[:2]:
+            text = str(cell).strip()
+            if text:
+                return text
+        return ""
 
     @staticmethod
     def _resolve_row(rows: list[list[str]], row: int | str) -> int:
@@ -466,6 +498,16 @@ class FinanceStore:
         # 先按首列名称匹配，再退回行号：金融表格里“2024”既可能是列名，也可能是行号。
         for index, values in enumerate(rows):
             if values and str(values[0]).strip() == text:
+                return index
+        # 有些表的行标签落在第 2 列：首列是合并单元格/空列，行名在下一列。
+        # 2026-11-03 实测比亚迪「营业收入构成」t0013：`营业收入合计` 在 col2，
+        # 按首列查会全部 not_found。只在首列为空的行上回退，避免误命中。
+        for index, values in enumerate(rows):
+            if (
+                len(values) > 1
+                and not str(values[0]).strip()
+                and str(values[1]).strip() == text
+            ):
                 return index
         if text.isdigit():
             return int(text)

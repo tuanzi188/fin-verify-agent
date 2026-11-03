@@ -42,6 +42,9 @@ from app.finance.tree import (
 
 PARSER_VERSION = "pymupdf-" + (fitz.__doc__ or "").split()[1].rstrip(":")
 TREE_VERSION = "v1"
+#: 解析规则版本。改 `_split_header` / `_align_columns` / 表头剥离等启发式时必须 bump；
+#: 它和 PARSER_VERSION（PyMuPDF 库版本）分开，否则规则变了产物却无法追溯。
+PIPELINE_VERSION = "2026-11-03.2"
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _UNIT_LINE_RE = re.compile(r"^[（(]?单位[：:）)]")
@@ -62,6 +65,9 @@ _CAPTION_MAX_GAP = 45.0
 _ROW_LABEL_COLUMN = "项目"
 # 多行合并表头：首行空格由后续表头行补齐，最多再收 2 行（且至少给 body 留一行）。
 _HEADER_FILL_MAX_EXTRA = 2
+# 段中第二段表头的单元格长度上限。超过它的行更像被换行拆开的正文（如“XX 律师事务所
+# 关于……的法律意见书”），不能当表头删。
+_EMBEDDED_HEADER_MAX_CHARS = 20
 # 数字样内容（金额/纯数/百分比/年份/日期），匹配前先去掉空白。表头续行不允许
 # 出现这些——把数据行吃进表头，比留下 colN 空名糟糕得多。
 _NUMBERY_RE = re.compile(
@@ -98,6 +104,45 @@ def _is_header_continuation(row: list[str]) -> bool:
     if not filled or (row and row[0]):
         return False
     return not any(_NUMBERY_RE.match(cell) for cell in filled)
+
+
+def _is_embedded_header_row(row: list[str], body: list[list[str]]) -> bool:
+    """表格中段的第二段表头（比亚迪「主要会计数据」下半段）。
+
+    年报常把同一张表拆成上下两段（上段 2025/2024 年度、下段 2025 年末/
+    2024 年末），下段表头留在数据区里。它会让全空列看起来"有值"
+    （1/N 行），`_align_columns` 于是保留 col3/col5 这些空列。
+
+    判定要保守：行首为空、至少 3 个短标签、无数字样内容，而且每个标签都落在
+    **其他行全空**的列上。最后一条把"换行拆开的正文行"挡在外面——2026-11-03
+    全库实测只有 3 张表命中，其中 1 张是正文长标题，再靠长度上限挡掉。
+    """
+    filled = [index for index, cell in enumerate(row) if str(cell).strip()]
+    if len(filled) < 3 or str(row[0]).strip():
+        return False
+    if any(
+        len(str(row[index]).replace(" ", "")) > _EMBEDDED_HEADER_MAX_CHARS
+        for index in filled
+    ):
+        return False
+    if not _is_header_continuation(row):
+        return False
+    return all(
+        all(
+            not (index < len(other) and str(other[index]).strip())
+            for other in body
+            if other is not row
+        )
+        for index in filled
+    )
+
+
+def _drop_embedded_header_rows(body: list[list[str]]) -> list[list[str]]:
+    """删掉数据区里的第二段表头行；至少留 2 行数据，避免把表吃空。"""
+    if len(body) < 3:
+        return body
+    kept = [row for row in body if not _is_embedded_header_row(row, body)]
+    return kept if len(kept) >= 2 else body
 
 
 def _fill_header_from_rows(
@@ -151,6 +196,7 @@ def _split_header(rows: list[list[str]]) -> tuple[list[str], list[list[str]]]:
     if not any(cell for cell in header):
         header = [""] * len(rows[0])
         body = rows[header_index:]
+    body = _drop_embedded_header_rows(body)
     merged, filled_body, used = _fill_header_from_rows(header, body)
     if used:
         columns, body_rows = _align_columns(merged, filled_body)
@@ -175,7 +221,11 @@ def _align_columns(header: list[str], body: list[list[str]]) -> tuple[list[str],
         total = 0.0
         for index, name in enumerate(header):
             target = index + shift
-            if name and 0 <= target < width:
+            # 第 0 列是行标签列，不参与位移打分：表头首格常因纵向合并而空
+            # （`项目` 丢失）。让它参与时 shift=-1 会把整个表头左移一格，
+            # 「第一季度」之类的列名落到行名列上，`get_cell` 取回的是行标签
+            # 文本而不是数值（2026-11-03 美的 t0008 实测）。
+            if name and target != 0 and 0 <= target < width:
                 total += fill[target]
         return total
 
@@ -367,6 +417,56 @@ _COL_MERGE_GAP = 30.0
 _HEADER_MAX_ROWS = 3
 _REBUILD_MIN_ROWS = 6
 _REBUILD_MAX_COLS = 9
+
+#: 表级口径/报表类型：财报里同一指标会在合并报表、母公司报表各出现一次，
+#: 不标出来，Agent 只能靠表名猜，容易给出“有页码的错误数字”。
+_STATEMENT_TYPE_HINTS = (
+    ("资产负债表", "balance_sheet"),
+    ("利润表", "income_statement"),
+    ("现金流量表", "cash_flow"),
+    ("所有者权益变动表", "equity_change"),
+    ("主要会计数据", "main_indicators"),
+    ("主要财务指标", "main_indicators"),
+)
+
+
+_STATEMENT_CONTEXT_GAP = 160.0
+_STATEMENT_CONTEXT_LINES = 12
+
+
+def _statement_meta(text: str, default_scope: str = "consolidated") -> tuple[str, str]:
+    """从表名/章节路径/表上方标题推导 (口径, 报表类型)。
+
+    文本按“离表格最近的标题在前”拼接；口径取最先出现的 `母公司` 或 `合并`，
+    避免同一页跨两张表时被更远的标题带偏。
+    """
+    scope = default_scope or "consolidated"
+    parent_at = text.find("母公司")
+    consolidated_at = text.find("合并")
+    if parent_at != -1 and (consolidated_at == -1 or parent_at < consolidated_at):
+        scope = "parent"
+    elif consolidated_at != -1:
+        scope = "consolidated"
+    statement = "other"
+    for hint, value in _STATEMENT_TYPE_HINTS:
+        if hint in text:
+            statement = value
+            break
+    return scope, statement
+
+
+def _statement_context(bbox: tuple, page_lines: list[Line]) -> str:
+    """表格上方的最近 12 行文本（就近优先），用于识别「母公司现金流量表」这类标题。"""
+    _, y0, _, _ = bbox
+    candidates = [
+        line
+        for line in page_lines
+        if line.y1 <= y0 + 2
+        and y0 - line.y1 <= _STATEMENT_CONTEXT_GAP
+        and line.text.strip()
+    ]
+    candidates.sort(key=lambda item: item.y1, reverse=True)
+    return " ".join(line.text.strip() for line in candidates[:_STATEMENT_CONTEXT_LINES])
 
 
 def _is_amount(text: str) -> bool:
@@ -637,6 +737,29 @@ def ingest_pdf(pdf_path: str | Path, metadata: dict) -> dict:
             x0, y0, _, _ = table["bbox"]
             table["section_id"] = _locate_section(sections, table["page"], y0)
             by_section.setdefault(table["section_id"], []).append(table["table_id"])
+        # 表级口径/类型要在 section_id 加文档前缀之前算：这里还拿得到本地路径。
+        section_paths = {
+            str(section.get("section_id") or ""): " ".join(
+                str(part) for part in section.get("path") or []
+            )
+            for section in sections
+        }
+        page_lines: dict[int, list[Line]] = {}
+        for line in lines:
+            page_lines.setdefault(line.page, []).append(line)
+        default_scope = str(metadata.get("scope") or "consolidated")
+        for table in tables:
+            context = _statement_context(
+                tuple(table["bbox"]), page_lines.get(int(table["page"]), [])
+            )
+            hint = (
+                f"{context} "
+                f"{table.get('caption') or ''} "
+                f"{section_paths.get(str(table.get('section_id') or ''), '')}"
+            )
+            scope, statement = _statement_meta(hint, default_scope)
+            table["statement_scope"] = scope
+            table["statement_type"] = statement
         for section in sections:
             section["table_ids"] = by_section.get(section["section_id"], [])
 
@@ -676,6 +799,7 @@ def ingest_pdf(pdf_path: str | Path, metadata: dict) -> dict:
             "body_font_size": size,
             "raw_chars": sum(len(line.text) for line in lines),
             "parser_version": PARSER_VERSION,
+            "pipeline_version": PIPELINE_VERSION,
             "tree_version": TREE_VERSION,
             "sha256": metadata.get("sha256"),
             "sections": sections,

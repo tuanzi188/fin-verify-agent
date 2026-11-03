@@ -17,6 +17,7 @@ from app.finance.ingest import (  # noqa: E402
     _is_header_continuation,
     _merge_continuations,
     _split_header,
+    _statement_meta,
     ingest_pdf,
     summarize,
     write_document,
@@ -104,6 +105,66 @@ def test_align_columns_shifts_merged_header():
     assert columns == ["项目", "2025 年", "2024 年"]
     assert rows[0] == ["营业收入", "1,234", "1,000"]
     assert rows[1] == ["净利润", "120", "100"]
+
+
+def test_align_columns_returns_row_label_column_to_header():
+    """表头首格为空时不能整体左移：否则「第一季度」会落到行名列上。
+
+    2026-11-03 实测美的 t0008：列名变成 ['第一季度', …, 'col5']，
+    `get_cell('营业收入', '第一季度')` 取回的是行标签文本。
+    """
+    header = ["", "第一季度", "第二季度", "第三季度", "第四季度"]
+    body = [
+        ["营业收入", "127,838,538", "123,285,176", "111,933,037", "93,394,980"],
+        ["净利润", "12,422,233", "13,591,457", "11,869,693", "6,062,028"],
+    ]
+    columns, rows = _align_columns(header, body)
+    assert columns == ["项目", "第一季度", "第二季度", "第三季度", "第四季度"]
+    assert rows[0][0] == "营业收入"
+
+
+def test_split_header_drops_embedded_second_segment_header():
+    """段中第二段表头（比亚迪「主要会计数据」下半段）不能留在数据区。
+
+    它会填满本应全空的列，`_align_columns` 因此保留 col3/col5 空列，
+    整张表从 5 列膨胀到 9 列。
+    """
+    rows = [
+        ["", "", "", "", "2025 年", "", "", "2024 年", "", "", "2023 年", ""],
+        ["", "营业收入", "", "100", "", "", "90", "", "", "80", "", ""],
+        ["", "总资产", "", "200", "", "", "180", "", "", "150", "", ""],
+        ["", "", "", "", "2025 年末", "", "", "2024 年末", "", "", "2023 年末", ""],
+        ["", "净资产", "", "50", "", "", "40", "", "", "30", "", ""],
+    ]
+    columns, body = _split_header(rows)
+    assert columns == ["项目", "2025 年", "2024 年", "2023 年"]
+    assert len(body) == 3
+    assert all(row[0] for row in body)
+
+
+def test_split_header_keeps_wrapped_text_rows():
+    """换行拆开的正文行不能被当成第二段表头删掉（全库实测的假阳性）。"""
+    rows = [
+        ["项目", "2025 年", "2024 年", "说明"],
+        ["营业收入", "100", "90", ""],
+        ["总资产", "200", "180", ""],
+        ["", "北京市中伦（深圳）律师事务所关于比亚迪股份有限公司2025年第二次临时股东会的法律意见书", "2025 年12 月6 日", "巨潮资讯网（www.cninfo.com.cn）"],
+        ["净资产", "50", "40", ""],
+    ]
+    columns, body = _split_header(rows)
+    assert len(body) == 4
+    assert body[2][0] == ""
+
+
+def test_statement_meta_derives_scope_and_type():
+    """表级口径：合并/母公司从表名或章节路径推导，不靠模型猜。"""
+    assert _statement_meta("母公司现金流量表", "consolidated") == ("parent", "cash_flow")
+    assert _statement_meta("合并资产负债表", "parent") == ("consolidated", "balance_sheet")
+    assert _statement_meta("（一）主要会计数据", "consolidated") == (
+        "consolidated",
+        "main_indicators",
+    )
+    assert _statement_meta("营业收入构成", "consolidated") == ("consolidated", "other")
 
 
 def test_drop_empty_columns_removes_blank_placeholder_columns():

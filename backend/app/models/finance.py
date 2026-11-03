@@ -87,7 +87,22 @@ class EvidenceRef(BaseModel):
     cell_text: Optional[str] = None
     unit: str = ""
     footnote: str = ""
+    #: 表级口径/类型：consolidated|parent / balance_sheet|income_statement|...
+    statement_scope: str = ""
+    statement_type: str = ""
     content: str = ""
+    #: 逐字原文摘录。校验规则：必须是 content / 表格行 / 单元格的精确子串。
+    #: 页码可以缺，但这句原文不能缺——它才是“有原文依据”的硬证据。
+    quote: str = ""
+    #: quote 能否在解析产物里逐字找到。False 时只能当线索，不能当证据。
+    quote_verified: bool = False
+    #: quote 在“同一份文件”里出现的次数（不跨文件去重：多份文件一致是佐证）。
+    quote_occurrences: int = 0
+    #: 同文件内出现多次、且 locator 不足以区分落点时为 True。
+    quote_ambiguous: bool = False
+    #: 可选定位。PDF: {"page": 11}；XLSX: {"sheet": "...", "cell": "B12"}；
+    #: DOCX: {"paragraph": 37}。locator 只用于展示/跳转，不参与正确性判定。
+    locator: Dict[str, Any] = Field(default_factory=dict)
     source_spans: List[SourceSpan] = Field(default_factory=list)
     table_preview: Optional[TablePreview] = None
     # verified=True 只表示“坐标来自解析表格/单元格”，不表示模型结论正确。
@@ -237,3 +252,17 @@ class LabRunSummary(BaseModel):
     artifact: Optional[str] = None
     compare_artifact: Optional[str] = None
     message: Optional[str] = None
+
+
+class FinanceDocumentUploadResponse(BaseModel):
+    """上传解析结果：只回传用户能判断“能不能用”的字段。"""
+
+    doc_id: str
+    filename: str
+    status: str
+    sections: int = 0
+    tables: int = 0
+    raw_chars: int = 0
+    pipeline_version: str = ""
+    warnings: List[str] = Field(default_factory=list)
+    message: str = ""

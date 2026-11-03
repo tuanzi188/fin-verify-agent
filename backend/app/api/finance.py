@@ -17,7 +17,8 @@ import asyncio
 import logging
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from app.core.conversation_scope import ConversationNamespace
 from app.core.user_context import extract_user_context
@@ -26,6 +27,7 @@ from app.finance.routing_policy import initial_decision, response_upgrade
 from app.models.finance import (
     FinanceChatRequest,
     FinanceChatResponse,
+    FinanceDocumentUploadResponse,
     FinanceEvidenceResponse,
 )
 from app.services.audit_logger import AuditAction, AuditEvent, AuditStatus, audit_logger
@@ -35,6 +37,7 @@ from app.services.finance_corpus import (
     document_inventory,
     get_finance_store,
     index_fingerprint,
+    reset_cache,
 )
 from app.services.finance_corpus import (
     stats as finance_stats,
@@ -42,6 +45,7 @@ from app.services.finance_corpus import (
 from app.services.finance_entry import build_evidence, run_finance_query
 from app.services.finance_history import build_history_payload
 from app.services.finance_rag import run_structured_rag
+from app.services.finance_upload import UploadError, save_and_parse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -248,6 +252,40 @@ async def list_finance_documents():
     except Exception as exc:
         logger.exception("Finance documents failed")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@router.post(
+    "/finance/documents",
+    response_model=FinanceDocumentUploadResponse,
+    status_code=201,
+)
+async def upload_finance_document(
+    file: UploadFile = File(...),  # noqa: B008 - FastAPI 依赖注入的标准写法
+    company: str = Form(""),
+    period: str = Form(""),
+    doc_type: str = Form("annual_report"),
+    force: bool = Form(False),
+):
+    """上传一份 PDF：解析 → QC → 并入运行时语料。单用户演示级，不做 per-user ACL。"""
+    data = await file.read()
+    try:
+        result = await run_in_threadpool(
+            save_and_parse,
+            file.filename or "upload.pdf",
+            data,
+            company=company,
+            period=period,
+            doc_type=doc_type,
+            force=force,
+        )
+    except UploadError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        logger.exception("Finance document upload failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+    # 语料/块索引都是进程内缓存：上传成功后必须清一次，下一次请求才会看到新文档。
+    reset_cache()
+    return result
 
 
 @router.get("/finance/evidence", response_model=FinanceEvidenceResponse)

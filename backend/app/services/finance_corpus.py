@@ -19,6 +19,7 @@ from pathlib import Path
 from app.config import DATA_DIR
 from app.finance.block_index import BlockIndex
 from app.finance.store import FinanceStore
+from app.services.finance_upload import upload_root
 
 
 class FinanceCorpusError(RuntimeError):
@@ -41,8 +42,11 @@ def get_finance_store() -> FinanceStore:
             "python -m scripts.ingest_finance_corpus 或设置 FINANCE_DOCUMENT_DIR"
         )
     try:
-        return FinanceStore(root)
-    except Exception as exc:  # noqa: BLE001 - 统一转成可读的语料错误
+        # 官方语料 + 用户上传合成一个运行时命名空间；上传目录不存在时跳过。
+        # 评测侧不走这里，仍然只读 official documents。
+        extra = [upload_root()] if upload_root().exists() else []
+        return FinanceStore(root, extra_roots=extra)
+    except Exception as exc:  # 统一转成可读的语料错误
         raise FinanceCorpusError(f"金融语料加载失败: {exc}") from exc
 
 

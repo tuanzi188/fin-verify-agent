@@ -151,7 +151,21 @@ export interface EvidenceRef {
   cell_text?: string | null
   unit: string
   footnote: string
+  /** 表级口径：consolidated / parent */
+  statement_scope?: string
+  /** 表级报表类型：balance_sheet / income_statement / cash_flow / ... */
+  statement_type?: string
   content: string
+  /** 逐字原文摘录：必须能在 content / 表格行里逐字找到。旧历史载荷可能没有。 */
+  quote?: string
+  /** quote 是否通过逐字校验。False 时只能当线索。 */
+  quote_verified?: boolean
+  /** 同一份文件内 quote 出现的次数；跨文件不去重。 */
+  quote_occurrences?: number
+  /** 同文件内重复且 locator 不足以区分落点。 */
+  quote_ambiguous?: boolean
+  /** 可选定位：PDF 用 page，XLSX 用 sheet/cell，DOCX 用 paragraph。 */
+  locator?: Record<string, unknown>
   source_spans: SourceSpan[]
   table_preview?: TablePreview | null
   verified: boolean
@@ -238,6 +252,36 @@ export interface FinanceDocumentInfo {
   sections: number
   tables: number
   status: string
+  origin?: 'corpus' | 'upload' | string
+  pipeline_version?: string
+}
+
+export interface FinanceDocumentUploadResult {
+  doc_id: string
+  filename: string
+  status: string
+  sections: number
+  tables: number
+  raw_chars: number
+  pipeline_version?: string
+  warnings: string[]
+  message: string
+}
+
+export async function uploadFinanceDocument(
+  file: File,
+  meta: { company?: string; period?: string; docType?: string } = {},
+): Promise<FinanceDocumentUploadResult> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('company', meta.company || '')
+  form.append('period', meta.period || '')
+  form.append('doc_type', meta.docType || 'annual_report')
+  const { data } = await api.post<FinanceDocumentUploadResult>('/finance/documents', form, {
+    // 解析 200 页年报可能超过默认 60s；上传单独放宽。
+    timeout: 300000,
+  })
+  return data
 }
 
 export async function sendFinanceChat(
