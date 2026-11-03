@@ -33,6 +33,9 @@ BM25_K1 = 1.2
 BM25_B = 0.75
 RRF_K = 60
 CANDIDATE_DEPTH = 60
+#: 表块在 RRF 融合后的加权（2026-11-03）。查数题的答案在表里；核心财务表
+#: 常被利润表/附注挤出 top-k。1.06 只打破接近的平局，不改变明显更相关的排序。
+TABLE_BLOCK_BOOST = 1.06
 STOPWORD_DF_RATIO = 0.5
 BGE_QUERY_PREFIX = "为这个句子生成表示以用于检索相关文章："
 INDEX_VERSION = "finance-blocks-v1"
@@ -128,7 +131,12 @@ def row_groups(row_count: int) -> list[list[int]]:
     return groups
 
 
-def _table_content(document: dict, table: dict, row_indices: list[int], column_indices: list[int]) -> str:
+def _table_content(
+    document: dict,
+    table: dict,
+    row_indices: list[int],
+    column_indices: list[int],
+) -> str:
     columns = [str(table.get("columns", [])[index]) for index in column_indices]
     unit = str(table.get("unit") or document.get("unit") or "未标注")
     lines = [
@@ -474,6 +482,13 @@ class BlockIndex:
         ):
             for rank, index in enumerate(ranked, 1):
                 fused[index] = fused.get(index, 0.0) + 1.0 / (RRF_K + rank)
+        # 表块小幅加权（2026-11-03）：查数题的答案在表里，但"主要会计数据"
+        # 这类核心表常被利润表/附注挤出 top-k（实测 FIN-S02 金标 rank 5、
+        # FIN-S03/S06/S07/S10 不在 top20）。1.06 只打破接近的平局，
+        # 不会让表块压过明显更相关的正文段。
+        for index in fused:
+            if self.blocks[index].get("kind") == "table_rows":
+                fused[index] *= TABLE_BLOCK_BOOST
         ordered = sorted(fused.items(), key=lambda item: item[1], reverse=True)
         # 先每个文档取一个最优块，再按来源去重补足。
         # 跨文档题如果被同一份年报的多个窗口占满 top-k，另一份文档永远进不来；

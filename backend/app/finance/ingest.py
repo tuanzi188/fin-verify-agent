@@ -208,6 +208,29 @@ def _align_columns(header: list[str], body: list[list[str]]) -> tuple[list[str],
     return unique, trimmed
 
 
+def _drop_empty_columns(grid: list[list[str]]) -> list[list[str]]:
+    """删掉整列为空的列（行名列除外）。
+
+    rect 重建路径把每个文本 anchor 当一列：PDF 的列间距、合并单元格残留
+    都会造出只有表头、数据行全空的列（2026-11-03 比亚迪 2025 的 t0007：
+    9 列里 4 列全空，列名是 col3/col5/col7/col9）。空列会让表块内容变长、
+    检索相似度被稀释，也让 get_rows 返回一串空串。
+
+    只删「所有数据行都为空」的列；有一行有值就保留——那可能是真正稀疏的列。
+    """
+    if not grid or len(grid) < 2:
+        return grid
+    width = len(grid[0])
+    body = grid[1:]
+    keep = [0]  # 行名列永远保留
+    for index in range(1, width):
+        if any(index < len(row) and str(row[index]).strip() for row in body):
+            keep.append(index)
+    if len(keep) == width:
+        return grid
+    return [[row[index] if index < len(row) else "" for index in keep] for row in grid]
+
+
 def _caption_for(table_bbox: tuple, page_lines: list[Line], repeated: set[str]) -> str:
     """表标题：紧贴表格上方的那一行。取不到就留空，不猜。"""
     x0, y0, _, _ = table_bbox
@@ -491,6 +514,7 @@ def _grid_from_words(words: list[tuple]) -> tuple[list[list[str]], tuple] | None
     grid = [columns]
     for row in kept[first_data:]:
         grid.append([row["name"][4]] + place(row["rest"]))
+    grid = _drop_empty_columns(grid)
 
     every = [word for row in kept for word in [row["name"]] + row["rest"]]
     bbox = (

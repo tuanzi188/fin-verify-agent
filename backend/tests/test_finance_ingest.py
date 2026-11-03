@@ -13,6 +13,7 @@ fitz = pytest.importorskip("fitz")
 
 from app.finance.ingest import (  # noqa: E402
     _align_columns,
+    _drop_empty_columns,
     _is_header_continuation,
     _merge_continuations,
     _split_header,
@@ -103,6 +104,32 @@ def test_align_columns_shifts_merged_header():
     assert columns == ["项目", "2025 年", "2024 年"]
     assert rows[0] == ["营业收入", "1,234", "1,000"]
     assert rows[1] == ["净利润", "120", "100"]
+
+
+def test_drop_empty_columns_removes_blank_placeholder_columns():
+    """整列为空的列要删掉：rect 重建路径会造出 col3/col5 这类空列。
+
+    2026-11-03 实测：比亚迪 2025 的 t0007 是 9 列、其中 4 列数据行全空。
+    """
+    grid = [
+        ["项目", "2025 年", "col3", "2024 年", "col5"],
+        ["营业收入", "100", "", "90", ""],
+        ["净利润", "10", "", "9", ""],
+    ]
+    out = _drop_empty_columns(grid)
+    assert out[0] == ["项目", "2025 年", "2024 年"]
+    assert out[1] == ["营业收入", "100", "90"]
+    assert out[2] == ["净利润", "10", "9"]
+
+
+def test_drop_empty_columns_keeps_sparse_columns():
+    """有一行有值的列不能删：稀疏列可能只在个别行出现。"""
+    grid = [
+        ["项目", "A", "B"],
+        ["x", "1", ""],
+        ["y", "", "2"],
+    ]
+    assert _drop_empty_columns(grid) == grid
 
 
 def test_split_header_fills_merged_multiline_header():
