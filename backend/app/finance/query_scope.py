@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
 _SCOPE_YEAR = re.compile(r"(?<!\d)(20\d{2})(?!\d)")
 _SCOPE_QUARTER = re.compile(
     r"Q\s*([1-4])|第?([一二三四1234])季度|([一二三四1234])季报", re.IGNORECASE
 )
 _SCOPE_METRIC = re.compile(
-    r"营业收入|营业成本|归母净利润|净利润|经营活动(?:产生的)?现金流量净额|现金流|毛利率|净利率|净资产收益率|每股收益|研发投入|总资产|总负债|收入|利润|资产|负债"
+    r"营业收入|营业成本|归母净利润|净利润|经营活动(?:产生的)?现金流量净额|现金流|毛利率|净利率|净资产收益率|每股收益|研发投入|研发费用|总资产|总负债|资产负债率|应收账款|存货|商誉|股权激励|分红|派息|股息|转股|收入|利润|资产|负债"
 )
 
 
@@ -132,6 +133,8 @@ def unknown_scope_company(question: str, documents: list[dict]) -> str:
     if metric:
         before_metric = question[: metric.start()].strip()
         before_metric = re.sub(r"^(?:请问|请查|查询|核查|查证)\s*", "", before_metric)
+        # 「格力电器的分红派息」——主体和指标之间常带「的」，先剥掉再判。
+        before_metric = before_metric.rstrip("的").strip()
         if re.fullmatch(r"[\u4e00-\u9fffA-Za-z]{2,16}", before_metric) and not any(
             word in before_metric
             for word in (
@@ -155,9 +158,54 @@ def unknown_scope_company(question: str, documents: list[dict]) -> str:
                 "最近",
                 "一下",
                 "总",
+                "它",
+                "那",
+                "这",
+                "该",
+                "去年",
+                "今年",
+                "上年",
+                "上一年",
+                "前年",
+                "本年",
+                "当年",
+                "最新",
+                "同期",
+                "可转债",
+                "转债",
+                "债券",
+                "债",
+                "股权激励",
+                "期权",
+                "行权",
+                "授予",
+                "回购",
+                "分红",
+                "派息",
+                "股息",
             )
         ):
             return before_metric
+    return ""
+
+
+# 年报「分季度主要财务指标」按季披露的指标：营业收入/归母净利润/经营现金流。
+# 这类季度问题可以直接用年报回答；毛利率等未按季披露的才走"没有季报"边界。
+_QUARTER_DISCLOSED_METRIC = re.compile(
+    r"营业收入|营业总收入|归母净利润|归属于上市公司股东的净利润|"
+    r"经营活动(?:产生的)?现金流量净额|经营现金流"
+)
+
+
+def _relative_year(question: str, available_years: set[str]) -> str:
+    """把相对期间解析成具体年份；解析不了返回空串，交给上游澄清。"""
+    match = re.search(r"去年|上一年|前年|今年|本年", question)
+    if match:
+        token = match.group()
+        offset = {"前年": 2, "今年": 0, "本年": 0}.get(token, 1)
+        return str(datetime.now().year - offset)
+    if re.search(r"最新一期|最近一期|最新|最近", question) and available_years:
+        return max(available_years)
     return ""
 
 
@@ -255,6 +303,15 @@ def prepare_finance_scope(
         if covered
         else set()
     )
+    # 相对期间确定性解析（零成本、可复现）：去年/前年按当前年份推算，
+    # 「最新一期」映射到语料最新覆盖年份。真实用户高频省略年份，不能一律澄清。
+    if not years:
+        relative_year = _relative_year(resolved, available_years)
+        if relative_year:
+            years = {relative_year}
+            resolved = f"{relative_year} 年 " + resolved
+            base["resolved_query"] = resolved
+            base["years"] = tuple(sorted(years))
     if years and available_years and max(years) > max(available_years):
         return FinanceQuestionScope(
             **base,
@@ -277,7 +334,11 @@ def prepare_finance_scope(
                 or bool(scope_years(str(document.get("period") or "")) & years)
             )
         ]
-        if not quarter_documents:
+        # 季报没有，但年报的「分季度主要财务指标」披露了当季营业收入/
+        # 归母净利润/经营现金流——这类问题能用年报回答；只有未按季披露的
+        # 指标（如毛利率）才拒答。2026-11-03 修正：原规则一票拒答，把
+        # FIN-09/CX-02 这类可答题也拦了。
+        if not quarter_documents and not _QUARTER_DISCLOSED_METRIC.search(resolved):
             return FinanceQuestionScope(
                 **base,
                 blocked_reason=f"本地没有与指定期间匹配的 {quarter} 季报；现有年报不能直接替代该季度披露。",

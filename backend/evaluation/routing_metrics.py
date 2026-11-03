@@ -137,7 +137,9 @@ def _prf(confusion: dict[str, dict[str, int]], label: str) -> dict:
     )
     precision = ratio(true_positive, true_positive + false_positive)
     recall = ratio(true_positive, true_positive + false_negative)
-    if precision is None or recall is None or precision + recall == 0:
+    if true_positive == 0 and false_negative > 0:
+        f1 = 0.0
+    elif precision is None or recall is None or precision + recall == 0:
         f1 = 0.0 if (precision is not None and recall is not None) else None
     else:
         f1 = 2 * precision * recall / (precision + recall)

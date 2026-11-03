@@ -16,32 +16,32 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.core.conversation_scope import ConversationNamespace
 from app.core.user_context import extract_user_context
+from app.finance.query_scope import prepare_finance_scope
+from app.finance.routing_policy import initial_decision, response_upgrade
 from app.models.finance import (
     FinanceChatRequest,
     FinanceChatResponse,
     FinanceEvidenceResponse,
 )
 from app.services.audit_logger import AuditAction, AuditEvent, AuditStatus, audit_logger
+from app.services.conversation_memory import conversation_memory
 from app.services.finance_corpus import (
     FinanceCorpusError,
     document_inventory,
     get_finance_store,
     index_fingerprint,
+)
+from app.services.finance_corpus import (
     stats as finance_stats,
 )
 from app.services.finance_entry import build_evidence, run_finance_query
-from app.services.finance_rag import run_structured_rag
-from app.services.finance_router import decide_strategy
-from app.finance.claim_consistency import check_response
-from app.finance.query_scope import prepare_finance_scope
-from app.services.conversation_memory import conversation_memory
 from app.services.finance_history import build_history_payload
+from app.services.finance_rag import run_structured_rag
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -50,31 +50,13 @@ router = APIRouter()
 ESCALATE_ON_STRUCTURED_FAILURE = True
 
 
-def _escalation_reason(response: FinanceChatResponse) -> Optional[str]:
-    """结构检索的结果够不够格直接交付；够就返回 None。
-
-    两条判据，按代价从小到大：
-
-    1. 没拿到可用证据（检索为空 / 执行失败）—— 一定升级，否则用户看到的是
-       "资料不足"，而资料其实在库里（实测：资产总计块在块检索里排第 18 位）。
-    2. 答了，但结论里的数字对不上它引用的单元格 —— 复用绑定级一致性校验器；
-       不升级等于把"有页码的错误数字"直接交付，这是查证类产品最坏的失败形态。
-    """
-    if response.status == "error":
-        return "结构检索执行失败"
-    if response.status == "abstained" and not response.citations:
-        return "结构检索没有取得可用证据"
-    report = check_response(response)
-    if report.get("mismatched"):
-        detail = next(
-            (row for row in report.get("details") or [] if row.get("result") == "mismatch"),
-            {},
-        )
-        return f"结论与引用不一致（{detail.get('raw') or '数值'}）"
-    return None
+def _escalation_reason(response: FinanceChatResponse) -> str | None:
+    """只接收可枚举的修复理由；执行故障、澄清和语料越界不自动升级。"""
+    decision = response_upgrade(response)
+    return decision["reason"] if decision["upgrade"] else None
 
 
-def _parse_values(raw: Optional[str], *, numeric: bool = True) -> list[int | str]:
+def _parse_values(raw: str | None, *, numeric: bool = True) -> list[int | str]:
     if not raw:
         return []
     values: list[int | str] = []
@@ -96,7 +78,7 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
     started_at = asyncio.get_event_loop().time()
     status = AuditStatus.SUCCESS
     error_message = ""
-    response: Optional[FinanceChatResponse] = None
+    response: FinanceChatResponse | None = None
     strategy = body.strategy
     route_reason = ""
 
@@ -108,6 +90,11 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
                 last_turn = previous["turns"][-1]
                 previous_query = str((last_turn.get("payload") or {}).get("resolved_query") or last_turn.get("query") or "")
         scope = prepare_finance_scope(body.query, get_finance_store().list_documents(), previous_query)
+        initial = initial_decision(body.query, get_finance_store().list_documents(), previous_query)
+        if body.strategy == "auto" and initial.initial_path in ("clarify", "abstain"):
+            from dataclasses import replace
+
+            scope = replace(scope, blocked_reason=initial.reason, clarify=initial.initial_path == "clarify")
         if scope.blocked_reason:
             response = FinanceChatResponse(
                 status="clarified" if scope.clarify else "abstained",
@@ -123,7 +110,7 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
                 payload=build_history_payload(response, corpus_fingerprint=index_fingerprint()),
             )
         elif strategy == "auto":
-            strategy, route_reason = decide_strategy(scope.resolved_query, get_finance_store())
+            strategy, route_reason = initial.initial_path, initial.reason
         elif strategy == "structured_rag":
             route_reason = "显式指定结构检索"
         else:
@@ -149,6 +136,8 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
                 else None
             )
             if escalation:
+                preliminary_usage = response.token_usage or {}
+                preliminary_duration = response.duration_ms
                 escalated = await run_finance_query(
                     query=scope.resolved_query,
                     original_query=body.query,
@@ -158,11 +147,28 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
                     search_mode=body.search_mode,
                     route_reason=f"{route_reason}；{escalation}，升级多步查证",
                     corpus_fingerprint=index_fingerprint(),
+                    persist=False,
                 )
                 escalated.notes = list(escalated.notes or []) + [
                     f"escalated_from_structured_rag:{escalation}"
                 ]
+                escalated.duration_ms += preliminary_duration
+                escalated.token_usage = {
+                    **(escalated.token_usage or {}),
+                    **{key: int((escalated.token_usage or {}).get(key) or 0) + int(preliminary_usage.get(key) or 0)
+                       for key in ("prompt_tokens", "completion_tokens", "total_tokens", "llm_calls")},
+                }
+                escalated.verification["routing"] = {
+                    "initial_path": "structured_rag", "upgraded": True,
+                    "reason": escalation, "preliminary_duration_ms": preliminary_duration,
+                    "preliminary_token_usage": preliminary_usage,
+                }
                 response = escalated
+                if response.status != "error" and response.answer:
+                    await conversation_memory.add_turn(
+                        scoped_conversation_id, body.query, response.answer,
+                        payload=build_history_payload(response, corpus_fingerprint=index_fingerprint()),
+                    )
             elif response.status != "error" and response.answer:
                 await conversation_memory.add_turn(
                     scoped_conversation_id,
@@ -191,7 +197,7 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
         status = AuditStatus.DENIED if exc.status_code == 403 else AuditStatus.FAILURE
         error_message = str(exc.detail)
         raise
-    except Exception as exc:  # noqa: BLE001 - 入口层统一记录并返回 500
+    except Exception as exc:
         status = AuditStatus.FAILURE
         error_message = str(exc)
         logger.exception("Finance chat failed")
@@ -228,7 +234,7 @@ async def get_finance_stats():
         return finance_stats()
     except FinanceCorpusError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Finance stats failed")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
 
@@ -239,17 +245,17 @@ async def list_finance_documents():
         return {"documents": document_inventory()}
     except FinanceCorpusError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Finance documents failed")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/finance/evidence", response_model=FinanceEvidenceResponse)
 async def get_finance_evidence(
-    evidence_id: Optional[str] = Query(default=None, description="章节/表格/行组/单元格锚点"),
-    table_id: Optional[str] = Query(default=None, description="按表格取证据"),
-    rows: Optional[str] = Query(default=None, description="行号或行名，逗号分隔"),
-    columns: Optional[str] = Query(default=None, description="列号或列名，逗号分隔"),
+    evidence_id: str | None = Query(default=None, description="章节/表格/行组/单元格锚点"),
+    table_id: str | None = Query(default=None, description="按表格取证据"),
+    rows: str | None = Query(default=None, description="行号或行名，逗号分隔"),
+    columns: str | None = Query(default=None, description="列号或列名，逗号分隔"),
 ):
     if not evidence_id and not table_id:
         raise HTTPException(status_code=400, detail="evidence_id 或 table_id 至少提供一个")
@@ -278,6 +284,6 @@ async def get_finance_evidence(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except HTTPException:
         raise
-    except Exception as exc:  # noqa: BLE001 - 未知锚点/坐标越界都是 404
+    except Exception as exc:
         logger.warning("Finance evidence failed: %s", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc

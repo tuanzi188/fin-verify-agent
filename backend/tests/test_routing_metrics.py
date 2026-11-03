@@ -9,7 +9,7 @@ from evaluation.routing_metrics import (
 
 class FakeStore:
     def list_documents(self):
-        return [{"period": "2025"}]
+        return [{"company": "美的集团", "period": "2025", "code": "000333"}]
 
 
 def make_task(task_id, query_type, question, **overrides):
@@ -70,12 +70,12 @@ def test_evaluate_confusion_and_cost_types():
     assert summary["tasks"] == 4
     assert summary["correct"] == 2
     assert summary["accuracy"] == 0.5
-    assert summary["macro_f1"] == 0.5
-    assert summary["confusion"]["structured_rag"]["agent"] == 1
-    assert summary["confusion"]["agent"]["structured_rag"] == 1
-    assert summary["cost_breakdown"] == {"simple_to_agent": 1, "complex_to_rag": 1}
+    assert summary["macro_f1"] == 0.3333
+    assert summary["confusion"]["structured_rag"]["agent"] == 0
+    assert summary["confusion"]["agent"]["structured_rag"] == 2
+    assert summary["cost_breakdown"] == {"simple_to_agent": 0, "complex_to_rag": 2}
     assert summary["excluded_count"] == 2
-    assert {row["task_id"] for row in summary["errors"]} == {"T3", "T4"}
+    assert {row["task_id"] for row in summary["errors"]} == {"T2", "T4"}
 
 
 def test_evaluate_from_compare_uses_empirical_winners():

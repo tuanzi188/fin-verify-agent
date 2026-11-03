@@ -550,6 +550,7 @@ async def run_finance_query(
     route_reason: str = "",
     corpus_fingerprint: str = "",
     original_query: Optional[str] = None,
+    persist: bool = True,
 ) -> FinanceChatResponse:
     store = get_finance_store()
     block_index = get_block_index() if search_mode == "blocks" else None
@@ -640,7 +641,7 @@ async def run_finance_query(
     from app.services.finance_validation import validate_finance_response
 
     validate_finance_response(response)
-    if status != "error" and answer:
+    if persist and status != "error" and answer:
         await conversation_memory.add_turn(
             conversation_id,
             original_query if original_query is not None else query,

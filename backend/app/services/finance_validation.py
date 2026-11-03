@@ -61,11 +61,11 @@ def validate_finance_response(response: FinanceChatResponse) -> None:
     for calculation_index in calculation_markers(response.answer):
         if not 0 <= calculation_index < len(response.calc):
             issues.append(
-                {"reason": "计算编号无法回查", "calculation_index": calculation_index}
+                {"code": "citation_missing", "reason": "计算编号无法回查", "calculation_index": calculation_index}
             )
     for marker in reference_markers(response.answer):
         if marker not in citations:
-            issues.append({"reason": "引用编号无法回查", "marker": marker})
+            issues.append({"code": "citation_missing", "reason": "引用编号无法回查", "marker": marker})
     for index, claim in enumerate(response.claims):
         values = finance_claim_values(claim.text)
         pool: list[tuple[Decimal, str]] = []
@@ -86,7 +86,7 @@ def validate_finance_response(response: FinanceChatResponse) -> None:
             calc = response.calc[claim.calc_index]
             if not calc.recomputed or calc.grounding_status != "complete":
                 issues.append(
-                    {"claim_index": index, "reason": "计算公式或输入来源尚未完整验证"}
+                    {"code": "input_source_missing", "claim_index": index, "reason": "计算公式或输入来源尚未完整验证"}
                 )
             pool.extend(
                 (value, calc.unit or unit)
@@ -94,7 +94,7 @@ def validate_finance_response(response: FinanceChatResponse) -> None:
             )
         if not claim.citation_markers and calc is None:
             issues.append(
-                {"claim_index": index, "reason": "要点缺少明确引用或计算记录"}
+                {"code": "citation_missing", "claim_index": index, "reason": "要点缺少明确引用或计算记录"}
             )
         for value, unit in values:
             checked += 1
@@ -116,6 +116,7 @@ def validate_finance_response(response: FinanceChatResponse) -> None:
                 issues.append(
                     {
                         "claim_index": index,
+                        "code": "numeric_mismatch",
                         "reason": "引用或计算记录中缺少同单位等价数值",
                         "value": str(value),
                         "unit": unit,

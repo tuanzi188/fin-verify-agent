@@ -17,6 +17,8 @@ import re
 import time
 
 from app.config import MODEL_CONFIG
+from app.finance.references import reference_markers
+from app.finance.routing_policy import assess_evidence
 from app.models.finance import FinanceChatResponse, FinanceCitation
 from app.services import model_provider
 from app.services.agent_trace import to_trace
@@ -24,9 +26,8 @@ from app.services.conversation_memory import conversation_memory
 from app.services.finance_corpus import get_block_index, get_finance_store
 from app.services.finance_entry import build_claims, build_evidence
 from app.services.finance_history import build_history_payload
-from app.tools.contract import ABSTAIN_KEYWORDS
-from app.finance.references import reference_markers
 from app.services.finance_validation import validate_finance_response
+from app.tools.contract import ABSTAIN_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,8 @@ async def run_structured_rag(
         }
     ]
 
-    if not citations:
+    evidence_check = assess_evidence(query, citations, store.list_documents())
+    if evidence_check["sufficient"] is False:
         trace.append(
             {
                 "step": 2,
@@ -157,13 +159,13 @@ async def run_structured_rag(
                 "ok": False,
                 "result_count": 0,
                 "latency_ms": 0,
-                "note": "retrieval_empty",
+                "note": "retrieval_empty" if not citations else "evidence_insufficient",
             }
         )
         response = FinanceChatResponse(
-            status="abstained",
-            answer="根据现有资料无法确定：本次结构检索没有找到可用证据。",
-            citations=[],
+            status="needs_review" if citations else "abstained",
+            answer="根据现有资料无法确定：" + "；".join(issue["reason"] for issue in evidence_check["issues"]),
+            citations=citations,
             strategy="structured_rag",
             route_reason=route_reason,
             search_mode="blocks",
@@ -172,15 +174,19 @@ async def run_structured_rag(
             variant="structured_rag",
             duration_ms=int((time.perf_counter() - started_at) * 1000),
             trace=to_trace(trace),
-            notes=["retrieval_empty"],
+            notes=["retrieval_empty" if not citations else "evidence_insufficient"],
+            verification={"evidence_check": evidence_check, "issues": evidence_check["issues"]},
+            resolved_query=query,
+            token_usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "llm_calls": 0},
         )
         # 拒答也要进历史：重新打开时能看到“查过但没证据”，而不是一条空回答。
-        await conversation_memory.add_turn(
-            conversation_id,
-            original_query if original_query is not None else query,
-            response.answer,
-            payload=build_history_payload(response, corpus_fingerprint=corpus_fingerprint),
-        )
+        if persist:
+            await conversation_memory.add_turn(
+                conversation_id,
+                original_query if original_query is not None else query,
+                response.answer,
+                payload=build_history_payload(response, corpus_fingerprint=corpus_fingerprint),
+            )
         return response
 
     prompt = STRUCTURED_RAG_SYSTEM.format(
@@ -204,7 +210,7 @@ async def run_structured_rag(
             max_tokens=MAX_ANSWER_TOKENS,
         )
         answer = (answer or "").strip()
-    except Exception as exc:  # noqa: BLE001 - 返回 error 状态，不丢 HTTP 契约
+    except Exception as exc:
         failed = True
         logger.exception("structured rag generation failed")
         answer = f"结构检索已找到证据，但生成失败：{type(exc).__name__}"
@@ -259,6 +265,7 @@ async def run_structured_rag(
         resolved_query=query,
     )
     validate_finance_response(response)
+    response.verification["evidence_check"] = evidence_check
     # `persist=False` 给上层留出"先看结果再决定要不要升级"的余地：
     # 结构检索失败会被升级到 Agent，这条半成品不该先写进会话历史。
     if persist and status != "error" and answer:

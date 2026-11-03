@@ -290,24 +290,24 @@ async def test_finance_chat_uses_scoped_conversation_and_returns_contract(api_ap
 
 
 def test_decide_strategy_simple_lookup_uses_structured_rag(demo_store):
-    strategy, reason = finance_router.decide_strategy("美的 2025 年营业收入是多少？", demo_store)
+    strategy, reason = finance_router.decide_strategy("XX股份 2025 年营业收入是多少？", demo_store)
     assert strategy == "structured_rag"
     assert "结构检索" in reason
 
 
 def test_decide_strategy_calculation_uses_agent(demo_store):
     strategy, reason = finance_router.decide_strategy(
-        "美的 2025 年智能家居收入占公司营业收入多少？毛利率高多少个百分点？",
+        "XX股份 2025 年智能家居收入占公司营业收入多少？毛利率高多少个百分点？",
         demo_store,
     )
     assert strategy == "agent"
-    assert "比较/计算" in reason
+    assert "计算" in reason
 
 
-def test_decide_strategy_future_period_uses_agent(demo_store):
+def test_decide_strategy_future_period_does_not_use_agent(demo_store):
     strategy, reason = finance_router.decide_strategy("2026 年第一季度营业收入是多少？", demo_store)
-    assert strategy == "agent"
-    assert "未覆盖" in reason
+    assert strategy == "structured_rag"
+    assert "本地最新覆盖" in reason
 
 
 @pytest.mark.asyncio
@@ -370,7 +370,7 @@ async def test_finance_api_followup_uses_scoped_previous_question(api_app, demo_
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("boundary_query", ["宁德时代2025年营业收入是多少？", "XX股份2025Q1营业收入是多少？"])
+@pytest.mark.parametrize("boundary_query", ["宁德时代2025年营业收入是多少？", "XX股份2025Q1毛利率是多少？"])
 async def test_finance_api_scope_boundary_skips_generation(api_app, demo_store, monkeypatch, boundary_query):
     boundary_agent = AsyncMock()
     boundary_rag = AsyncMock()
@@ -664,7 +664,7 @@ async def test_number_mismatch_escalates_to_agent(api_app, demo_store, monkeypat
 
     assert calls["agent"] == 1
     assert body["strategy"] == "agent"
-    assert "不一致" in body["route_reason"]
+    assert "缺少同单位等价数值" in body["route_reason"]
 
 
 @pytest.mark.asyncio
