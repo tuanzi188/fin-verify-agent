@@ -114,6 +114,10 @@ def test_build_evidence_keeps_table_coordinates(demo_store):
     assert evidence.table_preview is not None
     assert evidence.table_preview.total_rows == 2
     assert evidence.table_preview.rows[0].row_name == "营业收入"
+    # 原文优先：quote 必须是解析行文本的逐字摘录，页码只作可选定位。
+    assert "营业收入 | 12.34 | 10.00" in evidence.quote
+    assert evidence.quote_verified is True
+    assert evidence.locator == {"kind": "table", "table_id": "demo#t1", "page": 42, "rows": [0, 1]}
 
 
 def test_build_evidence_keeps_cell_coordinates_and_context(demo_store):
@@ -125,6 +129,13 @@ def test_build_evidence_keeps_cell_coordinates_and_context(demo_store):
     assert evidence.row_name == "营业收入"
     assert evidence.column == "2025"
     assert evidence.cell_text == "12.34"
+    # 单元格证据的 quote 带整行上下文，且校验“目标值真的在这一行里”。
+    assert "营业收入 | 12.34 | 10.00" == evidence.quote
+    assert evidence.quote_verified is True
+    assert evidence.locator["row"] == 0
+    assert evidence.locator["column"] == 1
+    assert evidence.quote_occurrences == 1
+    assert evidence.quote_ambiguous is False
     # 上下文窗口可以更宽，但目标坐标不能被窗口替换
     assert len(evidence.table_preview.rows) >= 1
 
@@ -153,6 +164,13 @@ def test_display_columns_repairs_parser_placeholders():
     assert finance_entry._display_columns(unit_table)[0] == "项目"
 
 
+def test_quote_occurrences_counts_within_source():
+    """重复计数只看同一份来源；跨文件一致不是歧义。"""
+    assert finance_entry._quote_occurrences("a\nb\na", "a") == 2
+    assert finance_entry._quote_occurrences("a\nb", "c") == 0
+    assert finance_entry._quote_occurrences("a\nb", "") == 0
+
+
 def test_build_evidence_paragraph_has_page_and_path(demo_store):
     evidence = finance_entry.build_evidence(demo_store, "demo#s1")
 
@@ -161,6 +179,12 @@ def test_build_evidence_paragraph_has_page_and_path(demo_store):
     assert evidence.path == ["第二节", "主要会计数据"]
     assert "营业收入" in evidence.content
     assert evidence.verified is False
+    assert evidence.quote and evidence.quote in evidence.content
+    assert evidence.quote_verified is True
+    assert evidence.quote_occurrences >= 1
+    # section_id 已经定位到具体章节，同句重复也能判读。
+    assert evidence.quote_ambiguous is False
+    assert evidence.locator == {"kind": "section", "section_id": "demo#s1", "page": 42}
 
 
 @pytest.mark.asyncio

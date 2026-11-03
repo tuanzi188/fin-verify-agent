@@ -1,6 +1,7 @@
 """答案等价规则测试：单位换算、舍入、方向、四条原子判据。"""
 
 from evaluation.equivalence import (
+    cell_equivalence,
     direction_consistent,
     direction_of,
     numbers_in,
@@ -87,3 +88,54 @@ def test_task_equivalence_marks_abstain_reasonable():
     row = task_equivalence(task, result)
     assert row["abstain_expected"] is True
     assert row["abstain_reasonable"] is True
+
+
+def test_cell_equivalence_matches_same_row_and_period_in_another_table():
+    """研发费用同时出现在利润表和研发投入表：同科目、同期、同值即可等价。"""
+    table = {
+        "columns": ["项目", "2025 年", "2024 年"],
+        "rows": [["研发费用", "17,787,624", "16,232,771"]],
+    }
+    result = cell_equivalence("研发费用金额（千元）", "2025 年", "17,787,624", table)
+    assert result["match"] is True
+    assert result["row_label"] == "研发费用"
+    assert result["column_label"] == "2025 年"
+
+
+def test_cell_equivalence_rejects_different_row_semantics():
+    """`净利润` 不能匹配 `归属于上市公司股东的净利润`，尽管前者是后者的子串。"""
+    table = {
+        "columns": ["项目", "2025 年"],
+        "rows": [["归属于上市公司股东的净利润", "100"]],
+    }
+    result = cell_equivalence("净利润", "2025 年", "100", table)
+    assert result["match"] is False
+    assert "同一口径" in result["reason"]
+
+
+def test_cell_equivalence_allows_expense_sign_flip():
+    """利润表把费用写成 (17,787,624)，投入表写成正数：费用类行允许符号翻转。"""
+    table = {
+        "columns": ["项目", "2025 年"],
+        "rows": [["研发费用", "(17,787,624)"]],
+    }
+    result = cell_equivalence("研发费用金额（千元）", "2025 年", "17,787,624", table)
+    assert result["match"] is True
+
+
+def test_cell_equivalence_does_not_flip_profit_sign():
+    """净利润不是费用类行，负数不能当正数接受。"""
+    table = {
+        "columns": ["项目", "2025 年"],
+        "rows": [["净利润", "(100)"]],
+    }
+    assert cell_equivalence("净利润", "2025 年", "100", table)["match"] is False
+
+
+def test_cell_equivalence_rejects_wrong_period_or_value():
+    table = {
+        "columns": ["项目", "2025 年", "2024 年"],
+        "rows": [["研发费用", "17,787,624", "16,232,771"]],
+    }
+    assert cell_equivalence("研发费用", "2023 年", "17,787,624", table)["match"] is False
+    assert cell_equivalence("研发费用", "2025 年", "99", table)["match"] is False

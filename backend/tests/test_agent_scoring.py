@@ -8,6 +8,7 @@ import json
 import pytest
 
 from evaluation.agent_checks import (
+    apply_equivalent_sources,
     check_citations,
     check_injection,
     check_retrieval_hit,
@@ -262,6 +263,119 @@ def test_order_violation():
     checks = check_tool_constraints(task, result)
     assert checks["tool_order"]["ok"] is False
     assert "search_kb 应在 get_citation 之前" in checks["tool_order"]["detail"]
+
+
+def test_search_blocks_satisfies_search_sections_constraint():
+    """产品默认切到 blocks 后，旧任务卡的 search_sections 约束应视为同一检索动作。"""
+    task = make_task(tool_constraints={
+        "must_include": ["search_sections"],
+        "call_count": {"search_sections": [1, 6]},
+        "order": [["search_sections", "get_rows"]],
+        "must_not_include": [],
+    })
+    result = make_result(
+        trace=[
+            make_step(tool="search_blocks"),
+            make_step(tool="get_rows"),
+            make_final(),
+        ]
+    )
+    checks = check_tool_constraints(task, result)
+    assert checks["tool_must_include"]["ok"] is True
+    assert checks["tool_call_count"]["ok"] is True
+    assert checks["tool_order"]["ok"] is True
+    # 明细仍保留真实工具名，审计时能看出用的是 blocks。
+    assert "search_blocks" in checks["tool_must_include"]["actual"]
+
+
+def test_equivalent_table_citation_is_accepted_and_overrides_judge_source():
+    """同一科目、同期、同值出现在另一张表：确定性等价接受，并覆盖 judge 的来源否定。"""
+    task = make_task(
+        answer_points=[
+            {
+                "text": "研发费用 17,787,624 千元",
+                "chunk_ids": ["demo#t0022"],
+                "evidence": {
+                    "table_id": "demo#t0022",
+                    "row": "研发费用金额（千元）",
+                    "column": "2025 年",
+                    "value": "17,787,624",
+                },
+            }
+        ]
+    )
+    result = make_result(
+        answer="研发费用为 17,787,624 千元 [1]。",
+        citations=[{"marker": 1, "chunk_id": "demo#t0095"}],
+        trace=[make_step(result_ids=["demo#t0095"]), make_final()],
+    )
+    tables = {
+        "demo#t0022": {
+            "columns": ["项目", "2025 年"],
+            "rows": [["研发费用金额（千元）", "17,787,624"]],
+            "statement_scope": "consolidated",
+        },
+        "demo#t0095": {
+            "columns": ["项目", "2025 年"],
+            "rows": [["研发费用", "17,787,624"]],
+            "statement_scope": "consolidated",
+        },
+    }
+    checks = check_citations(task, result, tables=tables)
+    assert checks["answer_points_cited"]["ok"] is True
+    assert checks["answer_points_cited"]["points"][0]["equivalent"]["table_id"] == "demo#t0095"
+
+    judgment = make_judgment(
+        points=[
+            {
+                "index": 0,
+                "pass": True,
+                "cited": True,
+                "citation_supports": False,
+                "reason": "数值正确，但引用为利润表而非研发投入表",
+            }
+        ]
+    )
+    apply_equivalent_sources(checks, judgment)
+    assert judgment["points"][0]["citation_supports"] is True
+    assert "等价表" in judgment["points"][0]["reason"]
+
+
+def test_equivalent_citation_rejects_different_statement_scope():
+    """合并 vs 母公司：同值也不能当等价表。"""
+    task = make_task(
+        answer_points=[
+            {
+                "text": "经营现金流 61,522,204,989.35 元",
+                "chunk_ids": ["demo#t0008"],
+                "evidence": {
+                    "table_id": "demo#t0008",
+                    "row": "经营活动产生的现金流量净额",
+                    "column": "2025年",
+                    "value": "61,522,204,989.35",
+                },
+            }
+        ]
+    )
+    result = make_result(
+        citations=[{"marker": 1, "chunk_id": "demo#t0086"}],
+        trace=[make_step(result_ids=["demo#t0086"]), make_final()],
+    )
+    tables = {
+        "demo#t0008": {
+            "columns": ["项目", "2025年"],
+            "rows": [["经营活动产生的现金流量净额", "61,522,204,989.35"]],
+            "statement_scope": "consolidated",
+        },
+        "demo#t0086": {
+            "columns": ["项目", "2025年"],
+            "rows": [["经营活动产生的现金流量净额", "61,522,204,989.35"]],
+            "statement_scope": "parent",
+        },
+    }
+    checks = check_citations(task, result, tables=tables)
+    assert checks["answer_points_cited"]["ok"] is False
+    assert checks["answer_points_cited"]["points"][0]["equivalent"] is None
 
 
 # ---------------------------------------------------------------------------

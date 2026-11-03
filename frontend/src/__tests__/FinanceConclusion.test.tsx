@@ -53,6 +53,7 @@ describe('FinanceConclusion', () => {
           status: 'needs_review',
           verification: {
             status: 'needs_review',
+            checked_numbers: 3,
             issues: [
               {
                 claim_index: 0,
@@ -67,6 +68,8 @@ describe('FinanceConclusion', () => {
       />,
     )
     expect(screen.getByText('需要人工复核')).toBeTruthy()
+    // 先说已核验什么，再说哪里没过
+    expect(screen.getByText(/已核验 3 项 · 数值未对上/)).toBeTruthy()
     expect(screen.getByText(/第 1 条 · 65\.71%/)).toBeTruthy()
     expect(screen.getByText(/数值未在引用表格中找到对应值/)).toBeTruthy()
   })

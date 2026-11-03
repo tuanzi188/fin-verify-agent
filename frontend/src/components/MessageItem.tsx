@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import type { AgentTraceStep, CalcRecord, EvidenceRef } from '../api/client'
 import type { FinanceMessagePayload } from '../hooks/useChat'
 import type { TurnStatus } from '../utils/status'
+import { locatorPrecision } from '../utils/citation'
 import AgentTracePanel from './AgentTracePanel'
 import FinanceConclusion from './FinanceConclusion'
 
@@ -117,6 +118,53 @@ const CodeBlock: React.FC<{
   )
 }
 
+const STRATEGY_LABELS: Record<string, string> = {
+  structured_rag: '结构检索',
+  agent: '多步查证',
+}
+
+/** 技术详情：正常态不占版面，展开才看策略、验证范围与定位精度。 */
+const TechDetails: React.FC<{ finance: FinanceMessagePayload }> = ({ finance }) => {
+  const verification = finance.verification
+  const checked = verification?.checked_numbers || 0
+  const issues = verification?.issues?.length || 0
+  const counts: Record<string, number> = {}
+  for (const citation of finance.citations) {
+    const key = locatorPrecision(citation.evidence)
+    counts[key] = (counts[key] || 0) + 1
+  }
+  const locators = [
+    counts.cell ? `单元格 ${counts.cell}` : '',
+    counts.rows ? `行组 ${counts.rows}` : '',
+    counts.paragraph ? `段落 ${counts.paragraph}` : '',
+    counts.document ? `整篇 ${counts.document}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const strategy = STRATEGY_LABELS[finance.strategy] || finance.strategy
+  return (
+    <details className="tech-details">
+      <summary>技术详情</summary>
+      <div className="tech-details-body">
+        <div>
+          策略：{strategy}
+          {finance.route_reason ? ` · ${finance.route_reason}` : ''}
+        </div>
+        <div>
+          验证：
+          {verification
+            ? `已核验 ${checked} 项${issues ? `，待复核 ${issues} 项` : '，未发现不一致'}`
+            : '未记录'}
+        </div>
+        <div>定位：{locators || '无引用'}</div>
+        {finance.notes && finance.notes.length > 0 && (
+          <div>备注：{finance.notes.join(' · ')}</div>
+        )}
+      </div>
+    </details>
+  )
+}
+
 const MessageItem: React.FC<MessageItemProps> = ({
   content,
   trace,
@@ -179,6 +227,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
     )}
 
     <AgentTracePanel trace={trace} />
+
+    {finance && <TechDetails finance={finance} />}
 
     <div
       style={{

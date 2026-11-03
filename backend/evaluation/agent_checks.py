@@ -20,6 +20,8 @@
 import re
 from typing import Any, Optional
 
+from evaluation.equivalence import cell_equivalence
+
 _MARKER_PATTERN = re.compile(r"\[(\d{1,2})\]")
 
 
@@ -75,31 +77,47 @@ def base_chunk_id(chunk_id: str) -> str:
 # 工具约束
 # ---------------------------------------------------------------------------
 
+# 产品默认检索入口已从 sections 切到 blocks；旧任务卡仍写 search_sections。
+# 约束检查只关心“有没有检索”，两个工具视为同一个动作，避免把正确运行判成没检索。
+_SEARCH_TOOL_ALIASES = {"search_blocks": "search_sections"}
+
+
+def _canonical_tool(name: object) -> str:
+    text = str(name or "")
+    return _SEARCH_TOOL_ALIASES.get(text, text)
+
+
 def check_tool_constraints(task: dict, result: dict) -> dict[str, dict]:
     constraints = task.get("tool_constraints") or {}
     tool_steps = _tool_steps(result)
-    tool_sequence = [str(step.get("tool") or "") for step in tool_steps]
+    raw_sequence = [str(step.get("tool") or "") for step in tool_steps]
+    tool_sequence = [_canonical_tool(name) for name in raw_sequence]
     checks: dict[str, dict] = {}
 
-    must_include = constraints.get("must_include") or []
+    must_include = [_canonical_tool(name) for name in (constraints.get("must_include") or [])]
     missing = [name for name in must_include if name not in tool_sequence]
     checks["tool_must_include"] = _check(
         not missing if must_include else None,
         "缺失: " + ", ".join(missing) if missing else "该调的都在",
         expected=must_include,
-        actual=tool_sequence,
+        actual=raw_sequence,
     )
 
-    must_not_include = constraints.get("must_not_include") or []
+    must_not_include = [
+        _canonical_tool(name) for name in (constraints.get("must_not_include") or [])
+    ]
     violated = [name for name in must_not_include if name in tool_sequence]
     checks["tool_must_not_include"] = _check(
         not violated if must_not_include else None,
         "出现了禁用工具: " + ", ".join(violated) if violated else "未出现禁用工具",
         expected=must_not_include,
-        actual=tool_sequence,
+        actual=raw_sequence,
     )
 
-    call_count = constraints.get("call_count") or {}
+    call_count = {
+        _canonical_tool(name): bounds
+        for name, bounds in (constraints.get("call_count") or {}).items()
+    }
     count_details: dict[str, dict] = {}
     count_ok: Optional[bool] = None
     for name, bounds in call_count.items():
@@ -123,7 +141,7 @@ def check_tool_constraints(task: dict, result: dict) -> dict[str, dict]:
     for pair in order_pairs:
         if not isinstance(pair, (list, tuple)) or len(pair) != 2:
             continue
-        first, second = pair[0], pair[1]
+        first, second = _canonical_tool(pair[0]), _canonical_tool(pair[1])
         if first not in tool_sequence or second not in tool_sequence:
             order_failures.append(f"{first}->{second} 有一步没发生")
             continue
@@ -202,7 +220,50 @@ def _answer_markers(answer: str) -> list[int]:
     return markers
 
 
-def check_citations(task: dict, result: dict) -> dict[str, dict]:
+def _equivalent_citation(
+    point: dict,
+    cited_base_ids: set[str],
+    tables: dict[str, dict],
+) -> Optional[dict]:
+    """引用表不是金标表时，按“同一行/同列/同值”判等价。
+
+    只放宽表，不放宽口径：合并 vs 母公司直接拒绝（statement_scope 不同）。
+    这样研发费用同时出现在利润表和研发投入表可以接受，但拿母公司现金流
+    冒充合并现金流不会被放过。
+    """
+    evidence = point.get("evidence") if isinstance(point.get("evidence"), dict) else {}
+    row = evidence.get("row")
+    column = evidence.get("column")
+    value = evidence.get("value")
+    if not row or not column or value is None:
+        return None
+    expected_table = tables.get(str(evidence.get("table_id") or ""))
+    expected_scope = str((expected_table or {}).get("statement_scope") or "")
+    for base_id in sorted(cited_base_ids):
+        table = tables.get(base_id)
+        if not table:
+            continue
+        cited_scope = str(table.get("statement_scope") or "")
+        if expected_scope and cited_scope and expected_scope != cited_scope:
+            continue
+        result = cell_equivalence(row, column, value, table)
+        if result.get("match"):
+            return {
+                "table_id": base_id,
+                "row": result.get("row_label"),
+                "column": result.get("column_label"),
+                "value": result.get("cell_text"),
+                "statement_scope": cited_scope,
+            }
+    return None
+
+
+def check_citations(
+    task: dict,
+    result: dict,
+    *,
+    tables: Optional[dict[str, dict]] = None,
+) -> dict[str, dict]:
     checks: dict[str, dict] = {}
     answer = str(result.get("answer") or "")
     citations = result.get("citations") or []
@@ -237,16 +298,29 @@ def check_citations(task: dict, result: dict) -> dict[str, dict]:
     for index, point in enumerate(points):
         expected = list((point or {}).get("chunk_ids") or [])
         cited = [chunk_id for chunk_id in expected if base_chunk_id(chunk_id) in cited_base_ids]
+        equivalent = None
+        if not cited and tables:
+            equivalent = _equivalent_citation(point or {}, cited_base_ids, tables)
         point_details.append(
-            {"index": index, "expected": expected, "cited": cited, "ok": bool(cited)}
+            {
+                "index": index,
+                "expected": expected,
+                "cited": cited,
+                "ok": bool(cited or equivalent),
+                "equivalent": equivalent,
+            }
         )
 
     if points:
         all_cited = all(detail["ok"] for detail in point_details)
         uncited = [detail["index"] for detail in point_details if not detail["ok"]]
+        equivalents = [
+            detail["equivalent"] for detail in point_details if detail.get("equivalent")
+        ]
         checks["answer_points_cited"] = _check(
             all_cited,
             f"{sum(1 for d in point_details if d['ok'])}/{len(points)} 个要点被引用"
+            + (f"（其中 {len(equivalents)} 条为等价表）" if equivalents else "")
             + (f"；未引用要点 {uncited}" if uncited else ""),
             points=point_details,
         )
@@ -374,15 +448,43 @@ def check_injection(task: dict, result: dict) -> dict[str, dict]:
 # 汇总
 # ---------------------------------------------------------------------------
 
-def collect_checks(task: dict, result: dict) -> dict[str, dict]:
+def collect_checks(
+    task: dict,
+    result: dict,
+    *,
+    tables: Optional[dict[str, dict]] = None,
+) -> dict[str, dict]:
     """跑全部确定性检查，返回 name -> {ok, detail, ...} 的扁平字典。"""
     checks: dict[str, dict] = {}
     checks.update(check_tool_constraints(task, result))
     checks["retrieval_hit"] = check_retrieval_hit(task, result)
-    checks.update(check_citations(task, result))
+    checks.update(check_citations(task, result, tables=tables))
     checks.update(check_status(task, result))
     checks.update(check_injection(task, result))
     return checks
+
+
+def apply_equivalent_sources(checks: dict[str, dict], judgment: Optional[dict]) -> None:
+    """judge 说“引用的是另一张表”时，用确定性等价结果覆盖来源判定。
+
+    只覆盖 citation_supports，不改 pass/数值判断；等价条件由
+    `cell_equivalence` 保证（同行/同列/同值），不是放宽字符串匹配。
+    """
+    if not judgment:
+        return
+    equivalents = {
+        detail["index"]: detail.get("equivalent")
+        for detail in (checks.get("answer_points_cited") or {}).get("points") or []
+        if detail.get("equivalent")
+    }
+    for index, point in enumerate(judgment.get("points") or []):
+        if index not in equivalents or not point.get("pass"):
+            continue
+        if point.get("citation_supports"):
+            continue
+        point["citation_supports"] = True
+        point["equivalent_source"] = equivalents[index]
+        point["reason"] = (point.get("reason") or "") + "；来源按等价表接受"
 
 
 def failed_checks(checks: dict[str, dict]) -> list[str]:

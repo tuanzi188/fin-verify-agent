@@ -65,13 +65,26 @@ const shortId = (value?: string | null): string => {
   return parts[parts.length - 1] || value
 }
 
+const STATEMENT_SCOPE_LABELS: Record<string, string> = {
+  consolidated: '合并口径',
+  parent: '母公司口径',
+}
+
+const STATEMENT_TYPE_LABELS: Record<string, string> = {
+  balance_sheet: '资产负债表',
+  income_statement: '利润表',
+  cash_flow: '现金流量表',
+  equity_change: '所有者权益变动表',
+  main_indicators: '主要会计数据',
+}
+
 const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(evidence.content || '')
+      await navigator.clipboard.writeText(evidence.quote || evidence.content || '')
       setCopied(true)
-      message.success('证据正文已复制')
+      message.success(evidence.quote ? '原文摘录已复制' : '证据正文已复制')
       setTimeout(() => setCopied(false), 2000)
     } catch {
       message.error('复制失败')
@@ -89,11 +102,31 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
           {evidence.company && <Tag style={{ margin: 0 }}>{evidence.company}</Tag>}
           {evidence.period && <Tag style={{ margin: 0 }}>{evidence.period}</Tag>}
           {evidence.doc_type && <Tag style={{ margin: 0 }}>{evidence.doc_type}</Tag>}
+          {evidence.statement_scope && (
+            <Tag style={{ margin: 0 }}>
+              {STATEMENT_SCOPE_LABELS[evidence.statement_scope] || evidence.statement_scope}
+            </Tag>
+          )}
+          {evidence.statement_type && (
+            <Tag style={{ margin: 0 }}>
+              {STATEMENT_TYPE_LABELS[evidence.statement_type] || evidence.statement_type}
+            </Tag>
+          )}
           {evidence.page && <Tag color="blue" style={{ margin: 0 }}>PDF P.{evidence.page}</Tag>}
           {evidence.unit && <Tag color="gold" style={{ margin: 0 }}>单位 {evidence.unit}</Tag>}
           <Tag color={evidence.verified ? 'green' : 'default'} style={{ margin: 0 }}>
             {evidence.verified ? '表格坐标可回查' : '段落证据'}
           </Tag>
+          {evidence.quote && (
+            <Tag color={evidence.quote_verified ? 'green' : 'orange'} style={{ margin: 0 }}>
+              {evidence.quote_verified ? '原文可逐字回查' : '原文未校验'}
+            </Tag>
+          )}
+          {evidence.quote_ambiguous && (
+            <Tag color="orange" style={{ margin: 0 }}>
+              同文件多处出现
+            </Tag>
+          )}
         </Space>
       </div>
 
@@ -123,6 +156,31 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
             {copied ? '已复制' : '复制'}
           </Button>
         </div>
+        {evidence.quote && (
+          <div
+            style={{
+              marginBottom: 10,
+              padding: '8px 10px',
+              background: 'var(--color-primary-bg, rgba(22,119,255,0.06))',
+              borderLeft: '3px solid var(--color-primary)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <Text type="secondary" style={{ fontSize: 10 }}>原文摘录（逐字）</Text>
+            <Paragraph
+              style={{
+                marginBottom: 0,
+                marginTop: 4,
+                fontSize: 13,
+                lineHeight: 1.75,
+                whiteSpace: 'pre-wrap',
+                color: 'var(--color-text)',
+              }}
+            >
+              {evidence.quote}
+            </Paragraph>
+          </div>
+        )}
         <Paragraph
           style={{
             marginBottom: 0,

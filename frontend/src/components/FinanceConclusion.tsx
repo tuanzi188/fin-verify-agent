@@ -11,7 +11,14 @@ import type {
   FinanceMessagePayload,
   FinanceVerificationIssue,
 } from '../utils/financeHistory'
-import { citationDescriptor, citationShortDescriptor, docTypeLabel, shortTableId } from '../utils/citation'
+import {
+  citationDescriptor,
+  citationShortDescriptor,
+  docTypeLabel,
+  locatorPrecision,
+  locatorPrecisionLabel,
+  shortTableId,
+} from '../utils/citation'
 import { normalizeStatus, type TurnStatus } from '../utils/status'
 import CalcCard from './CalcCard'
 
@@ -82,6 +89,9 @@ const CitationPill: React.FC<{
           </Tag>
         )}
         {evidence.unit && <Tag color="gold" style={{ margin: 0 }}>{evidence.unit}</Tag>}
+        <Tag color="purple" style={{ margin: 0 }}>
+          {locatorPrecisionLabel(locatorPrecision(evidence))}
+        </Tag>
       </Space>
       <div
         style={{
@@ -177,6 +187,18 @@ const REVIEW_COPY: Record<string, { title: string; body: string }> = {
   legacy: { title: '历史结果', body: '这条记录来自旧版本会话，只保存了答案文字。' },
 }
 
+type IssueKind = 'numeric' | 'calc' | 'reference' | 'other'
+
+/** issue 归类只用于分组展示，不改变后端 reason 原文。 */
+function issueKind(reason?: string): IssueKind {
+  const text = reason || ''
+  if (text.includes('数值') || text.includes('同单位')) return 'numeric'
+  // “引用或计算记录”这类复合表述先归引用，避免把缺引用说成计算问题。
+  if (text.includes('引用')) return 'reference'
+  if (text.includes('计算')) return 'calc'
+  return 'other'
+}
+
 /** 正常态不渲染状态条；只有需要用户行动时才出现。 */
 const ReviewAlert: React.FC<{
   statusKey: TurnStatus
@@ -186,6 +208,7 @@ const ReviewAlert: React.FC<{
   if (statusKey === 'answered') return null
   const copy = REVIEW_COPY[statusKey]
   if (!copy) return null
+  const checked = verification?.checked_numbers || 0
   const issues = verification?.issues || []
   const fallback = (claims || [])
     .map((claim) => claim.uncertainty)
@@ -196,6 +219,18 @@ const ReviewAlert: React.FC<{
       ? fallback
       : []
   const visible = details.slice(0, 4)
+  const kinds = new Set(issues.map((issue) => issueKind(issue.reason)))
+  // 先写“已核验什么”，再写“哪里没过”——避免“需要复核”被读成“全都没验”。
+  const scope = [
+    checked > 0 ? `已核验 ${checked} 项` : '引用可回查',
+    kinds.has('numeric') ? '数值未对上' : '',
+    kinds.has('calc') ? '计算来源未完整' : '',
+    kinds.has('reference') ? '引用不完整' : '',
+    !issues.length && fallback.length ? '语义未机验' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const useScope = statusKey === 'needs_review' && details.length > 0
   const tone =
     statusKey === 'error'
       ? { bg: 'var(--color-error-bg)', color: 'var(--color-error)', border: 'var(--color-error)' }
@@ -217,7 +252,11 @@ const ReviewAlert: React.FC<{
           {copy.title}
         </Text>
       </div>
-      <div className="review-alert-body">{copy.body}</div>
+      {useScope ? (
+        <div className="review-alert-scope">{scope}</div>
+      ) : (
+        <div className="review-alert-body">{copy.body}</div>
+      )}
       {visible.length > 0 && (
         <ul className="review-alert-list">
           {visible.map((item, index) => (

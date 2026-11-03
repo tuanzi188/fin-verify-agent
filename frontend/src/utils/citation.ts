@@ -25,6 +25,32 @@ export function docTypeLabel(docType?: string | null): string {
   return DOC_TYPE_LABELS[docType] || docType
 }
 
+export type LocatorPrecision = 'cell' | 'rows' | 'paragraph' | 'document'
+
+/**
+ * 这条引用能定位到多细：单元格 / 行组 / 段落 / 文档。
+ * “验证范围”里最实在的一格——数字能不能逐格回查，一眼可见。
+ */
+export function locatorPrecision(evidence: EvidenceRef): LocatorPrecision {
+  if (evidence.kind === 'table_cell') return 'cell'
+  if (evidence.table_id) return 'rows'
+  if (evidence.kind === 'paragraph') return 'paragraph'
+  return 'document'
+}
+
+export function locatorPrecisionLabel(precision: LocatorPrecision): string {
+  switch (precision) {
+    case 'cell':
+      return '精确到单元格'
+    case 'rows':
+      return '精确到行组'
+    case 'paragraph':
+      return '仅段落'
+    default:
+      return '文档级'
+  }
+}
+
 export function shortDocTitle(evidence: EvidenceRef, limit = 14): string {
   const title = evidence.doc_title || evidence.doc_id
   if (!title) return '未命名文档'

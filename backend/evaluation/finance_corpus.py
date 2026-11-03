@@ -104,6 +104,27 @@ def chunk_map() -> dict[str, dict]:
     return chunks
 
 
+@lru_cache(maxsize=1)
+def table_map() -> dict[str, dict]:
+    """`table_id -> table dict`，用于判定“等价表”里的行/列/值。
+
+    与 `chunk_map` 分开：judge 只需要渲染文本，等价判定需要原始 rows/columns。
+    """
+    if not DOCUMENT_DIR.exists():
+        raise FileNotFoundError(
+            f"金融文档库不存在: {DOCUMENT_DIR}\n先跑 python -m scripts.ingest_finance_corpus"
+        )
+    tables: dict[str, dict] = {}
+    for path in sorted(DOCUMENT_DIR.glob("*/document.json")):
+        document = json.loads(path.read_text(encoding="utf-8"))
+        doc_id = str(document.get("doc_id") or path.parent.name)
+        for table in document.get("tables") or []:
+            table_id = str(table.get("table_id") or "")
+            if table_id:
+                tables[table_id] = {**table, "doc_id": doc_id}
+    return tables
+
+
 def corpus_hash() -> str:
     """语料指纹：直接用 manifest 里的 PDF sha256，重解析不会让指纹变化。
 

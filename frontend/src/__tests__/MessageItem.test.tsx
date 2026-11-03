@@ -72,9 +72,12 @@ describe('MessageItem', () => {
         finance={{ ...financePayload, notes: ['structured_rag:top_k=6'] }}
       />,
     )
-    expect(screen.queryByText('结构检索')).toBeNull()
     expect(screen.queryByText(/条要点/)).toBeNull()
-    expect(screen.queryByText(/top_k/)).toBeNull()
+    // 策略和调试备注只在技术详情里，默认收起
+    const details = screen.getByText('技术详情').closest('details')
+    expect(details?.open).toBe(false)
+    expect(details?.textContent).toContain('多步查证')
+    expect(screen.getByText(/top_k=6/)).toBeTruthy()
   })
 
   it('calls onCopy when copy button clicked', () => {
@@ -105,6 +108,26 @@ describe('MessageItem', () => {
     expect(screen.getByText('3 条结果')).toBeTruthy()
     // 延迟、工具名等实验数据不进入普通查证页面
     expect(screen.queryByText('42 ms')).toBeNull()
+  })
+
+  it('keeps technical details collapsed and shows verification scope when expanded', () => {
+    render(
+      <MessageItem
+        plain
+        content="完整回答"
+        finance={{
+          ...financePayload,
+          verification: { checked_numbers: 2, issues: [] },
+          notes: ['structured_rag:top_k=6'],
+        }}
+      />,
+    )
+    const summary = screen.getByText('技术详情')
+    // 默认收起；内容留在 DOM 里，展开不需要额外请求
+    expect(summary.closest('details')?.open).toBe(false)
+    expect(screen.getByText(/已核验 2 项，未发现不一致/)).toBeTruthy()
+    expect(screen.getByText(/行组 1/)).toBeTruthy()
+    expect(screen.getByText(/top_k=6/)).toBeTruthy()
   })
 
   it('plain mode does not render an avatar or bubble chrome', () => {

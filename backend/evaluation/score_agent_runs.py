@@ -33,7 +33,7 @@ from evaluation import (
     trajectory_eval,
 )
 from evaluation._runner_common import load_tasks
-from evaluation.agent_checks import collect_checks
+from evaluation.agent_checks import apply_equivalent_sources, collect_checks
 from evaluation.agent_corpus import AGENT_CORPUS_VERSION, chunk_map
 from evaluation.agent_judge import judge_task
 from evaluation.agent_report import (
@@ -66,12 +66,14 @@ def build_verdict(
     judge_result: dict | None,
     *,
     chunks: dict[str, dict] | None = None,
+    tables: dict[str, dict] | None = None,
     routing: dict | None = None,
     section_map: dict[str, list[str]] | None = None,
 ) -> dict:
-    checks = collect_checks(task, result)
+    checks = collect_checks(task, result, tables=tables)
     judged = dimension_verdict(task, result, checks, judge_result)
     judgment = (judge_result or {}).get("judgment")
+    apply_equivalent_sources(checks, judgment)
 
     # 检索层：零模型调用，失败题先在这里分岔（miss vs hit-but-wrong）。
     try:
@@ -155,6 +157,7 @@ async def score_all(
     reuse_judgments: dict[tuple[str, int], dict] | None = None,
     routing_by_task: dict[str, dict] | None = None,
     section_map: dict[str, list[str]] | None = None,
+    tables: dict[str, dict] | None = None,
 ) -> list[dict]:
     semaphore = asyncio.Semaphore(max(1, concurrency))
 
@@ -203,6 +206,7 @@ async def score_all(
             result,
             judge_result,
             chunks=chunks,
+            tables=tables,
             routing=(routing_by_task or {}).get(task_id),
             section_map=section_map,
         )
@@ -271,10 +275,13 @@ def main() -> int:
         keep = args.holdout == "only"
         tasks = [task for task in tasks if bool(task.get("holdout")) is keep]
     tasks_by_id = {str(task.get("id")): task for task in tasks}
+    tables = None
     if args.corpus == "finance":
         from evaluation.finance_corpus import chunk_map as finance_chunk_map
+        from evaluation.finance_corpus import table_map as finance_table_map
 
         chunks = finance_chunk_map()
+        tables = finance_table_map()
     else:
         chunks = chunk_map()
 
@@ -327,6 +334,7 @@ def main() -> int:
             reuse_judgments=reuse_judgments,
             routing_by_task=routing_by_task,
             section_map=section_map,
+            tables=tables,
         )
     )
 

@@ -247,6 +247,106 @@ def point_equivalence(
     }
 
 
+_LABEL_NOISE = re.compile(r"[（(][^）)]*[）)]|\s+")
+_ROW_QUALIFIERS = ("金额", "合计", "净额", "总额", "本期", "上年")
+#: 利润表把费用/成本列成负数，研发投入表列成正数；只在这类行上允许符号翻转。
+_EXPENSE_ROW_HINTS = ("费用", "成本", "支出", "损失", "流出", "税金")
+
+
+def _normalize_label(text: object) -> str:
+    value = _LABEL_NOISE.sub("", str(text or ""))
+    return value.strip(" ：:，,。.、-—_")
+
+
+def _row_label_match(expected: str, actual: str) -> bool:
+    """行名匹配：先精确；只有“金额/合计/净额…”这类量词差异才放宽。
+
+    不能写成 substring：`净利润` 是 `归属于上市公司股东的净利润` 的子串，
+    但两者不是同一口径；`研发费用金额` 与 `研发费用` 才是同一行。
+    """
+    if expected == actual:
+        return True
+    return any(
+        expected == actual + suffix or actual == expected + suffix
+        for suffix in _ROW_QUALIFIERS
+    )
+
+
+def _column_label_match(expected: str, actual: str) -> bool:
+    if expected == actual:
+        return True
+    year = re.compile(r"20\d{2}年?")
+    return bool(
+        year.fullmatch(expected)
+        and year.fullmatch(actual)
+        and expected[:4] == actual[:4]
+    )
+
+
+def cell_equivalence(
+    expected_row: object,
+    expected_column: object,
+    expected_value: object,
+    table: dict,
+    *,
+    rel_tolerance: Decimal = DEFAULT_REL_TOLERANCE,
+) -> dict:
+    """判断一张表里是否存在与要点等价的单元格。
+
+    用于“同一会计科目出现在另一张表”的场景（如研发费用同时出现在利润表和
+    研发投入表）。只放宽**表**，不放宽行/列/值：行名必须同一口径、列必须是
+    同一期间、数值必须落在容差内。合并/母公司口径由调用方另判。
+    """
+    target_row = _normalize_label(expected_row)
+    target_column = _normalize_label(expected_column)
+    if not target_row or not target_column or expected_value is None:
+        return {"match": False, "reason": "缺少行/列/值"}
+
+    rows = table.get("rows") or []
+    columns = table.get("columns") or []
+    row_index = None
+    for index, values in enumerate(rows):
+        label = _normalize_label(values[0] if values else "")
+        if label and _row_label_match(target_row, label):
+            row_index = index
+            break
+    if row_index is None:
+        return {"match": False, "reason": f"找不到同一口径的行: {expected_row}"}
+
+    column_index = None
+    for index, name in enumerate(columns):
+        label = _normalize_label(name)
+        if label and _column_label_match(target_column, label):
+            column_index = index
+            break
+    if column_index is None:
+        return {"match": False, "reason": f"找不到同一期间的列: {expected_column}"}
+
+    row = rows[row_index]
+    cell_text = str(row[column_index]) if column_index < len(row) else ""
+    compare_text = cell_text
+    row_label = _normalize_label(row[0] if row else "")
+    if any(hint in row_label for hint in _EXPENSE_ROW_HINTS):
+        # 费用/成本在利润表常写成 (17,787,624)，在投入表写成 17,787,624。
+        stripped = cell_text.strip()
+        if (stripped.startswith("(") and stripped.endswith(")")) or (
+            stripped.startswith("（") and stripped.endswith("）")
+        ):
+            compare_text = stripped[1:-1]
+        elif stripped.startswith(("-", "−")):
+            compare_text = stripped[1:]
+    numeric = value_in_text(str(expected_value), compare_text, rel_tolerance=rel_tolerance)
+    return {
+        "match": bool(numeric.get("match")),
+        "row_index": row_index,
+        "column_index": column_index,
+        "row_label": row[0] if row else "",
+        "column_label": columns[column_index],
+        "cell_text": cell_text,
+        "numeric": numeric,
+    }
+
+
 def task_equivalence(
     task: dict,
     result: dict,

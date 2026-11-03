@@ -88,6 +88,28 @@ def _cut_payload(name: str, data: Any) -> Any:
     return data
 
 
+_STATEMENT_SCOPE_LABELS = {"consolidated": "合并", "parent": "母公司"}
+_STATEMENT_TYPE_LABELS = {
+    "balance_sheet": "资产负债表",
+    "income_statement": "利润表",
+    "cash_flow": "现金流量表",
+    "equity_change": "所有者权益变动表",
+    "main_indicators": "主要会计数据",
+}
+
+
+def _statement_tags(payload: dict) -> str:
+    """表头里的口径/报表标签，让模型在 read 阶段就能看到合并 vs 母公司。"""
+    scope = _STATEMENT_SCOPE_LABELS.get(str(payload.get("statement_scope") or ""), "")
+    statement = _STATEMENT_TYPE_LABELS.get(str(payload.get("statement_type") or ""), "")
+    parts = []
+    if scope:
+        parts.append(f"口径：{scope}")
+    if statement:
+        parts.append(f"报表：{statement}")
+    return ("｜" + "｜".join(parts)) if parts else ""
+
+
 def _render_table(table: dict) -> str:
     head = (
         f"表 {table.get('table_id')}｜{table.get('caption') or '无标题'}"
@@ -96,6 +118,7 @@ def _render_table(table: dict) -> str:
     if table.get("page_end") and table.get("page_end") != table.get("page"):
         head += f"–{table.get('page_end')}"
     head += f"｜单位：{table.get('unit') or '未标注'}"
+    head += _statement_tags(table)
     lines = [head, " | ".join(str(name) for name in table.get("columns") or [])]
     for row in table.get("rows") or []:
         lines.append(" | ".join(str(cell) for cell in row))
@@ -113,6 +136,7 @@ def _render_rows(rows: dict) -> str:
     if rows.get("page_end") and rows.get("page_end") != rows.get("page"):
         head += f"–{rows.get('page_end')}"
     head += f"｜单位：{rows.get('unit') or '未标注'}（来源：{rows.get('unit_source') or '未标注'}）"
+    head += _statement_tags(rows)
     columns = [str(name) for name in rows.get("columns") or []]
     lines = [head, "行号 | " + " | ".join(columns)]
     for row in rows.get("rows") or []:
@@ -307,6 +331,8 @@ class FinanceToolset:
             "\n计算结果的结论必须同时引用原始证据 [n] 和对应计算 [计算1]、[计算2]。"
             "计算编号按 calculate 成功调用顺序排列；每个计算输入必须先读取对应单元格。"
             "百分数相减后用百分点表示时，原始小数差必须乘以 100，例如 30%-20%=10 个百分点。"
+            "同一指标同时出现在合并报表与母公司报表时，默认用合并口径；"
+            "用户明确问母公司时才用母公司，并在回答里写清口径。"
         )
         if self.search_mode == "blocks":
             prompt = prompt.replace(
@@ -563,6 +589,8 @@ class FinanceToolset:
                     truncated=truncated,
                     table_caption=data.get("caption") or "",
                     unit=data.get("unit") or "",
+                    statement_scope=data.get("statement_scope") or "",
+                    statement_type=data.get("statement_type") or "",
                     doc_id=data.get("doc_id"),
                 )
             ]
@@ -587,6 +615,8 @@ class FinanceToolset:
                     table_id=data.get("table_id"),
                     table_caption=data.get("table_caption") or "",
                     unit=data.get("unit") or "",
+                    statement_scope=data.get("statement_scope") or "",
+                    statement_type=data.get("statement_type") or "",
                     row_indices=list(data.get("row_indices") or []),
                     column_indices=list(data.get("column_indices") or []),
                     row_name="、".join(
@@ -618,6 +648,8 @@ class FinanceToolset:
                     column=data.get("column"),
                     cell_text=data.get("cell_text"),
                     unit=data.get("unit") or "",
+                    statement_scope=data.get("statement_scope") or "",
+                    statement_type=data.get("statement_type") or "",
                     doc_id=data.get("doc_id"),
                 )
             ]

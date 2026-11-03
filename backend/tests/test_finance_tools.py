@@ -11,6 +11,7 @@ import pytest
 from app.finance.calc import CalculationError, calculate
 from app.finance.store import FinanceStore, FinanceStoreError
 from app.tools.finance import FINANCE_TOOL_SPECS, FinanceToolbox
+from app.tools.finance_set import _render_rows
 
 
 def write_demo_document(root: Path) -> Path:
@@ -132,6 +133,82 @@ def test_store_get_cell_by_name_and_index(tmp_path):
 
     by_index = store.get_cell("demo-t1", 1, 2)
     assert by_index["value"] == "1.00"
+
+
+def test_store_resolves_row_label_in_second_column(tmp_path):
+    """首列为空、行名落在第 2 列的表也要能按行名取数（比亚迪 t0013 形状）。"""
+    document = {
+        "doc_id": "shifted",
+        "title": "XX公司2025年年度报告",
+        "company": "XX股份",
+        "code": "000002",
+        "doc_type": "annual_report",
+        "period": "2025",
+        "published_at": "2026-04-20",
+        "source_url": "https://example.com/shifted.pdf",
+        "sections": [
+            {
+                "section_id": "shifted-s1",
+                "path": ["第三节", "营业收入构成"],
+                "page_start": 50,
+                "page_end": 50,
+                "text": "营业收入构成。",
+            }
+        ],
+        "tables": [
+            {
+                "table_id": "shifted-t1",
+                "section_id": "shifted-s1",
+                "page": 50,
+                "caption": "（1） 营业收入构成",
+                "columns": ["项目", "col2", "金额", "col4"],
+                "rows": [
+                    ["", "营业收入合计", "803,964,958,000.00", "100%"],
+                    ["分行业", "", "", ""],
+                    ["汽车", "", "648,645,636,000.00", "80.68%"],
+                ],
+            }
+        ],
+    }
+    doc_dir = tmp_path / "shifted"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "document.json").write_text(
+        json.dumps(document, ensure_ascii=False), encoding="utf-8"
+    )
+    store = FinanceStore(tmp_path)
+
+    cell = store.get_cell("shifted-t1", "营业收入合计", "金额")
+    assert cell["value"] == "803,964,958,000.00"
+    assert cell["row_name"] == "营业收入合计"
+
+    result = store.get_rows("shifted-t1", ["营业收入合计"], ["金额"])
+    assert result["rows"][0]["row_name"] == "营业收入合计"
+    assert result["rows"][0]["values"] == ["803,964,958,000.00"]
+
+
+def test_render_rows_exposes_statement_scope():
+    """工具输出要带口径/报表类型，模型才能在合并 vs 母公司之间做选择。"""
+    text = _render_rows(
+        {
+            "table_id": "demo#t1",
+            "caption": "现金流量表",
+            "page": 66,
+            "unit": "元",
+            "unit_source": "table",
+            "columns": ["项目", "2025 年"],
+            "rows": [
+                {
+                    "row": 0,
+                    "row_name": "经营活动产生的现金流量净额",
+                    "values": ["经营活动产生的现金流量净额", "1"],
+                }
+            ],
+            "statement_scope": "parent",
+            "statement_type": "cash_flow",
+        }
+    )
+    assert "口径：母公司" in text
+    assert "报表：现金流量表" in text
 
 
 def test_store_get_rows_keeps_coordinates_and_selected_columns(tmp_path):

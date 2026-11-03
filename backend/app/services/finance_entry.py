@@ -50,6 +50,9 @@ _HEADING_PATTERN = re.compile(r"^#{1,6}\s*")
 _LIST_PREFIX_PATTERN = re.compile(r"^(?:[-*+]\s+|\d+[.、)]\s*)")
 _MAX_CLAIMS = 12
 _MAX_PARAGRAPH_CHARS = 4000
+#: 证据里的逐字摘录上限。quote 只放“能核对的那一小段”，完整正文仍在 content。
+_QUOTE_MAX_CHARS = 400
+_QUOTE_MAX_ROWS = 3
 
 
 def _safe_int(value: Any) -> Optional[int]:
@@ -250,6 +253,49 @@ def _render_table_content(preview: TablePreview, row_indices: list[int]) -> str:
     return "\n".join(lines)
 
 
+def _row_quote(values: list) -> str:
+    """表格行的逐字文本：保持解析产物里的原值，只做分隔。"""
+    return " | ".join(_as_text(cell) for cell in values).strip()
+
+
+def _table_quote(
+    table: dict,
+    indices: list[int],
+    *,
+    cell_text: Optional[str] = None,
+) -> tuple[str, bool]:
+    """从解析表格里取一段逐字原文，并校验它确实来自这些行。
+
+    `cell_text` 给了就额外校验：目标值必须真的出现在行文本里。
+    这样即使行/列坐标错位，也不会把另一格的数字当成本格证据。
+    """
+    rows = table.get("rows") or []
+    lines = [
+        _row_quote(rows[index])
+        for index in indices[:_QUOTE_MAX_ROWS]
+        if 0 <= index < len(rows)
+    ]
+    quote = "\n".join(line for line in lines if line)[:_QUOTE_MAX_CHARS].strip()
+    verified = bool(quote)
+    if verified and cell_text is not None:
+        verified = _as_text(cell_text) in quote
+    return quote, verified
+
+
+def _text_quote(text: str) -> tuple[str, bool]:
+    """章节/文档原文摘录：quote 必须是 content 的精确前缀。"""
+    body = _as_text(text).strip()
+    if not body:
+        return "", False
+    quote = body[:_QUOTE_MAX_CHARS].strip()
+    return quote, bool(quote) and quote in body
+
+
+def _quote_occurrences(source: str, quote: str) -> int:
+    """同文件内的重复次数。跨文件不去重：多份文件一致是佐证，不是歧义。"""
+    return source.count(quote) if quote else 0
+
+
 def _table_evidence(
     store: FinanceStore,
     *,
@@ -324,6 +370,31 @@ def _table_evidence(
             f"（单位：{preview.unit or '未标注'}）\n{content}"
         )
 
+    quote_rows = (
+        target_rows[:1]
+        if kind == "table_cell" and target_rows
+        else (target_rows or [row.row for row in preview.rows[:1]])
+    )
+    quote, quote_verified = _table_quote(
+        table,
+        quote_rows,
+        cell_text=cell_text if kind == "table_cell" else None,
+    )
+    locator: dict[str, Any] = {"kind": "table", "table_id": table_id}
+    if preview.page is not None:
+        locator["page"] = preview.page
+    if kind == "table_cell" and target_rows and target_columns:
+        locator["row"] = target_rows[0]
+        locator["column"] = target_columns[0]
+    elif target_rows:
+        locator["rows"] = target_rows
+
+    haystack = "\n".join(_row_quote(row) for row in table.get("rows") or [])
+    occurrences = _quote_occurrences(haystack, quote)
+    # table_id 只定位到“哪张表”；表内同一行重复出现时，必须靠 row/rows 区分。
+    pins_row = "row" in locator or "rows" in locator
+    ambiguous = occurrences > 1 and not pins_row
+
     return EvidenceRef(
         evidence_id=anchor or table_id,
         doc_id=meta.get("doc_id", ""),
@@ -354,7 +425,14 @@ def _table_evidence(
         cell_text=cell_text,
         unit=preview.unit,
         footnote=preview.footnote,
+        statement_scope=_as_text(table.get("statement_scope")),
+        statement_type=_as_text(table.get("statement_type")),
         content=content,
+        quote=quote,
+        quote_verified=quote_verified,
+        quote_occurrences=occurrences,
+        quote_ambiguous=ambiguous,
+        locator=locator,
         source_spans=[
             SourceSpan(
                 source_id=table_id,
@@ -367,7 +445,7 @@ def _table_evidence(
         ],
         table_preview=preview,
         verified=True,
-        note="表格坐标来自解析产物；页码为 PDF 解析页码，不是原版截图。",
+        note="表格坐标来自解析产物；quote 为逐字行文本，页码只是可选定位（不是原版截图）。",
         source_url=meta.get("source_url") or None,
     )
 
@@ -413,6 +491,15 @@ def _section_evidence(
             )
         ]
 
+    quote, quote_verified = _text_quote(content)
+    page = _safe_int(section.get("page_start"))
+    locator: dict[str, Any] = {"kind": "section", "section_id": section_id}
+    if page is not None:
+        locator["page"] = page
+    occurrences = _quote_occurrences(full_text, quote)
+    # section_id 已经定位到具体章节，同句重复也能判读。
+    ambiguous = occurrences > 1 and not section_id
+
     return EvidenceRef(
         evidence_id=anchor or section_id,
         doc_id=meta.get("doc_id", ""),
@@ -421,13 +508,18 @@ def _section_evidence(
         period=meta.get("period", ""),
         doc_type=meta.get("doc_type", ""),
         kind=EvidenceKind.paragraph,
-        page=_safe_int(section.get("page_start")),
+        page=page,
         section_id=section_id,
         path=[_as_text(part) for part in section.get("path") or []],
         content=content,
+        quote=quote,
+        quote_verified=quote_verified,
+        quote_occurrences=occurrences,
+        quote_ambiguous=ambiguous,
+        locator=locator,
         source_spans=spans,
         verified=False,
-        note="章节段落证据；页码为 PDF 解析页码。",
+        note="章节段落证据；quote 为原文逐字摘录，页码只是可选定位。",
         source_url=meta.get("source_url") or None,
     )
 
@@ -450,6 +542,9 @@ def build_evidence(
         return _section_evidence(store, anchor=anchor, raw=raw, located=located)
 
     meta = _document_meta(store, _as_text(located.get("doc_id") or raw.get("doc_id")))
+    content = _as_text(raw.get("content"))
+    quote, quote_verified = _text_quote(content)
+    occurrences = _quote_occurrences(content, quote)
     return EvidenceRef(
         evidence_id=anchor,
         doc_id=meta.get("doc_id", ""),
@@ -458,7 +553,12 @@ def build_evidence(
         period=meta.get("period", ""),
         doc_type=meta.get("doc_type", ""),
         kind=EvidenceKind.document,
-        content=_as_text(raw.get("content")),
+        content=content,
+        quote=quote,
+        quote_verified=quote_verified,
+        quote_occurrences=occurrences,
+        quote_ambiguous=occurrences > 1,
+        locator={"kind": "document", "doc_id": meta.get("doc_id", "")},
         verified=False,
         source_url=meta.get("source_url") or None,
     )
