@@ -138,6 +138,24 @@ python -m evaluation.eval_report --retrieval %TEMP%\retrieval.json \
 - 闸门：金融两条红线——数值幻觉率 = 0、误拒率 ≤ 阈值；缺数据记 `insufficient_data`，不算通过。
 - 实施记录与首轮读数：`docs/EVAL_UPGRADE_IMPLEMENTATION.md`；等价规则：`docs/ANSWER_EQUIVALENCE_RUBRIC.md`。
 
+### 任务集维护（防漂移）
+
+```bash
+# 语料重解析或路由规则变更后：三套都跑，0 error 才算过
+python -m evaluation.lint_finance_tasks --check-refs --check-routing
+python -m evaluation.lint_finance_tasks --tier complex --tasks evaluation/finance_tasks_complex.jsonl --check-refs --check-routing
+python -m evaluation.lint_finance_tasks --tier stress --tasks evaluation/finance_tasks_stress.jsonl --check-refs --check-routing
+
+# 坐标漂移：按内容签名重绑（默认 dry-run，--write 才落盘；拿不准的列人工处理）
+python -m evaluation.rebind_coords --tasks evaluation/finance_tasks.jsonl
+
+# 留出题是否被调参消耗过
+python -m evaluation.holdout_registry --check --tasks evaluation/finance_tasks.jsonl
+
+# 可读视图（评审 diff 用）
+python -m evaluation.render_tasks --tasks evaluation/finance_tasks.jsonl --out docs/tasks_review.md
+```
+
 ---
 
 ## 技术栈

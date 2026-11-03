@@ -61,9 +61,17 @@ def load_tasks(path: Path) -> list[dict]:
     return tasks
 
 
-def lint(tasks: list[dict], chunks: dict[str, dict], profile: bool = True) -> tuple[list[str], list[str]]:
+def lint(
+    tasks: list[dict],
+    chunks: dict[str, dict],
+    profile: bool = True,
+    required_fields: tuple[str, ...] | None = None,
+) -> tuple[list[str], list[str]]:
     """`profile=False` 用于压力/回归子集：那里的条数、维度配比、澄清配比
-    都是按另一套设计走的，拿主集的比例规则去卡只会报假错。"""
+    都是按另一套设计走的，拿主集的比例规则去卡只会报假错。
+
+    `required_fields` 允许别的任务集换一份必填清单（金融集没有 `required_args`，
+    那是通用制度库的工具参数约束，金融工具层的参数由 `tool_constraints` 表达）。"""
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -77,7 +85,7 @@ def lint(tasks: list[dict], chunks: dict[str, dict], profile: bool = True) -> tu
 
     for task in tasks:
         tag = task.get("id") or f"line{task['_line']}"
-        for field in REQUIRED_FIELDS:
+        for field in required_fields or REQUIRED_FIELDS:
             if field not in task:
                 errors.append(f"[{tag}] 缺少字段: {field}")
         if task.get("dimension") not in DIMENSIONS:
@@ -121,10 +129,19 @@ def lint(tasks: list[dict], chunks: dict[str, dict], profile: bool = True) -> tu
     # ---- 3. 反向覆盖 + 4. 锚定一致 ----
     for task in tasks:
         tag = task.get("id") or f"line{task['_line']}"
+        points = [point for point in task.get("answer_points") or [] if isinstance(point, dict)]
         anchored = {
             chunk_id
-            for point in task.get("answer_points") or []
+            for point in points
             for chunk_id in (point.get("chunk_ids") or [])
+        }
+        # 金融任务卡还会把坐标写进 evidence.table_id（2026-11-03）：只写 evidence
+        # 不写 chunk_ids 时，它也必须是 relevant_chunk_ids 的一部分——否则检索层
+        # 标错位置而判分器照旧判对，两份读数互相打架。
+        anchored |= {
+            str(point["evidence"]["table_id"])
+            for point in points
+            if isinstance(point.get("evidence"), dict) and point["evidence"].get("table_id")
         }
         relevant = set(task.get("relevant_chunk_ids") or [])
         for chunk_id in sorted(relevant - anchored):

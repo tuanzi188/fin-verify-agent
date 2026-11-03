@@ -285,6 +285,85 @@ def test_lint_requires_calc_for_derived_points():
     assert any("没有 calc" in error for error in errors), errors
 
 
+def _minimal_task(**overrides):
+    """过 base_lint 所需的最小合法任务（其余字段由 lint 自带默认口径）。"""
+    task = {
+        "id": "T-min",
+        "dimension": "检索与引用",
+        "secondary_tags": ["单跳"],
+        "difficulty": "easy",
+        "question": "XX股份 2025 年营业收入是多少？",
+        "tool_constraints": {},
+        "answer_points": [{"text": "营业收入 1,234 万元", "chunk_ids": [TABLE_ID]}],
+        "citation_required": True,
+        "should_abstain": False,
+        "clarify_mode": "none",
+        "forbidden": ["编造数据"],
+        "max_steps": 8,
+        "relevant_chunk_ids": [TABLE_ID],
+        "query_type": "single_hop",
+        "source": "real",
+        "mock": False,
+    }
+    task.update(overrides)
+    return task
+
+
+def test_finance_required_fields_drop_required_args():
+    """`required_args` 是通用制度库的字段，金融集不再强制（2026-11-03 删除）。"""
+    from evaluation.lint_agent_tasks import REQUIRED_FIELDS
+    from evaluation.lint_agent_tasks import lint as base_lint
+    from evaluation.lint_finance_tasks import FINANCE_REQUIRED_FIELDS
+
+    assert "required_args" in REQUIRED_FIELDS
+    assert "required_args" not in FINANCE_REQUIRED_FIELDS
+    assert set(FINANCE_REQUIRED_FIELDS) == set(REQUIRED_FIELDS) - {"required_args"}
+
+    chunks = {TABLE_ID: {"chunk_id": TABLE_ID}}
+    errors, _warnings = base_lint(
+        [_minimal_task()], chunks, profile=False, required_fields=FINANCE_REQUIRED_FIELDS
+    )
+    assert not any("required_args" in error for error in errors), errors
+    # 默认清单（通用制度库）仍然要求它，证明参数真的生效
+    legacy_errors, _warnings = base_lint([_minimal_task()], chunks, profile=False)
+    assert any("required_args" in error for error in legacy_errors), legacy_errors
+
+
+def test_lint_anchor_sets_must_match_relevant_chunks():
+    """`relevant_chunk_ids` 必须等于答案点锚点并集，含 evidence.table_id（2026-11-03）。"""
+    from evaluation.lint_agent_tasks import lint as base_lint
+
+    extra_id = f"{TABLE_ID}#b2"
+    chunks = {TABLE_ID: {"chunk_id": TABLE_ID}, extra_id: {"chunk_id": extra_id}}
+    point = {"text": "营业收入 1,234 万元", "chunk_ids": [TABLE_ID]}
+
+    ok = _minimal_task(answer_points=[point], relevant_chunk_ids=[TABLE_ID])
+    errors, _warnings = base_lint([ok], chunks, profile=False)
+    assert not any("锚定" in error or "反向覆盖" in error for error in errors), errors
+
+    # evidence.table_id 也算锚点：只写 evidence 时 relevant 必须带上它
+    evidence_point = {
+        "text": "营业收入 1,234 万元",
+        "chunk_ids": [extra_id],
+        "evidence": {"table_id": TABLE_ID},
+    }
+    with_evidence = _minimal_task(
+        answer_points=[evidence_point], relevant_chunk_ids=[TABLE_ID, extra_id]
+    )
+    errors, _warnings = base_lint([with_evidence], chunks, profile=False)
+    assert not any("锚定" in error or "反向覆盖" in error for error in errors), errors
+
+    # 漏写：答案点有锚点而 relevant 没有
+    missing = _minimal_task(answer_points=[point], relevant_chunk_ids=[])
+    errors, _warnings = base_lint([missing], chunks, profile=False)
+    assert any("锚定不一致" in error for error in errors), errors
+
+    # 多写：relevant 有摆设 chunk
+    extra = _minimal_task(answer_points=[point], relevant_chunk_ids=[TABLE_ID, extra_id])
+    errors, _warnings = base_lint([extra], chunks, profile=False)
+    assert any("反向覆盖失败" in error for error in errors), errors
+
+
 def _complex_task(index: int, kind: str) -> dict:
     return {
         "id": f"CX-{index:02d}",
@@ -301,7 +380,7 @@ def test_lint_complex_requires_twelve_and_four_buckets():
 
     short = [_complex_task(i, "calc") for i in range(1, 12)]
     errors, _warnings = _lint_complex(short)
-    assert any("少于 12" in error for error in errors), errors
+    assert any("必须恰好 12 条" in error for error in errors), errors
 
     twelve_same_bucket = [_complex_task(i, "calc") for i in range(1, 13)]
     errors, _warnings = _lint_complex(twelve_same_bucket)
@@ -548,3 +627,129 @@ def test_prepare_resets_search_budget(tmp_path):
 
     toolset.prepare(None)
     assert asyncio.run(toolset.call("search_sections", {"query": "营业收入"})).ok is True
+
+
+# ---------------------------------------------------------------------------
+# 坐标一致性 / 路由一致性 / 冻结配比（2026-11-03 起）
+# ---------------------------------------------------------------------------
+
+
+def test_lint_refs_ok_for_consistent_task():
+    from evaluation.lint_finance_tasks import _lint_refs
+
+    chunks = {"doc#t0001": {"content": "项目 营业收入 1,234"}}
+    task = {
+        "id": "T1",
+        "relevant_chunk_ids": ["doc#t0001"],
+        "answer_points": [
+            {
+                "text": "营业收入 1,234",
+                "chunk_ids": ["doc#t0001"],
+                "evidence": {
+                    "table_id": "doc#t0001",
+                    "row": "营业收入",
+                    "column": "2025 年",
+                    "value": "1,234",
+                },
+            }
+        ],
+    }
+    assert _lint_refs(task, chunks) == []
+
+
+def test_lint_refs_detects_dangling_reference():
+    from evaluation.lint_finance_tasks import _lint_refs
+
+    task = {"id": "T2", "relevant_chunk_ids": ["doc#t9999"], "answer_points": []}
+    errors = _lint_refs(task, {"doc#t0001": {"content": "x"}})
+    assert any("引用不存在" in error for error in errors), errors
+
+
+def test_lint_refs_detects_silent_content_drift():
+    """表 id 重排后引用还在、内容已不是同一块——只查存在性会放过。"""
+    from evaluation.lint_finance_tasks import _lint_refs
+
+    chunks = {"doc#t0001": {"content": "项目 净利润 100"}}
+    task = {
+        "id": "T3",
+        "relevant_chunk_ids": ["doc#t0001"],
+        "answer_points": [
+            {
+                "text": "营业收入 1,234",
+                "chunk_ids": ["doc#t0001"],
+                "evidence": {
+                    "table_id": "doc#t0001",
+                    "row": "营业收入",
+                    "column": "2025 年",
+                    "value": "1,234",
+                },
+            }
+        ],
+    }
+    errors = _lint_refs(task, chunks)
+    assert any("不含金标值" in error for error in errors), errors
+
+
+def test_lint_routing_flags_rule_drift():
+    from evaluation.lint_finance_tasks import _lint_routing
+
+    documents = [{"company": "美的集团", "period": "2025", "code": "000333"}]
+    assert any(
+        "clarify_mode=ask" in error
+        for error in _lint_routing(
+            {"id": "T1", "question": "美的集团 2025 年营业收入是多少？", "clarify_mode": "ask"},
+            documents,
+        )
+    )
+    assert any(
+        "route_target=agent" in error
+        for error in _lint_routing(
+            {"id": "T2", "question": "美的集团 2025 年营业收入是多少？", "route_target": "agent"},
+            documents,
+        )
+    )
+    assert any(
+        "被路由拦截" in error
+        for error in _lint_routing(
+            {"id": "T3", "question": "美的集团 2026 年营业收入是多少？"},
+            documents,
+        )
+    )
+    assert _lint_routing({"id": "T4", "question": "随便", "mock": True}, documents) == []
+
+
+def test_lint_tier_freezes_profile_ratio():
+    from evaluation.lint_agent_tasks import DIMENSIONS
+    from evaluation.lint_finance_tasks import PROFILE_TASK_COUNT, _lint_tier
+
+    short = [
+        {"id": f"T{i}", "dimension": DIMENSIONS[i % len(DIMENSIONS)]}
+        for i in range(PROFILE_TASK_COUNT - 1)
+    ]
+    errors, _warnings = _lint_tier(short, "profile")
+    assert any("必须恰好 30 条" in error for error in errors), errors
+
+    errors, _warnings = _lint_tier(short, "profile", holdout_only=True)
+    assert not any("必须恰好" in error for error in errors), errors
+
+
+def test_lint_complex_freezes_bucket_count():
+    from evaluation.lint_finance_tasks import COMPLEX_TYPES, _lint_complex
+
+    tasks = []
+    for kind in COMPLEX_TYPES:
+        for index in range(3):
+            tasks.append(
+                {
+                    "id": f"{kind}-{index}",
+                    "complex_type": kind,
+                    "holdout": index == 0,
+                    "tool_constraints": {},
+                }
+            )
+    errors, _warnings = _lint_complex(tasks)
+    assert errors == [], errors
+
+    tasks[0] = dict(tasks[0], complex_type="cross_table_extra")
+    errors, _warnings = _lint_complex(tasks)
+    assert any("complex_type 非法" in error for error in errors), errors

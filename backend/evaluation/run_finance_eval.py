@@ -213,6 +213,13 @@ def main() -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"结果：{out_path}")
+        # 留出题使用登记：--holdout include/only 跑过的留出题记一笔，
+        # 验收前用 `python -m evaluation.holdout_registry --check` 看有没有被消耗。
+        holdout_ids = [str(task.get("id")) for task in tasks if task.get("holdout")]
+        if holdout_ids:
+            from evaluation.holdout_registry import record_usage
+
+            record_usage(holdout_ids, out_path)
 
     return 0 if not schema_problems else 1
 

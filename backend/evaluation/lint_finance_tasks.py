@@ -15,6 +15,13 @@
 | 压力集任务的 `source` 与 `defect` 必须写清 | "这条题到底在测哪个已知缺陷"说不出来 |
 
 另外两条软检查（warning）：要点文本里没出现该数字；留出集不是 5–7 条。
+
+两个可选硬检查（2026-11-03 起，默认关闭、按需开）：
+
+- `--check-refs`：`chunk_ids`/`relevant_chunk_ids` 必须存在，且引用内容里
+  仍能读到金标值——防表 id 重排后的静默漂移（此前只有 evidence.table_id 被机检）；
+- `--check-routing`：任务金标 vs 当前 `initial_decision`——clarify 题必须澄清、
+  非边界题不得被拦、`route_target` 必须与路由一致，产品规则改了这里会先红。
 """
 
 from __future__ import annotations
@@ -32,12 +39,24 @@ from app.finance.calc import calculate
 from app.finance.store import FinanceStore
 from evaluation.calc_schema import calc_specs, has_calc_spec
 from evaluation.finance_corpus import DOCUMENT_DIR, chunk_map
-from evaluation.lint_agent_tasks import DIMENSIONS, load_tasks
+from evaluation.lint_agent_tasks import DIMENSIONS, REQUIRED_FIELDS, load_tasks
 from evaluation.lint_agent_tasks import lint as base_lint
 
 DEFAULT_PROFILE = "evaluation/finance_tasks.jsonl"
 DEFAULT_STRESS = "evaluation/finance_tasks_stress.jsonl"
 HOLDOUT_RANGE = (5, 7)
+#: 冻结配比（2026-11-03 起 error 级）：主集 5 维×6、压力集 10、复杂集 4 桶×3。
+#: 想增减题目先改这里的常量——把"配比漂移"从人眼盯变成 lint 红灯。
+PROFILE_TASK_COUNT = 30
+PROFILE_DIMENSION_COUNT = 6
+STRESS_TASK_COUNT = 10
+COMPLEX_BUCKET_COUNT = 3
+#: 金融集必填字段 = 通用清单 − `required_args`（2026-11-03）。
+#: `required_args` 是通用制度库的工具参数约束，金融线零消费（52 题全写 `{}`），
+#: 金融工具层的调用约束由 `tool_constraints` 表达，两套不要混。
+FINANCE_REQUIRED_FIELDS = tuple(
+    field for field in REQUIRED_FIELDS if field != "required_args"
+)
 _DIGITS = str.maketrans("", "", " ,\u00a0")
 
 
@@ -161,13 +180,19 @@ def _lint_calc(task: dict) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
-def _lint_tier(tasks: list[dict], tier: str) -> tuple[list[str], list[str]]:
+def _lint_tier(
+    tasks: list[dict], tier: str, *, holdout_only: bool = False
+) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
     if tier == "complex":
         # 复杂集的路数由 `_lint_complex` 单独管：它有四桶冻结留出，不套主集的维度配比
         return errors, warnings
     if tier == "stress":
+        if len(tasks) != STRESS_TASK_COUNT:
+            errors.append(
+                f"压力集必须恰好 {STRESS_TASK_COUNT} 条（10 个已知缺陷各 1），当前 {len(tasks)}"
+            )
         for task in tasks:
             tag = task.get("id") or "?"
             if task.get("source") not in ("failure", "synthetic"):
@@ -175,6 +200,22 @@ def _lint_tier(tasks: list[dict], tier: str) -> tuple[list[str], list[str]]:
             if not task.get("defect"):
                 errors.append(f"[{tag}] 压力集必须写 defect：这条题对应哪个已知缺陷")
         return errors, warnings
+
+    if not holdout_only:
+        # 5 维×6 是冻结配比：误删一条要红，而不是只打印。
+        if len(tasks) != PROFILE_TASK_COUNT:
+            errors.append(
+                f"主集必须恰好 {PROFILE_TASK_COUNT} 条（5 维×6 冻结配比），当前 {len(tasks)}"
+            )
+        counter: dict[str, int] = {}
+        for task in tasks:
+            name = str(task.get("dimension") or "")
+            counter[name] = counter.get(name, 0) + 1
+        for name in DIMENSIONS:
+            if counter.get(name, 0) != PROFILE_DIMENSION_COUNT:
+                errors.append(
+                    f"维度「{name}」必须恰好 {PROFILE_DIMENSION_COUNT} 条，当前 {counter.get(name, 0)}"
+                )
 
     holdout = [task.get("id") for task in tasks if task.get("holdout")]
     low, high = HOLDOUT_RANGE
@@ -436,9 +477,10 @@ def _lint_complex(tasks: list[dict]) -> tuple[list[str], list[str]]:
     """复杂集是「Agent 多花的钱值不值」的主判据，跑前必须固定且分桶可核。"""
     errors: list[str] = []
     warnings: list[str] = []
-    if len(tasks) < COMPLEX_MIN_TASKS:
+    if len(tasks) != COMPLEX_MIN_TASKS:
         errors.append(
-            f"复杂集只有 {len(tasks)} 条，少于 {COMPLEX_MIN_TASKS}：15 个百分点的分辨率会退化成一题"
+            f"复杂集必须恰好 {COMPLEX_MIN_TASKS} 条（4 桶×{COMPLEX_BUCKET_COUNT} 冻结配比），"
+            f"当前 {len(tasks)}：少一题 15 个百分点的分辨率就退化成一道题"
         )
     holdout_counts = {kind: 0 for kind in COMPLEX_TYPES}
     for task in tasks:
@@ -459,6 +501,10 @@ def _lint_complex(tasks: list[dict]) -> tuple[list[str], list[str]]:
     for kind, count in counts.items():
         if count == 0:
             errors.append(f"复杂集缺少 {kind} 桶：四桶必须都有，否则回答不了'哪类问题 Agent 才值'")
+        elif count != COMPLEX_BUCKET_COUNT:
+            errors.append(
+                f"复杂集 {kind} 桶必须恰好 {COMPLEX_BUCKET_COUNT} 条（4 桶×3 冻结），当前 {count}"
+            )
         if count >= 3 and holdout_counts[kind] != 1:
             errors.append(
                 f"复杂集 {kind} 桶必须恰好 1 条冻结留出，当前 {holdout_counts[kind]} 条"
@@ -466,11 +512,107 @@ def _lint_complex(tasks: list[dict]) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+def _lint_refs(task: dict, chunks: dict[str, dict]) -> list[str]:
+    """三处坐标一致性：chunk_ids / relevant_chunk_ids 必须存在且支撑金标值。
+
+    以前只有 `evidence.table_id` 被机检；另外两处漂移只能靠人眼——2026-11-03
+    重解析后 FIN-05/28/29 的 chunk_ids 曾指向旧表，lint 0 error 却掩盖了它。
+    块级 id（带 #rows#/#b 后缀）目前只验锚点存在性；内容校验留给块级检查。
+    """
+    errors: list[str] = []
+    tag = task.get("id") or "?"
+    refs = list(
+        dict.fromkeys(
+            [
+                *(str(ref) for ref in (task.get("relevant_chunk_ids") or [])),
+                *(
+                    str(ref)
+                    for point in task.get("answer_points") or []
+                    for ref in (point.get("chunk_ids") or [])
+                ),
+            ]
+        )
+    )
+    anchor_of: dict[str, str] = {}
+    for ref in refs:
+        if ref in chunks:
+            anchor_of[ref] = ref
+            continue
+        anchor = "#".join(ref.split("#")[:2])
+        if "#" in ref and anchor in chunks:
+            anchor_of[ref] = anchor
+            continue
+        errors.append(f"[{tag}] 引用不存在: {ref}")
+    for index, point in enumerate(task.get("answer_points") or []):
+        value = (point.get("evidence") or {}).get("value")
+        if value is None:
+            continue
+        point_refs = [str(ref) for ref in (point.get("chunk_ids") or [])] or refs
+        haystack = " ".join(
+            _norm(chunks[anchor_of[ref]].get("content") or "")
+            for ref in point_refs
+            if ref in anchor_of
+        )
+        needle = _norm(value).lstrip("+-")
+        if haystack and needle not in haystack.lstrip("+-"):
+            errors.append(
+                f"[{tag}] answer_points[{index}] 引用内容不含金标值 {value!r}："
+                f"坐标可能已漂移（表 id 重排后需重绑）"
+            )
+    return errors
+
+
+def _lint_routing(task: dict, documents: list[dict]) -> list[str]:
+    """任务金标与当前路由策略的一致性——规则改了就让它变红。
+
+    只做两向可判定的断言：`clarify_mode=ask` 必须澄清；非边界任务不得被拦。
+    `should_abstain` 任务不判——"证据不足型拒答"需要闸门放行、由 Agent 检索后
+    拒答，与"越界型拒答"（闸门直接拦）混在同一字段里，无法自动区分（2026-11-03）。
+    """
+    from app.finance.routing_policy import initial_decision
+
+    tag = task.get("id") or "?"
+    if task.get("mock"):
+        return []  # mock 题测行为注入（超时/重试），不对路由作断言
+    question = str(task.get("question") or "")
+    if not question:
+        return []
+    decision = initial_decision(question, documents)
+    blocked = decision.initial_path in ("clarify", "abstain")
+    errors: list[str] = []
+    if task.get("clarify_mode") == "ask" and decision.initial_path != "clarify":
+        errors.append(
+            f"[{tag}] clarify_mode=ask 但当前路由给 {decision.initial_path}"
+            f"（{decision.rule_id}）"
+        )
+    if not task.get("should_abstain") and task.get("clarify_mode") != "ask" and blocked:
+        errors.append(
+            f"[{tag}] 非边界任务被路由拦截：{decision.initial_path}/{decision.rule_id}"
+        )
+    target = task.get("route_target")
+    if target in ("agent", "structured_rag") and not blocked and decision.initial_path != target:
+        errors.append(
+            f"[{tag}] route_target={target} 但当前路由是 {decision.initial_path}"
+            f"（{decision.rule_id}）"
+        )
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="金融任务集 lint")
     parser.add_argument("--tasks", default=DEFAULT_PROFILE)
     parser.add_argument("--tier", choices=("profile", "stress", "complex"), default="profile")
     parser.add_argument("--holdout-only", action="store_true", help="只看留出集")
+    parser.add_argument(
+        "--check-refs",
+        action="store_true",
+        help="校验 chunk_ids/relevant_chunk_ids 存在且内容含金标值（坐标漂移检查）",
+    )
+    parser.add_argument(
+        "--check-routing",
+        action="store_true",
+        help="校验任务金标与当前路由策略一致（规则漂移检查）",
+    )
     args = parser.parse_args()
 
     tasks_path = Path(args.tasks)
@@ -485,7 +627,9 @@ def main() -> int:
     chunks = chunk_map()
     store = FinanceStore(DOCUMENT_DIR)
 
-    errors, warnings = base_lint(tasks, chunks, profile=args.tier == "profile")
+    errors, warnings = base_lint(
+        tasks, chunks, profile=args.tier == "profile", required_fields=FINANCE_REQUIRED_FIELDS
+    )
     for task in tasks:
         if not task.get("should_abstain"):
             errors.extend(_lint_evidence(task, chunks, store))
@@ -495,13 +639,20 @@ def main() -> int:
         schema_errors, schema_warnings = _lint_schema_v2(task)
         errors.extend(schema_errors)
         warnings.extend(schema_warnings)
-    tier_errors, tier_warnings = _lint_tier(tasks, args.tier)
+    tier_errors, tier_warnings = _lint_tier(tasks, args.tier, holdout_only=args.holdout_only)
     errors.extend(tier_errors)
     warnings.extend(tier_warnings)
     if args.tier == "complex":
         complex_errors, complex_warnings = _lint_complex(tasks)
         errors.extend(complex_errors)
         warnings.extend(complex_warnings)
+    if args.check_refs:
+        for task in tasks:
+            errors.extend(_lint_refs(task, chunks))
+    if args.check_routing:
+        documents = store.list_documents()
+        for task in tasks:
+            errors.extend(_lint_routing(task, documents))
 
     dimension_counter: dict[str, int] = {}
     for task in tasks:
