@@ -36,6 +36,14 @@ CANDIDATE_DEPTH = 60
 #: 表块在 RRF 融合后的加权（2026-11-03）。查数题的答案在表里；核心财务表
 #: 常被利润表/附注挤出 top-k。1.06 只打破接近的平局，不改变明显更相关的排序。
 TABLE_BLOCK_BOOST = 1.06
+#: 「主要会计数据 / 主要财务指标」类核心表的额外加权（2026-11-03 晚）。
+#: 查数题问"营业收入是多少"，最权威的出处是年报第二节的核心表；利润表和
+#: 附注里同样的数字在语义检索里反而更容易排前面（内容短、词频高）。
+#: 只认表名或所属章节名，不碰表内容——往 content 里塞章节会稀释 BM25（实测回退）。
+#: 2.2 是全集扫描后的档位：52 题要点命中 60.2%→80.6%、整题全中 54.8%→78.6%，
+#: 且 1.25→2.2 逐题对比零退化（6 题提升、其余不变）。
+CORE_TABLE_BOOST = 2.2
+CORE_TABLE_HINTS = ("主要会计数据", "主要财务指标")
 STOPWORD_DF_RATIO = 0.5
 BGE_QUERY_PREFIX = "为这个句子生成表示以用于检索相关文章："
 INDEX_VERSION = "finance-blocks-v1"
@@ -322,7 +330,20 @@ class BlockIndex:
 
     def __init__(self, store: FinanceStore):
         self.store = store
-        self.blocks = build_blocks(store.documents())
+        documents = store.documents()
+        self.blocks = build_blocks(documents)
+        # 章节路径只用于打分（核心表识别），不进块内容。
+        self._section_paths: dict[str, str] = {}
+        for document in documents:
+            for section in document.get("sections") or []:
+                section_id = str(section.get("section_id") or "")
+                if section_id:
+                    self._section_paths[section_id] = " > ".join(
+                        str(part) for part in section.get("path") or []
+                    )
+        self._core_table_blocks = {
+            index for index, block in enumerate(self.blocks) if self._is_core_table(block)
+        }
         self._block_by_id = {block["block_id"]: block for block in self.blocks}
         self._postings: dict[str, list[int]] = {}
         self._lengths: list[int] = []
@@ -346,6 +367,16 @@ class BlockIndex:
         if block is None:
             raise KeyError(f"未知 block_id: {block_id}")
         return dict(block)
+
+    def _is_core_table(self, block: dict) -> bool:
+        """表名或所属章节名含「主要会计数据 / 主要财务指标」的表块。"""
+        if block.get("kind") != "table_rows":
+            return False
+        caption = str(block.get("table_caption") or "")
+        if any(hint in caption for hint in CORE_TABLE_HINTS):
+            return True
+        path = self._section_paths.get(str(block.get("section_id") or ""), "")
+        return any(hint in path for hint in CORE_TABLE_HINTS)
 
     def _allowed_indices(
         self,
@@ -484,11 +515,13 @@ class BlockIndex:
                 fused[index] = fused.get(index, 0.0) + 1.0 / (RRF_K + rank)
         # 表块小幅加权（2026-11-03）：查数题的答案在表里，但"主要会计数据"
         # 这类核心表常被利润表/附注挤出 top-k（实测 FIN-S02 金标 rank 5、
-        # FIN-S03/S06/S07/S10 不在 top20）。1.06 只打破接近的平局，
-        # 不会让表块压过明显更相关的正文段。
+        # FIN-S03/S06/S07/S10 不在 top20）。核心表加得更多——只按元数据打分，
+        # 不改块内容。
         for index in fused:
             if self.blocks[index].get("kind") == "table_rows":
-                fused[index] *= TABLE_BLOCK_BOOST
+                fused[index] *= (
+                    CORE_TABLE_BOOST if index in self._core_table_blocks else TABLE_BLOCK_BOOST
+                )
         ordered = sorted(fused.items(), key=lambda item: item[1], reverse=True)
         # 先每个文档取一个最优块，再按来源去重补足。
         # 跨文档题如果被同一份年报的多个窗口占满 top-k，另一份文档永远进不来；
