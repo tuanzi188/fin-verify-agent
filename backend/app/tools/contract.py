@@ -9,7 +9,7 @@
    0.016），而描述写着"0-1、低于 0.35 表示资料不足"——照描述实现会让 Agent
    对每个问题都判定资料不足，拒答维度直接失效。
 3. **trace / result schema**：评测按这个判分，字段对齐
-   `docs/AGENT_EVAL_PROJECT_SPEC.md` §6.5。
+   `docs/archive/20261027_agent_eval_project_spec.md` §6.5。
 
 本模块不导入 app 内其他模块，测试可以单独 import。
 """
@@ -107,7 +107,7 @@ TOOL_SPECS: list[dict[str, Any]] = [SEARCH_KB_SPEC, GET_CITATION_SPEC]
 # 结果 schema
 # ---------------------------------------------------------------------------
 
-# 四态与 docs/AGENT_EVAL_PROJECT_SPEC.md §6.5 一致（第四态是 error，不是 failed）
+# 四态与 docs/archive/20261027_agent_eval_project_spec.md §6.5 一致（第四态是 error，不是 failed）
 VALID_STATUSES = ("answered", "abstained", "clarified", "error")
 
 RESULT_REQUIRED_FIELDS = (

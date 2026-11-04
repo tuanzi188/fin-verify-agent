@@ -13,6 +13,27 @@ from typing import Iterable, Optional, Sequence
 # 95% 双侧正态分位数
 Z_95 = 1.959963984540054
 
+#: 缓存命中部分的计价折扣：命中 token 按未命中价格的 1/10 计（DeepSeek 风格）。
+#: 这是计价假设，不是网关实测折扣；网关真实折扣确认后只改这一个数，
+#: 报告里"有效输入"的含义随之整体变化，不逐处手改。
+CACHE_HIT_PRICE_RATIO = 0.1
+
+
+def effective_input_tokens(tokens_in: int, cache_hit_tokens: int = 0) -> int:
+    """有效输入成本：未命中按全价、命中按 CACHE_HIT_PRICE_RATIO 折算。
+
+    - 全价部分一律按 `tokens_in - cache_hit_tokens` 推导，不接受显式 miss：
+      不同网关对 `prompt_cache_miss_tokens` 的定义不一，采信它可能把全价部分
+      误算成已折扣；旧 runs / 不回字段的网关缺 hit 时按全价处理，
+      宁可高估成本，不虚报折扣。
+    - hit 缺省为 0（旧 runs、网关不回字段）→ 全价口径，不做任何折算，
+      宁可高估成本，不虚报折扣。
+    - 返回值是基于 CACHE_HIT_PRICE_RATIO 的**估算**，不是网关实测成本。
+    """
+    hit = max(0, int(cache_hit_tokens or 0))
+    miss = max(0, int(tokens_in or 0) - hit)
+    return int(miss + hit * CACHE_HIT_PRICE_RATIO)
+
 
 def wilson_interval(successes: int, total: int, z: float = Z_95) -> tuple[float, float]:
     """Wilson score 区间。total <= 0 时返回 (0.0, 0.0)。"""

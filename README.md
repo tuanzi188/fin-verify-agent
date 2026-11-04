@@ -3,6 +3,11 @@
 面向金融文档的查证产品：**材料入库 → 提问 → 结论与证据 → 历史复核**。
 产品只保留一条主路径（`/finance/*`），评测独立运行（`/lab` 只读离线产物）。
 
+> **接手 / 引用数字前先读**：[AGENTS.md](AGENTS.md)（工程导航）、
+> [docs/CURRENT.md](docs/CURRENT.md)（当前阶段与未闭环项）、
+> [docs/evidence/INDEX.md](docs/evidence/INDEX.md)（哪个评测读数有效）。
+> `docs/archive/` 内为历史设计与评测记录，只查依据、不引读数。
+
 ---
 
 ## 项目定位
@@ -49,7 +54,7 @@
 
 2026-11-02 查证可靠性修复：组合引用完整解析、去重后同步编号、百分点展示尺度修正、
 计算输入坐标溯源、结论数值复核、追问条件补全，以及检索前主体和期间检查。
-实现边界及复现方法见 [可靠性修复说明](docs/FINANCE_RELIABILITY_20261102.md)。
+实现边界及复现方法见 [可靠性修复说明](docs/archive/20261102_finance_reliability.md)。
 
 ---
 
@@ -88,6 +93,10 @@ python -m evaluation.compare_agent_reports \
   --baseline ../docs/evidence/agent_baseline_report3_20261027.json \
   --improved ../docs/evidence/agent_improved_report3_20261027.json
 ```
+
+> 以下两张表均为**历史快照**，只作机制对照。当前有效读数与口径绑定条件见
+> [docs/evidence/INDEX.md](docs/evidence/INDEX.md)；答案层当前为 27/42 = 64.3%（重判产物），
+> 硬门禁仍未过，不能当验收结论。
 
 以下为 **2026-10-27 通用制度库 Agent 历史实测**（30 条 × 3 次 × 2 变体 = 180 次运行），
 用于比较 Agent 执行机制，**不代表当前金融查证产品的端到端准确率**：
@@ -136,7 +145,7 @@ python -m evaluation.eval_report --retrieval %TEMP%\retrieval.json \
 - 路由层：准确率、混淆矩阵、Macro-F1、错分代价（简单题烧钱 / 复杂题拿差答案）。
 - 稳定性：`pass@k`（至少一次）与 `pass^k`（全部）分开报，连续型指标报均值 ± 标准差 + P95。
 - 闸门：金融两条红线——数值幻觉率 = 0、误拒率 ≤ 阈值；缺数据记 `insufficient_data`，不算通过。
-- 实施记录与首轮读数：`docs/EVAL_UPGRADE_IMPLEMENTATION.md`；等价规则：`docs/ANSWER_EQUIVALENCE_RUBRIC.md`。
+- 实施记录与首轮读数：`docs/archive/20261101_eval_upgrade_implementation.md`；等价规则：`docs/ANSWER_EQUIVALENCE_RUBRIC.md`。
 
 ### 任务集维护（防漂移）
 
@@ -300,15 +309,16 @@ fin-verify-agent/
 cd backend
 pip install -r requirements.txt
 pip install pytest pytest-asyncio
-python -m pytest -q          # 292 passed
+python -m pytest -q
 
 cd ../frontend
 npm ci
 npm run typecheck            # tsc --noEmit
-npm test                     # 48 passed
+npm test
 npm run build
 ```
 
+通过数会随迭代变化，不在此写死；接手时的验证命令见 [AGENTS.md](AGENTS.md) §3。
 CI 运行后端测试、前端测试、类型检查与生产构建。
 
 ## License

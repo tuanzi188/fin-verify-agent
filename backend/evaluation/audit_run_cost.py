@@ -23,6 +23,8 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+from evaluation.agent_metrics import CACHE_HIT_PRICE_RATIO, effective_input_tokens
+
 READ_TOOLS = ("get_table", "get_rows", "get_cell", "read_section", "read_block")
 
 
@@ -109,18 +111,46 @@ def _llm_rollup(result: dict) -> dict:
     return {"available": True, "phases": phases}
 
 
+def _cache_tokens(result: dict, usage: dict, calls: list[dict]) -> tuple[int, int | None]:
+    """取一次运行的缓存命中/未命中。usage 优先，旧轨迹从逐轮调用回退聚合。
+
+    返回 (hit, miss)；miss 为 None 表示没有缓存字段（全价口径，不折算）。
+    """
+    usage_hit = usage.get("cache_hit_tokens")
+    usage_miss = usage.get("cache_miss_tokens")
+    if usage_hit is None and usage_miss is None and calls:
+        call_hit = sum(int(c.get("cache_hit_tokens") or 0) for c in calls)
+        if call_hit:
+            return call_hit, sum(int(c.get("cache_miss_tokens") or 0) for c in calls)
+        return 0, None
+    hit = int(usage_hit or 0)
+    miss = int(usage_miss or 0) if (usage_hit or usage_miss) is not None else None
+    return hit, miss
+
+
 def _summarize(result: dict) -> dict:
     usage = result.get("usage") or {}
     rollup = _tool_rollup(result)
     llm = _llm_rollup(result)
     calls = result.get("llm_calls") or []
+    tokens_in = int(usage.get("tokens_in") or 0)
+    cache_hit, cache_miss = _cache_tokens(result, usage, calls)
     return {
         "task_id": str(result.get("task_id") or ""),
         "variant": result.get("variant"),
         "status": result.get("status"),
         "total_tokens": _tokens(usage),
-        "tokens_in": int(usage.get("tokens_in") or 0),
+        "tokens_in": tokens_in,
         "tokens_out": int(usage.get("tokens_out") or 0),
+        "cache_hit_tokens": cache_hit,
+        # 网关上报值，仅供诊断；全价部分按 tokens_in − hit 推导，不采信它。
+        "cache_miss_tokens": cache_miss,
+        # 有效输入是估算值（命中折扣比 CACHE_HIT_PRICE_RATIO 为计价假设，
+        # 非网关实测）。全价部分按 tokens_in − hit 推导，不采信网关 miss：
+        # 不同网关 miss 定义不一，显式 miss 可能把全价部分误算成已折扣。
+        "effective_input_tokens": effective_input_tokens(tokens_in, cache_hit),
+        "cache_hit_price_ratio": CACHE_HIT_PRICE_RATIO,
+        "effective_input_is_estimate": True,
         "llm_calls": int(usage.get("llm_calls") or len(calls)),
         "steps": int(usage.get("steps") or 0),
         "rounds": usage.get("rounds"),
@@ -170,6 +200,11 @@ def _aggregate(rows: list[dict]) -> dict:
         "median_tokens": int(statistics.median(tokens)) if tokens else 0,
         "mean_tokens": int(sum(tokens) / len(tokens)) if tokens else 0,
         "legacy_runs": sum(1 for row in rows if not row["llm"].get("available")),
+        "cache_hit_tokens": sum(int(row.get("cache_hit_tokens") or 0) for row in rows),
+        "effective_input_tokens": sum(int(row.get("effective_input_tokens") or 0) for row in rows),
+        # 自声明：有效输入是按计价假设折算的估算，不是网关实测成本。
+        "cache_hit_price_ratio": CACHE_HIT_PRICE_RATIO,
+        "effective_input_is_estimate": True,
         "tool_totals": tools,
         "phase_totals": phases,
         "duplicate_read_groups": sum(len(row["duplicate_read_groups"]) for row in rows),
@@ -204,6 +239,12 @@ def _print_report(rows: list[dict], aggregate: dict, top: int) -> None:
         f"合计 {aggregate['runs']} 次：{aggregate['total_tokens']:,} token；"
         f"中位 {aggregate['median_tokens']:,}/次；旧轨迹 {aggregate['legacy_runs']} 次"
     )
+    if aggregate.get("cache_hit_tokens"):
+        print(
+            f"有效输入估算 {aggregate['effective_input_tokens']:,} token"
+            f"（缓存命中 {aggregate['cache_hit_tokens']:,}，命中折扣比 {CACHE_HIT_PRICE_RATIO}；"
+            f"折扣为计价假设，非网关实测成本）"
+        )
     if aggregate["phase_totals"]:
         print("按阶段：")
         for phase, bucket in sorted(

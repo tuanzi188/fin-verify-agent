@@ -14,8 +14,10 @@
 from typing import Optional
 
 from evaluation.agent_metrics import (
+    CACHE_HIT_PRICE_RATIO,
     continuous_summary,
     count_by,
+    effective_input_tokens,
     fisher_exact_two_sided,
     fisher_min_split,
     format_interval,
@@ -503,6 +505,12 @@ def aggregate(verdicts: list[dict], judge_repeats: int = 1, runs_per_task: int =
     ]
     tokens_in = sum(int((verdict.get("usage") or {}).get("tokens_in") or 0) for verdict in verdicts)
     tokens_out = sum(int((verdict.get("usage") or {}).get("tokens_out") or 0) for verdict in verdicts)
+    cache_hit_tokens = sum(
+        int((verdict.get("usage") or {}).get("cache_hit_tokens") or 0) for verdict in verdicts
+    )
+    cache_miss_tokens = sum(
+        int((verdict.get("usage") or {}).get("cache_miss_tokens") or 0) for verdict in verdicts
+    )
 
     judged_points = [
         point
@@ -557,6 +565,18 @@ def aggregate(verdicts: list[dict], judge_repeats: int = 1, runs_per_task: int =
         "p95_latency_ms": int(percentile(latencies, 0.95)) if latencies else None,
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
+        "cache_hit_tokens": cache_hit_tokens,
+        # 网关上报值，仅供诊断；全价部分按 tokens_in − hit 推导，不采信它
+        # （旧 runs / 不回字段的网关缺 hit 时按全价处理，宁可高估不虚报折扣）。
+        "cache_miss_tokens": cache_miss_tokens,
+        # 有效输入是估算值（命中折扣比是计价假设），不是网关实测成本。
+        # 全价部分一律按 tokens_in − hit 推导：不同网关 miss 定义不一，
+        # 采信显式 miss 可能把全价部分误算成已折扣。
+        # 旧 runs 无缓存字段时 hit=0，等价于全价口径。
+        "effective_input_tokens": effective_input_tokens(tokens_in, cache_hit_tokens),
+        # 自声明：折扣比是计价假设，有效输入是估算而非网关实测成本。
+        "cache_hit_price_ratio": CACHE_HIT_PRICE_RATIO,
+        "effective_input_is_estimate": True,
         # 连续型指标统一报 均值 ± 标准差 + 中位数 + P95：
         # 只报均值会把 CX-10 型长尾藏起来，只报最好一次会把不稳定藏起来。
         "token_stats": continuous_summary(token_totals),
@@ -936,7 +956,11 @@ def render_console(report: dict) -> str:
                  f"有据可依 {cross.get('grounded_label')}")
     lines.append(f"  尝试恢复率 {cross.get('recovery_attempt_label')}    "
                  f"恢复成功率 {cross.get('recovery_success_label')}")
-    lines.append(f"  token: 入 {cross.get('tokens_in')} / 出 {cross.get('tokens_out')}")
+    lines.append(
+        f"  token: 入 {cross.get('tokens_in')} / 出 {cross.get('tokens_out')}"
+        f"（有效输入估算 {cross.get('effective_input_tokens')}，缓存命中 {cross.get('cache_hit_tokens')}；"
+        f"命中折扣比 {cross.get('cache_hit_price_ratio', CACHE_HIT_PRICE_RATIO)} 为计价假设，非网关实测）"
+    )
     for label, key in (("token/次", "token_stats"), ("步数", "step_stats"), ("延迟ms", "latency_stats"), ("调用数", "calls_stats")):
         stats = cross.get(key) or {}
         if stats.get("n"):

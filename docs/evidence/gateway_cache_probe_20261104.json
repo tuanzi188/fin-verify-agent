@@ -1,0 +1,38 @@
+{
+  "kind": "gateway_cache_probe",
+  "date": "2026-11-04",
+  "purpose": "判别 H1（缓存写可见性延迟）/ H2（带 tools 请求键控差异）：对同一前缀连发两次请求，读第二次 prompt_cache_hit_tokens",
+  "gateway": "http://127.0.0.1:7863/v1 (wb2api)",
+  "model": "cn:deepseek-v4.1-flash",
+  "budget": "8 次短请求，max_tokens=16，实测约 7k prompt token",
+  "protocol": {
+    "prefix": "同一段金融材料重复 30 次（> 缓存最小分块），两次请求前缀完全一致",
+    "groups": {
+      "A": "带 tools，紧接连发（间隔 ~1.5s）",
+      "B": "不带 tools，紧接连发（阳性对照）",
+      "C": "带 tools，间隔 15s 再发（针对 H1）",
+      "D": "第一次带 tools，第二次不带 tools（针对 H2 写入/读取键控）"
+    }
+  },
+  "results": [
+    {"tag": "A-1st-with-tools", "with_tools": true, "prompt_tokens": 863, "completion_tokens": 16, "cache_hit_tokens": 512, "cache_miss_tokens": 351, "latency_ms": 2450, "finish_reason": "length"},
+    {"tag": "A-2nd-with-tools", "with_tools": true, "prompt_tokens": 863, "completion_tokens": 2, "cache_hit_tokens": 640, "cache_miss_tokens": 223, "latency_ms": 1465, "finish_reason": "stop"},
+    {"tag": "B-1st-no-tools", "with_tools": false, "prompt_tokens": 536, "completion_tokens": 2, "cache_hit_tokens": 384, "cache_miss_tokens": 152, "latency_ms": 1697, "finish_reason": "stop"},
+    {"tag": "B-2nd-no-tools", "with_tools": false, "prompt_tokens": 536, "completion_tokens": 2, "cache_hit_tokens": 384, "cache_miss_tokens": 152, "latency_ms": 1053, "finish_reason": "stop"},
+    {"tag": "C-1st-with-tools", "with_tools": true, "prompt_tokens": 863, "completion_tokens": 2, "cache_hit_tokens": 640, "cache_miss_tokens": 223, "latency_ms": 1558, "finish_reason": "stop"},
+    {"tag": "C-2nd-after-15s-with-tools", "with_tools": true, "prompt_tokens": 863, "completion_tokens": 16, "cache_hit_tokens": 640, "cache_miss_tokens": 223, "latency_ms": 3689, "finish_reason": "length"},
+    {"tag": "D-1st-with-tools", "with_tools": true, "prompt_tokens": 863, "completion_tokens": 16, "cache_hit_tokens": 640, "cache_miss_tokens": 223, "latency_ms": 1528, "finish_reason": "length"},
+    {"tag": "D-2nd-no-tools-after-tools", "with_tools": false, "prompt_tokens": 536, "completion_tokens": 2, "cache_hit_tokens": 384, "cache_miss_tokens": 152, "latency_ms": 2275, "finish_reason": "stop"}
+  ],
+  "findings": {
+    "H1_write_visibility_delay": "不成立。A2 紧接 A1 命中从 512 升到 640，写入立即可见；C 间隔 15s 与紧连读数一致（640），无延迟特征。",
+    "H2_tools_keying_difference": "不成立。带 tools 与不带 tools 请求都返回 hit/miss；D 组跨 tools/无 tools 切换后仍各自正常命中。",
+    "all_groups_prewarmed": true,
+    "prewarm_note": "四组共享同一前缀，第一次请求即已有命中（缓存预热），故本实验只判别『带 tools 是否记账 / 写入是否可见』，不用于测量绝对命中率。",
+    "root_cause_of_probe_zero_hit": "客户端缺字段透传，非网关行为。openai_client._chat_with_tools_impl 的 usage_info 此前未填 cache_hit_tokens / cache_miss_tokens；runner 走 chat_with_tools 时 round_usage 缺这两项，_record_llm_call 按 or 0 记 0，_accumulate_tokens 累加 0。后置调用走不带 tools 的 chat()，那条路径有字段，故显示 51–87% 命中。",
+    "fix": "给 _chat_with_tools_impl 补 _extract_cache_tokens(response.usage) 与两个字段，与 _chat_impl 对齐；新增行为测试 tests/test_cache_accounting.py::test_chat_with_tools_impl_propagates_cache_fields",
+    "implication": "成本计划 §3「循环 0 命中 → 网关侧 P0、收益上限 38.4k→15.5k/题」的前提不成立。修复后 tool_round 会有真实命中，但命中率与省钱幅度需重跑 4 题探针实测，不能沿用旧推算。§4-B 压历史的优先级不再因『循环足额全价』而自动升到最高。"
+  },
+  "reprobe_command": "cd backend && python -m evaluation.run_finance_eval --tasks evaluation/finance_tasks_complex.jsonl --ids CX-01,CX-04,CX-07,CX-10 --search-mode blocks --runs 1 --out docs/evidence/finance_probe_cache_20261104_v2.json",
+  "reprobe_note": "修复客户端字段透传后重跑；按 §2 记账口径读 tool_round 命中率。真实模型调用，按项目纪律先报预算上限。"
+}

@@ -1,6 +1,13 @@
+---
+status: historical
+scope: 评测体系 / 三层评测落地记录（2026-10-31 ~ 11-01）
+read_when: 查检索层/路由层/Gate 的首轮离线读数与命令时
+warning: Phase 0 读数来自当时的语料状态；答案层当时为 no_data。当前读数见 docs/evidence/INDEX.md。
+---
+
 # 评测升级实施记录：RAG 评价 + Agent 测评
 
-> 对应方案：`docs/EVAL_UPGRADE_PLAN.md`（原 `D:\a工作空间\KnowledgeMind_评测升级方案_RAG评价与Agent测评.md`）
+> 对应方案：`docs/archive/20261031_eval_upgrade_plan.md`（原 `D:\a工作空间\KnowledgeMind_评测升级方案_RAG评价与Agent测评.md`）
 > 实施日期：2026-10-31
 > 状态：Phase 0 已落地并产出真实离线读数；Phase 1/2 的确定性代码与测试已落地，真实模型调用（忠实度与答案层探针）待预算批准。
 

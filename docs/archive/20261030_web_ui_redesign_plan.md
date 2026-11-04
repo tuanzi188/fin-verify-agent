@@ -1,3 +1,10 @@
+---
+status: historical
+scope: 前端 / 视觉与工作台改版设计史
+read_when: 查三栏工作台、证据检查器的设计依据时
+warning: §10–15 是 2026-10-30 的每日实施记录，不是待办清单。
+---
+
 # KnowledgeMind Web 改造方案：从通用 RAG 聊天到金融查证工作台
 
 > 版本：v0.1（草案）  

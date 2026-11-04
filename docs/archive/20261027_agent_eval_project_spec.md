@@ -1,3 +1,11 @@
+---
+status: historical
+scope: 制度库时代 / Agent 评测设计史
+superseded_by: docs/INDEX.md 与 docs/CURRENT.md
+read_when: 查评测设计依据（五维能力、Wilson 区间、失败归类）时
+warning: 标题与 §6.6 的 HTTP 入口属于制度库时代，已下线；评测脚本与指标口径仍有效。本文读数不可当当前产品结论。
+---
+
 # KnowledgeMind · 企业知识问答 Agent 与多维能力评测
 
 > 项目设计文档 · v0.3 · 2026-10-27

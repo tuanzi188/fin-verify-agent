@@ -1,3 +1,11 @@
+---
+status: normative
+scope: 金融查证 / 路由判据 v2
+authoritative_for: 自动选路规则、一次检索证据充分清单、升级白名单
+read_when: 改动 finance_router.py 或 routing_metrics 回归前
+note: 无真实问题金标，禁止据单元测试宣称正确率提升（见本文 §5）
+---
+
 # 查证路由判据与当前实施范围
 
 版本：finance-routing-v2。此次只完成枚举规则、正式路径接入及合成证据回归测试。按用户要求，暂停抽取和标注 20–30 条真实问题，不建立新金标集，也不报告新准确率。

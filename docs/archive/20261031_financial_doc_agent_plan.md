@@ -1,8 +1,15 @@
+---
+status: historical
+scope: 金融查证 / 产品与实施总方案 v1.1
+read_when: 查语料、表格解析、证据链的设计依据时
+warning: §8 的 v1 5C6 周计划与 §11 的 v1 结论属历史排期；成本/准确性读数已被后续评测取代。
+---
+
 # 金融查证 Agent · 方案文档 v1.1
 
 生成日期：2026-10-27
 状态：方向已拍板，待落语料与首个垂直切片
-关联：`docs/AGENT_EVAL_PROJECT_SPEC.md`（现有 Agent 评测体系）
+关联：`docs/archive/20261027_agent_eval_project_spec.md`（现有 Agent 评测体系）
 
 **v1.1 修订记录（按评审意见收紧）**
 

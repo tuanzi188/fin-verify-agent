@@ -18,6 +18,23 @@ logger = logging.getLogger(__name__)
 _RETRYABLE_ERRORS = (RateLimitError, APITimeoutError, APIConnectionError)
 
 
+def _extract_cache_tokens(usage) -> tuple[int, int]:
+    """从 SDK usage 里取缓存命中/未命中 token。
+
+    DeepSeek 兼容网关在 usage 上返回 prompt_cache_hit_tokens / prompt_cache_miss_tokens
+    （prompt_tokens = hit + miss）。OpenAI 官方字段没有这两项，取不到时返回 (0, 0)，
+    上层按全价记账——宁可高估成本，不虚报折扣。
+    """
+    if usage is None:
+        return 0, 0
+    hit = getattr(usage, "prompt_cache_hit_tokens", None)
+    miss = getattr(usage, "prompt_cache_miss_tokens", None)
+    try:
+        return int(hit or 0), int(miss or 0)
+    except (TypeError, ValueError):
+        return 0, 0
+
+
 def parse_tool_calls(message) -> list[dict]:
     """把 SDK 返回的 tool_calls 规整成可记录进 trace 的 dict。
 
@@ -145,12 +162,15 @@ class OpenAICompatibleClient:
                 choice = response.choices[0]
                 content = choice.message.content or ""
                 reasoning = getattr(choice.message, "reasoning_content", None)
+                cache_hit, cache_miss = _extract_cache_tokens(response.usage)
                 usage_info = {
                     "provider": provider,
                     "model": model_cfg["model"],
                     "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
                     "completion_tokens": response.usage.completion_tokens if response.usage else 0,
                     "total_tokens": response.usage.total_tokens if response.usage else 0,
+                    "cache_hit_tokens": cache_hit,
+                    "cache_miss_tokens": cache_miss,
                     "finish_reason": getattr(choice, "finish_reason", None),
                     "has_reasoning": bool(reasoning),
                 }
@@ -264,12 +284,18 @@ class OpenAICompatibleClient:
                 content = choice.message.content or ""
                 reasoning = getattr(choice.message, "reasoning_content", None)
                 tool_calls = parse_tool_calls(choice.message)
+                # 与 `_chat_impl` 保持一致：带 tools 的请求网关同样返回缓存字段。
+                # 2026-11-04 判定实验实测带 tools 请求 hit 立即可见（512→640），
+                # 漏掉这两项会把 Agent 工具循环误记成 0 命中、按全额计价。
+                cache_hit, cache_miss = _extract_cache_tokens(response.usage)
                 usage_info = {
                     "provider": provider,
                     "model": model_cfg["model"],
                     "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
                     "completion_tokens": response.usage.completion_tokens if response.usage else 0,
                     "total_tokens": response.usage.total_tokens if response.usage else 0,
+                    "cache_hit_tokens": cache_hit,
+                    "cache_miss_tokens": cache_miss,
                     "finish_reason": getattr(choice, "finish_reason", None),
                     "has_reasoning": bool(reasoning),
                 }

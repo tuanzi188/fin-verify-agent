@@ -1,3 +1,10 @@
+---
+status: historical
+scope: 评测体系 / 三层评测升级方案（计划）
+superseded_by: docs/archive/20261101_eval_upgrade_implementation.md
+read_when: 查「为什么这样设计三层评测」时
+---
+
 # KnowledgeMind 评测升级方案：RAG 评价与 Agent 测评
 
 > **来源**：2026-10-31 基于《大模型应用/算法学习路线+八股+面试实战》（合并版）评测章（第 5 章）、RAG 章节（13.3 / 13.5）、SmartAppointment 评估模块（1.2.4）与本项目现状的对照分析。

@@ -1,3 +1,11 @@
+---
+status: normative
+scope: 评测体系 / 答案等价判据
+authoritative_for: 数值、单位、方向、容差的等价判定（equivalence.py 与 judge prompt 共用）
+read_when: 改动判分容差、单位换算、方向判定或 rubric 文本前
+supersedes: 无（当前权威）
+---
+
 # 答案等价规则（Answer Equivalence Rubric）
 
 > 目的：把“65.7084 / 65.71 / 约 65.7 算不算同一个答案”写死，避免 judge 凭感觉判、

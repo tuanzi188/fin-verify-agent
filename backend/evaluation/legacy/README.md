@@ -1,7 +1,7 @@
 # legacy：历史评测脚本（只读参考，不再维护）
 
 这里放的是**早期阶段跑出过数字、但已被主线替代**的脚本。归档而不删除的理由很简单：
-它们产出的结论还写在 `docs/AGENT_EVAL_PROJECT_SPEC.md` 与 `experiments/RESULTS.md` 里，
+它们产出的结论还写在 `docs/archive/20261027_agent_eval_project_spec.md` 与 `experiments/RESULTS.md` 里，
 删掉脚本，那些数字就只剩一句"当时跑过"。
 
 **规矩**：这个目录不进 CI、不被任何主线模块 import、不随新需求改动。

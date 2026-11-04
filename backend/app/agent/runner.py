@@ -1,7 +1,7 @@
 """被测 Agent（P1：baseline 变体）。
 
 契约：`run(task, variant, run_index) -> result`，result 字段见
-`app/tools/contract.py`，形式对齐 `docs/AGENT_EVAL_PROJECT_SPEC.md` §6.5。
+`app/tools/contract.py`，形式对齐 `docs/archive/20261027_agent_eval_project_spec.md` §6.5。
 
 baseline 的定义（对照组的诚实性靠它撑着）：
 
@@ -198,6 +198,9 @@ def _record_llm_call(
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
         "total_tokens": int(usage.get("total_tokens") or (tokens_in + tokens_out)),
+        # 缓存命中按调用记录：旧 runs / 不回字段的网关缺这两项，审计侧按全价处理。
+        "cache_hit_tokens": int(usage.get("cache_hit_tokens") or 0),
+        "cache_miss_tokens": int(usage.get("cache_miss_tokens") or 0),
         "latency_ms": latency_ms,
         "provider": usage.get("provider"),
         "model": usage.get("model"),
@@ -483,10 +486,18 @@ def _answer_gate(
     return "", ""
 
 def _accumulate_tokens(usage: dict, call_usage: Optional[dict]) -> tuple[int, int]:
-    tokens_in = int((call_usage or {}).get("prompt_tokens") or 0)
-    tokens_out = int((call_usage or {}).get("completion_tokens") or 0)
+    call_usage = call_usage or {}
+    tokens_in = int(call_usage.get("prompt_tokens") or 0)
+    tokens_out = int(call_usage.get("completion_tokens") or 0)
     usage["tokens_in"] += tokens_in
     usage["tokens_out"] += tokens_out
+    # 缓存命中/未命中随调用累加；网关不回字段时保持 0，报告按全价口径。
+    usage["cache_hit_tokens"] = usage.get("cache_hit_tokens", 0) + int(
+        call_usage.get("cache_hit_tokens") or 0
+    )
+    usage["cache_miss_tokens"] = usage.get("cache_miss_tokens", 0) + int(
+        call_usage.get("cache_miss_tokens") or 0
+    )
     # 记下实际出答的 provider：`no_tool_call` 既可能是"模型选择不查"，也可能是
     # "这家 provider 不支持 tool calling"。没有这一项，两种原因在报告里分不开。
     provider = (call_usage or {}).get("provider")
@@ -914,7 +925,14 @@ async def _run_improved(
     locators: list[dict] = []
     seen_chunk_ids: set[str] = set()
     seen_locator_ids: set[str] = set()
-    usage = {"steps": 0, "tokens_in": 0, "tokens_out": 0, "latency_ms": 0}
+    usage = {
+        "steps": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cache_hit_tokens": 0,
+        "cache_miss_tokens": 0,
+        "latency_ms": 0,
+    }
     llm_calls: list[dict] = []
     tool_result_chars = 0
     tool_payload_chars = 0
@@ -1495,7 +1513,14 @@ async def run(
     locators: list[dict] = []
     seen_chunk_ids: set[str] = set()
     seen_locator_ids: set[str] = set()
-    usage = {"steps": 0, "tokens_in": 0, "tokens_out": 0, "latency_ms": 0}
+    usage = {
+        "steps": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cache_hit_tokens": 0,
+        "cache_miss_tokens": 0,
+        "latency_ms": 0,
+    }
     llm_calls: list[dict] = []
     tool_result_chars = 0
     tool_payload_chars = 0
