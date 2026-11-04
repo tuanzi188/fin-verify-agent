@@ -64,6 +64,8 @@ chroma_db/
 *.sqlite3
 logs/
 *.log
+# 留出题使用登记是运行时状态，由 holdout_registry 写入，不入库
+docs/evidence/holdout_usage.json
 
 # ===========================
 # Docker

@@ -61,8 +61,15 @@ python -m evaluation.score_agent_runs \
   --out ../docs/evidence/finance_answer_report_20261103_rejudged.json
 ```
 
-**待办**：让 `run_finance_eval` 直接落盘它实际使用的合并任务卡，
-`run_config.tasks_file` 指向仓库内路径，从源头消灭临时文件依赖。
+**已解决（新产物）**：`run_finance_eval` 现在默认把筛选后的实际任务集落盘为
+`<out>.tasks.jsonl`（与 runs 同目录），`run_config.tasks_file` 指向它，
+并新增 `tasks_source_file` / `tasks_selection` / `task_snapshot` 三个溯源字段。
+正式产物落 `docs/evidence/` 时快照自动进 git；临时探针写 `%TEMP%` 不污染仓库。
+可用 `--no-task-snapshot` 关闭（不推荐）。回归测试：
+`backend/tests/test_run_finance_eval_snapshot.py`。
+
+**历史产物仍需重建**：上面的 42 题合并卡是 2026-11-03 旧报告留下的，
+不受新逻辑追溯影响；复现方式保留在本节。
 
 ## D. 产物清单
 

@@ -72,8 +72,10 @@ CI 跑同样四项。通过数会变，不要记在文档里。真实查证需�
 - **三套判分口径**：同一批 42 题 runs 有 50%（修正前产物）、61.9%（文档转述，
   无独立产物）、64.3%（当前代码零 token 重判，`..._rejudged.json`）三个数，
   另有 judge 要点 71.4%。引用必须带产物名。详见 `docs/evidence/INDEX.md`。
-- **合并任务卡是临时文件**：旧报告的 `runs_file`/`tasks_file` 指向 `%TEMP%`，
-  临时文件消失后报告不可复现。重建方式见 `docs/evidence/INDEX.md`。
+- **合并任务卡**：新产物的 `run_config.tasks_file` 指向 `<out>.tasks.jsonl`
+  （`run_finance_eval` 自动落盘的筛选后任务集），可复现；但**历史报告**的
+  `tasks_file` 仍指向 `%TEMP%`，临时文件消失后不可复现。重建方式见
+  `docs/evidence/INDEX.md` §C。
 - **缓存字段两条路径**：`openai_client._chat_impl`（不带 tools）与
   `_chat_with_tools_impl`（带 tools）都必须透传 `cache_hit/miss_tokens`；
   漏一条就会把工具循环误记成 0 命中（2026-11-04 已修复）。

@@ -89,6 +89,11 @@ def main() -> int:
     parser.add_argument("--search-mode", choices=("sections", "blocks"), default="sections",
                         help="Agent 检索入口：sections=原章节定位，blocks=结构块索引")
     parser.add_argument("--out", default="", help="结果 JSON 路径；空 = 不落盘")
+    parser.add_argument(
+        "--no-task-snapshot",
+        action="store_true",
+        help="不落盘实际任务集快照（默认落盘；仅用于临时探针，正式产物请勿关闭）",
+    )
     args = parser.parse_args()
 
     tasks_path = Path(args.tasks)
@@ -147,8 +152,28 @@ def main() -> int:
             print(f"  {key}: {problems}")
 
     if args.out:
+        out_path = Path(args.out)
+        if not out_path.is_absolute():
+            out_path = _BACKEND_DIR / out_path
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 把「筛选后实际跑的任务集」落盘到 runs 同目录，run_config 指向它。
+        # 旧实现把 run_config.tasks_file 写成筛选前的 --tasks 路径（可能是
+        # %TEMP% 下的合并临时文件），筛选（--ids/--holdout/--limit）之后
+        # 路径与哈希都不再对应实际任务集，报告因此不可复现。
+        # 快照与 runs 同生共死：正式产物落 docs/evidence/ 时自动进 git，
+        # 临时探针写 %TEMP% 时不污染仓库。
+        tasks_path_for_run = tasks_path
+        if not args.no_task_snapshot:
+            snapshot_path = out_path.with_suffix(".tasks.jsonl")
+            snapshot_path.write_text(
+                "\n".join(json.dumps(task, ensure_ascii=False) for task in tasks) + "\n",
+                encoding="utf-8",
+            )
+            tasks_path_for_run = snapshot_path
+
         manifest = build_run_manifest(
-            tasks_path=tasks_path,
+            tasks_path=tasks_path_for_run,
             corpus_hash=corpus_hash(),
             corpus_stats={
                 "version": "finance-7docs-v1",
@@ -195,8 +220,15 @@ def main() -> int:
                 "model": (MODEL_CONFIG.get("flash") or {}).get("model"),
                 "model_provider": MODEL_PROVIDER,
                 "corpus_version": "finance-7docs-v1",
-                "tasks_file": str(tasks_path),
-                "tasks_sha256": sha256_file(tasks_path),
+                "tasks_file": str(tasks_path_for_run),
+                "tasks_sha256": sha256_file(tasks_path_for_run),
+                "tasks_source_file": str(tasks_path),
+                "tasks_selection": {
+                    "ids": args.ids or None,
+                    "limit": args.limit or None,
+                    "task_count": len(tasks),
+                },
+                "task_snapshot": not args.no_task_snapshot,
                 "corpus_hash": corpus_hash(),
                 "holdout": args.holdout,
                 "elapsed_seconds": round(elapsed, 1),
@@ -207,12 +239,10 @@ def main() -> int:
             "schema_problems": schema_problems,
             "results": results,
         }
-        out_path = Path(args.out)
-        if not out_path.is_absolute():
-            out_path = _BACKEND_DIR / out_path
-        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"结果：{out_path}")
+        if not args.no_task_snapshot:
+            print(f"任务集快照：{tasks_path_for_run}")
         # 留出题使用登记：--holdout include/only 跑过的留出题记一笔，
         # 验收前用 `python -m evaluation.holdout_registry --check` 看有没有被消耗。
         holdout_ids = [str(task.get("id")) for task in tasks if task.get("holdout")]
