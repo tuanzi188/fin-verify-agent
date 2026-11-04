@@ -37,8 +37,8 @@ cd ../frontend && npm run typecheck && npm test -- --run
 python -m evaluation.lint_finance_tasks --check-refs --check-routing   # 在 backend 下
 ```
 
-CI 跑同样四项；其中任务卡 lint 只跑 `--check-routing`（`--check-refs` 需要本地
-`data/finance` 语料，CI 不携带，改动引用坐标后必须在本地补跑）。通过数会变，
+CI 跑后端测试、前端测试与检索回归门禁。任务卡 lint 不在 CI：它依赖本地
+`data/finance` 语料（语料不入库），改任务卡或路由后必须在本地跑。通过数会变，
 不要记在文档里。真实查证需要可用的模型 API。
 
 ## 4. 模块地图（改东西去哪）
@@ -80,8 +80,13 @@ CI 跑同样四项；其中任务卡 lint 只跑 `--check-routing`（`--check-re
 - **三套判分口径**：同一批 42 题 runs 有 50%（修正前产物）、61.9%（文档转述，
   无独立产物）、64.3%（零 token 重判，`..._rejudged.json`）三个数，
   另有 judge 要点 71.4%。引用必须带产物名。详见 `docs/evidence/INDEX.md`。
-  **注意**：64.3% 绑定的是 11-03 旧 runs（`221318d`），**不是当前代码**；
-  2026-11-04 的工具层改动尚未产出新 runs/report，别把它当成现状读数。
+  **注意**：64.3% 绑定 11-03 旧 runs（`221318d`, `sections` + 42 题卡 + 零 token 重判），
+  **不是当前代码**。2026-11-04 已有 11 题 blocks 子集复测产物
+  （`finance_ms11_20261104.json` / `finance_ms11_report_20261104.json`，绑定 `d9707b1`、
+  真实 judge、`pass@1=7/11`），是**不同条件下的单次剖面**：
+  `corpus_hash` 一致但 search_mode / 任务卡 / judge / commit 全不同，
+  **不能相减、不能写「提升 X 个百分点」、不能拿 11 题红线全绿宣称 42 题验收通过**。
+  两份读数的绑定条件与登记见 `docs/evidence/INDEX.md` §A / §D。
 - **合并任务卡**：新产物的 `run_config.tasks_file` 指向 `<out>.tasks.jsonl`
   （`run_finance_eval` 自动落盘的筛选后任务集），可复现；但**历史报告**的
   `tasks_file` 仍指向 `%TEMP%`，临时文件消失后不可复现。重建方式见

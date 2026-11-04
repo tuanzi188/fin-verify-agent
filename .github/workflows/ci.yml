@@ -25,9 +25,6 @@ jobs:
           pip install pytest pytest-asyncio pytest-cov httpx
       - name: Run tests
         run: pytest --cov=app --cov-report=xml -v
-      - name: Lint finance tasks (routing)
-        # --check-refs 需要 data/finance 语料，CI 不携带；引用完整性在本地跑。
-        run: python -m evaluation.lint_finance_tasks --check-routing
       - name: Verify OpenAPI schema is up to date
         run: |
           python scripts/generate_schema.py
