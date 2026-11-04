@@ -43,6 +43,9 @@ CI 跑同样四项。通过数会变，不要记在文档里。真实查证需�
 |---|---|
 | 自动选路 / 升级判定 | `backend/app/services/finance_router.py`、`app/finance/routing_policy.py`、`docs/ROUTING_POLICY.md` |
 | Agent 工具循环 | `backend/app/agent/runner.py`、`app/tools/finance_set.py` |
+| 行列名解析 / 表访问 | `backend/app/finance/store.py`（单位后缀、别名、模糊匹配、错位自校验） |
+| 覆盖槽位 / 表目录检索 | `backend/app/tools/finance_set.py`、`app/finance/query_scope.py`、`app/tools/finance.py` |
+| 正文 JSON 工具调用 / 回答闸门 | `backend/app/agent/runner.py`、`app/agent/prompts.py` |
 | 结构检索 / 块索引 | `backend/app/finance/block_index.py`、`app/services/finance_rag.py` |
 | 证据 / 引用 / 计算 | `backend/app/finance/references.py`、`calc.py`、`calculation_records.py`、`claim_consistency.py` |
 | 模型客户端 / 缓存记账 | `backend/app/services/openai_client.py`、`evaluation/agent_metrics.py`、`evaluation/audit_run_cost.py` |
@@ -81,6 +84,8 @@ CI 跑同样四项。通过数会变，不要记在文档里。真实查证需�
   漏一条就会把工具循环误记成 0 命中（2026-11-04 已修复）。
 - **检索层 vs 答案层命中率不可混**：离线层用任务问题原文查询（first_search），
   答案层用 Agent 改写后的 query，两个数字口径不同。
+- **覆盖率闸门按指标槽位触发**：比率题不拆成基础科目（「净资产收益率」不会要求
+  单独读「净资产」行）；`search_tables` 计入 5 次检索预算，读失败最多补 2 次额度。
 - **judge 与金标同模型**，存在同源偏好；未做 judge 扰动或外部抽审。
 - **网关对带 tools 请求照常缓存**，不要重提 H1/H2 写延迟/键控假设（已证伪）。
 

@@ -44,8 +44,8 @@
    - 对比、计算、跨文档、跨期间、未来期间、多个子问题 → 多步 Agent。
 2. **结构检索**：块级混合检索（向量 + BM25 + RRF），按问题识别公司与期间过滤，一次 LLM 生成，证据转成 `EvidenceRef`。
 3. **多步 Agent**：只读工具循环
-   `search_blocks` / `read_block` / `read_section` / `get_rows` / `get_table` / `get_cell` / `calculate` / `list_documents`；
-   空结果与失败会改写重试一次，终轮做覆盖自检。
+   `search_blocks` / `search_tables` / `read_block` / `read_section` / `get_rows` / `get_table` / `get_cell` / `calculate` / `list_documents`；
+   空结果与失败会改写重试一次；覆盖检查按「公司 × 期间 × 指标」槽位补读，终轮做覆盖自检。
 4. **结构化输出**：`answer`、`claims`（要点 / 引用编号 / 计算下标 / 不确定性）、
    `citations`（坐标）、`calc`（公式 / 输入 / 结果 / 单位 / 口径）、`trace`、`status`、`route_reason`、`notes`。
 5. **状态口径**：已回答 / 资料不足 / 需澄清 / 需人工复核 / 执行失败。
@@ -55,6 +55,10 @@
 2026-11-02 查证可靠性修复：组合引用完整解析、去重后同步编号、百分点展示尺度修正、
 计算输入坐标溯源、结论数值复核、追问条件补全，以及检索前主体和期间检查。
 实现边界及复现方法见 [可靠性修复说明](docs/archive/20261102_finance_reliability.md)。
+
+2026-11-04 多步查证工具层加固：行列名归一化与别名、`get_rows` 部分成功、
+`calculate` 参数别名、表目录 `search_tables`、指标槽位覆盖、正文 JSON 工具调用回注。
+实现状态与待测项见 [docs/CURRENT.md](docs/CURRENT.md)。
 
 ---
 
