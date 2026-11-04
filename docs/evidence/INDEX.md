@@ -97,6 +97,7 @@ python -m evaluation.score_agent_runs \
 | `finance_answer_report_20261103_rejudged.json` | report | 11-04 | **current（答案层）** | 64.3%，含 `rejudge_note` |
 | `finance_probe_cache_20261104.json` | probe | 11-04 | historical | **修复前**读数；tool_round 0 命中是客户端漏字段假象，需重跑 |
 | `gateway_cache_probe_20261104.json` | probe | 11-04 | **current** | 网关行为判定，8 次短请求 |
+| `ms11_tasks_20261104.jsonl` | tasks | 11-04 | **current（复测输入）** | 11 道多步题合并输入卡，由 `evaluation/rebuild_ms11_tasks.py` 生成；供 blocks 子集复测用 |
 
 ## E. 基线登记规则
 

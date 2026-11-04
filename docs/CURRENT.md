@@ -36,6 +36,30 @@ H1/H2 网关判定实验（两假设均证伪，真因是客户端漏字段，�
 
 1. **11 题 blocks 子集复测**（真实模型，先报预算）：验证 P0+P1+P2-1 的合并效果，
    重点看多步拆解是否离开 2/11，以及覆盖率闸门 / `search_tables` 带来的 token 与延迟增量。
+   **预算上限：≤1.2M token**（11 题旧读数合计 594,676，均值 54,061/题；
+   新增槽位覆盖与表目录检索会增加检索轮次，按约 2 倍留余量）。
+   11 题分散在三套任务卡（主集 5 / 复杂 2 / 压力 4），`run_finance_eval --tasks`
+   只收单文件，需先按下面命令合并一个 11 题输入卡，再跑：
+
+   ```bash
+   cd backend
+   # 1) 合并 11 题输入卡（零模型）：`python -m evaluation.rebuild_ms11_tasks`
+   #    从三套任务卡按固定 id 取并集、顺序与 11-03 runs 一致，产物已落盘为
+   #    docs/evidence/ms11_tasks_20261104.jsonl，供第 2 步直接引用。
+   # 2) 只跑不判（blocks 模式，排除留出集）
+   python -m evaluation.run_finance_eval \
+     --tasks ../docs/evidence/ms11_tasks_20261104.jsonl \
+     --search-mode blocks --holdout exclude --runs 1 \
+     --out ../docs/evidence/finance_ms11_20261104.json
+   # 3) 判分：代码已改、答案必然变化，不能复用旧 judge 结论，走真实 judge
+   python -m evaluation.score_agent_runs \
+     --runs ../docs/evidence/finance_ms11_20261104.json \
+     --tasks ../docs/evidence/ms11_tasks_20261104.jsonl --corpus finance \
+     --out ../docs/evidence/finance_ms11_report_20261104.json
+   ```
+
+   逐题对比用 `compare_agent_reports` 前先确认两份报告 `tasks_sha256` /
+   `corpus_hash` 一致，否则标 `incomparable`（旧报告绑定 11-03 语料状态）。
 2. 修复字段透传后**重跑 4 题探针**（真实模型，先报预算），拿 tool_round
    真实缓存命中率与有效输入；旧的「−60%」推算已作废。
 3. **32 题 blocks 基线 runs 落盘**（当前只在本地审计过，三套基线对照不可复现）。
@@ -56,7 +80,8 @@ H1/H2 网关判定实验（两假设均证伪，真因是客户端漏字段，�
   表目录定位；读失败补一次检索预算；章节正文数字触发补单元格。
 - 正文 JSON 工具调用（如 `{"tool":"search_kb"}`）不再落进答案：检测到后回注一次，
   要求使用真正的 function call；未知工具名会回显可用工具清单。
-- 离线验证：backend `pytest` 602 passed，任务卡 lint 0 error。
+- 离线验证：后端全量 `pytest` 通过、三套任务卡 lint 0 error（通过数会变，
+  跑 `python -m pytest -q` 看当前值）。
 - **尚未跑真模型**：多步拆解是否提升、覆盖率闸门带来的 token/延迟增量，
   都必须等 11 题 blocks 子集复测后再写结论。
 
