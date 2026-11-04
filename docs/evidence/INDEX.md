@@ -10,11 +10,16 @@ read_when: 引用任何 pass@1 / token / 命中率数字前
 > 规则：**只有指向本目录具体文件的数字才算数**。文档里的裸数、只有转述没有产物的
 > 读数标 `unverified`。`status=current` 每种口径同时只能有一条。
 
-## A. 当前有效基线（引用这些）
+## A. 可引用基线（引用这些，但看清绑定条件）
+
+> **重要**：答案层 64.3% 绑定的是 2026-11-03 的 runs（`221318d`）与任务卡，
+> **不能代表当前代码**。2026-11-04 合入的行列解析、指标槽位覆盖、`search_tables`、
+> 正文 JSON 工具调用回注尚未产出新 runs/report。11 题 blocks 子集复测落盘后，
+> 在 §D 增加新产物，并把本条标为 `superseded`。
 
 | 口径 | 产物 | 读数 | 绑定条件 |
 |---|---|---|---|
-| 答案层 pass@1（当前代码） | [finance_answer_report_20261103_rejudged.json](finance_answer_report_20261103_rejudged.json) | **27/42 = 64.3%** | 42 题 dev；`improved`×1；`--reuse-judgments` 零 token 重判；任务卡含 5 题等价表；`tasks_sha256=c376e1c9`；语料 `42597900ed95` |
+| 答案层 pass@1（**旧代码基线**，非当前代码） | [finance_answer_report_20261103_rejudged.json](finance_answer_report_20261103_rejudged.json) | **27/42 = 64.3%** | 42 题 dev；绑定 `221318d` 的 runs；`--reuse-judgments` 零 token 重判；任务卡含 5 题等价表；`tasks_sha256=c376e1c9`；语料 `42597900ed95`。**只代表改动前代码，当前能力待 11 题复测** |
 | 缓存记账 / 成本口径 | [COST_OPTIMIZATION_PLAN_20261104.md](../COST_OPTIMIZATION_PLAN_20261104.md) §2 | 有效输入 = (tokens_in − hit) + 0.1×hit | `CACHE_HIT_PRICE_RATIO=0.1` 是**计价假设**，报告带 `effective_input_is_estimate: true` |
 | 网关缓存行为判定 | [gateway_cache_probe_20261104.json](gateway_cache_probe_20261104.json) | H1/H2 均不成立 | 8 次短请求；带 tools 请求 hit 立即可见 |
 | 检索层最新快照 | [eval_retrieval_20261103.md](eval_retrieval_20261103.md) | 主集 69.7% / 复杂 50.0% / 压力 33.3% | first_search@5，零模型；重解析后语料；掉点为稀释性挤出 |
@@ -22,11 +27,6 @@ read_when: 引用任何 pass@1 / token / 命中率数字前
 
 **注意**：答案层与检索层命中率不是同一个口径——离线检索层用任务问题原文查询
 （`first_search`），答案层用 Agent 改写后的 query，两个数字不可混。
-
-> **2026-11-04 工具层改动尚未产出新 runs/report**：行列解析、指标槽位覆盖、
-> `search_tables`、正文 JSON 工具调用回注已合入代码，但上表 64.3% 仍绑定改动前的
-> runs 与任务卡，**不能代表当前代码**。11 题 blocks 子集复测落盘后，在 §D 增加新产物，
-> 并把本条标为 `superseded`。
 
 ## B. 三套判分读数的来源（最易踩坑）
 
@@ -37,7 +37,7 @@ read_when: 引用任何 pass@1 / token / 命中率数字前
 |---|---|---|
 | 50%（21/42） | [finance_answer_report_20261103.json](finance_answer_report_20261103.json) | 修正前严格口径；`tasks_file` 指向 `%TEMP%\km_full_tasks.jsonl`（已失效） |
 | 61.9%（26/42） | 仅文档转述（[20261103_finance_answer_eval.md](../archive/20261103_finance_answer_eval.md) §4） | `unverified`，**无独立落盘产物** |
-| 64.3%（27/42） | [finance_answer_report_20261103_rejudged.json](finance_answer_report_20261103_rejudged.json) | **current**，当前代码重判；比 61.9% 多 FIN-02 一题（blocks 模式下工具路径约束判 pass） |
+| 64.3%（27/42） | [finance_answer_report_20261103_rejudged.json](finance_answer_report_20261103_rejudged.json) | 当前**判分口径**重判、但绑定旧 runs（`221318d`），非当前代码；比 61.9% 多 FIN-02 一题（blocks 模式下工具路径约束判 pass） |
 | 71.4%（30/42） | 文档 §1 标为「judge 要点」 | 与严格口径不同，勿与上面三个并列 |
 
 硬门禁在 50% 与 64.3% 两份报告里均未过（fabrication 2 / false_refusal 1 /
@@ -92,9 +92,9 @@ python -m evaluation.score_agent_runs \
 | `eval_phase0_three_layer_20261031.json` / `.md` | 三层报告 | 10-31 | historical | 答案/数值/轨迹/忠实度仍 `no_data` |
 | `eval_retrieval_20261101_main/complex/stress.json` + `.md` | 检索层 | 11-01 | superseded | 语料状态不同，读数不代表当前 |
 | `eval_retrieval_20261103_main/complex/stress.json` + `.md` | 检索层 | 11-03 | **current** | 重解析后最新快照 |
-| `finance_answer_runs_20261103.json` | runs | 11-03 | **current（runs）** | 42 题 dev，唯一答案层 runs |
+| `finance_answer_runs_20261103.json` | runs | 11-03 | **unique（历史，绑定 `221318d`）** | 42 题 dev，唯一答案层 runs；**不能代表当前代码**，见 §A 上方告警 |
 | `finance_answer_report_20261103.json` | report | 11-03 | historical | 50% 修正前产物 |
-| `finance_answer_report_20261103_rejudged.json` | report | 11-04 | **current（答案层）** | 64.3%，含 `rejudge_note` |
+| `finance_answer_report_20261103_rejudged.json` | report | 11-04 | **unique（旧代码基线）** | 64.3%，含 `rejudge_note`；绑定 `221318d` 的 runs，**不代表当前代码** |
 | `finance_probe_cache_20261104.json` | probe | 11-04 | historical | **修复前**读数；tool_round 0 命中是客户端漏字段假象，需重跑 |
 | `gateway_cache_probe_20261104.json` | probe | 11-04 | **current** | 网关行为判定，8 次短请求 |
 | `ms11_tasks_20261104.jsonl` | tasks | 11-04 | **current（复测输入）** | 11 道多步题合并输入卡，由 `evaluation/rebuild_ms11_tasks.py` 生成；供 blocks 子集复测用 |
@@ -104,6 +104,9 @@ python -m evaluation.score_agent_runs \
 1. 每个基线绑定 `(corpus_hash, tasks_sha256, git_commit, judge_mode, scoring, cost_basis)`；
    缺任一项标 `incomplete`。
 2. `status=current` 每种口径一条；旧条目标 `historical`/`superseded` 并写 `supersedes` 链。
+   **没有绑定当前代码的产物时，不要硬标 `current`**：用 `unique（旧基线）` 并写明
+   绑定的 commit。产物清单的 `run_config.git`（新产物自带）是判断依据；
+   旧产物看 `manifest.code.commit`。
 3. **收益不跨基线叠加**：sections→blocks 的机制收益已兑现进 blocks 基线，
    不得在后续优化里再算一遍。
 4. 全价 token（预注册 ≤20k 红线口径）与有效输入估算分两列报，不混写「降了 X%」。

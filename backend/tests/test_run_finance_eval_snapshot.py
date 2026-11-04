@@ -69,6 +69,9 @@ def fake_env(tmp_path, monkeypatch):
     monkeypatch.setattr(rfe, "block_parameters", lambda: {})
     monkeypatch.setattr(rfe, "MODEL_CONFIG", {"flash": {"model": "m"}})
     monkeypatch.setattr(rfe, "MODEL_PROVIDER", "test")
+    # 不依赖真实 git 状态；断言 run_config 里确实带上了版本字段
+    monkeypatch.setattr(rfe, "git_provenance",
+                        lambda: {"commit": "abc123", "branch": "test", "dirty": False})
     # 留出题使用登记会写 docs/evidence/holdout_usage.json，测试不应污染仓库
     import evaluation.holdout_registry as hr
     monkeypatch.setattr(hr, "record_usage", lambda ids, out: None)
@@ -98,6 +101,8 @@ def test_snapshot_matches_filtered_tasks_and_run_config_points_to_it(fake_env, m
     assert rc["tasks_sha256"] == rfe.sha256_file(snapshot)
     assert rc["tasks_source_file"] == str(tasks_file)
     assert rc["tasks_selection"]["task_count"] == 2  # A + C，B 是 holdout
+    # 产物自带代码版本，不需要打开 manifest 或查文档
+    assert rc["git"] == {"commit": "abc123", "branch": "test", "dirty": False}
 
     snapshot_tasks = [json.loads(line)
                       for line in snapshot.read_text(encoding="utf-8").splitlines() if line.strip()]

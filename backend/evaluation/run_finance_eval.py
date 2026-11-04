@@ -62,7 +62,7 @@ from evaluation._runner_common import (
     summarize,
 )
 from evaluation.finance_corpus import DOCUMENT_DIR, corpus_hash, doc_inventory
-from evaluation.provenance import build_run_manifest
+from evaluation.provenance import build_run_manifest, git_provenance
 
 DEFAULT_TASKS = "evaluation/finance_tasks.jsonl"
 
@@ -232,6 +232,10 @@ def main() -> int:
                 "corpus_hash": corpus_hash(),
                 "holdout": args.holdout,
                 "elapsed_seconds": round(elapsed, 1),
+                # 产物自带代码版本：不打开 manifest 也能判断这份 runs 属于哪个
+                # commit、当时工作区是否 dirty。旧产物缺这个字段，只能靠文档转述，
+                # 容易把「唯一的 runs」误读成「当前有效读数」（2026-11-04 复盘）。
+                "git": git_provenance(),
             },
             "manifest": manifest,
             "corpus": inventory,
