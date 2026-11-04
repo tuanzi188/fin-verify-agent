@@ -349,10 +349,12 @@ def _numeric_leaks(answer: str) -> list[str]:
 
 
 def needs_cell_repair(answer: str, evidence: list[dict]) -> bool:
-    """答案引用了表级证据、且答案里有数值 → 需要补一次 get_cell。
+    """答案引用了表级/正文证据、且答案里有数值 → 需要补一次 get_cell。
 
     只看“被引用的证据里有没有 cell”。如果答案已经引了某个单元格，
     说明它至少做了一次精确引用，不再追问——避免每轮都强制补一轮。
+    正文证据也算：FIN-08/FIN-S10 都是拿章节正文里的数字作答，引用能对上，
+    但没有「表 + 行 + 列」，审计时无法复算，必须再落到单元格。
     """
     if not answer or not evidence:
         return False
@@ -365,7 +367,7 @@ def needs_cell_repair(answer: str, evidence: list[dict]) -> bool:
     kinds = {str(evidence[marker - 1].get("kind") or "") for marker in markers}
     if "cell" in kinds:
         return False
-    if "table" not in kinds:
+    if "table" not in kinds and "section" not in kinds:
         return False
     return bool(_TABLE_NUMBER_PATTERN.search(answer))
 

@@ -24,7 +24,8 @@ from app.agent.prompts import (
     FINANCE_IMPROVED_SYSTEM,
 )
 from app.finance.block_index import BlockIndex
-from app.finance.store import FinanceStore
+from app.finance.query_scope import scope_metrics
+from app.finance.store import FinanceStore, _normalize_label
 from app.tools.finance import FINANCE_TOOL_SPECS, FinanceToolbox
 from app.tools.toolset import Injector, ToolOutcome, evidence_item
 
@@ -48,6 +49,76 @@ _COMPANY_ALIASES = (
 _YEAR_PATTERN = re.compile(r"(20\d{2})\s*年")
 _DOC_WORD_PATTERN = re.compile(r"年报|年度报告|募集说明书|募集书|招股说明书")
 _DOC_TYPE_LABELS = {"annual_report": "年报", "prospectus": "募集说明书"}
+
+# 槽位覆盖用的指标→可接受行名。只收「同一科目的常见写法」，
+# 判定规则是「行名包含别名」，不做反向包含，避免「研发人员」被当成「研发投入」。
+_METRIC_ALIASES: dict[str, tuple[str, ...]] = {
+    "研发投入": ("研发投入", "研发费用", "研发支出"),
+    "营业收入": ("营业收入", "营业总收入"),
+    "营业成本": ("营业成本", "营业总成本"),
+    "归母净利润": (
+        "归属于上市公司股东的净利润",
+        "归属于母公司所有者的净利润",
+        "归母净利润",
+    ),
+    "净利润": ("净利润",),
+    "经营活动产生的现金流量净额": (
+        "经营活动产生的现金流量净额",
+        "经营活动现金流量净额",
+        "经营现金流",
+    ),
+    "总资产": ("总资产", "资产总计"),
+    "净资产": ("净资产",),
+    "每股收益": ("每股收益",),
+}
+
+
+_RATIO_LABEL_WORDS = (
+    "比例", "占比", "比重", "率", "增减", "增长", "下降", "变动", "同比", "环比",
+)
+
+
+def _metric_matches(label: object, metric: str) -> bool:
+    text = _normalize_label(label)
+    if not text:
+        return False
+    # 「研发投入占营业收入比例」不是营业收入本身；派生/比率行一律不当作基础科目。
+    if any(word in text for word in _RATIO_LABEL_WORDS):
+        return False
+    aliases = _METRIC_ALIASES.get(metric) or (metric,)
+    for alias in aliases:
+        target = _normalize_label(alias)
+        if not target:
+            continue
+        # 只接受「等于 / 以科目开头 / 以科目结尾」：
+        # 营业收入（元）→ 开头匹配；归属于上市公司股东的净利润 → 结尾匹配；
+        # 「研发投入占营业收入比例」→ 已在上面被比率词拦掉。
+        if text == target or text.startswith(target) or text.endswith(target):
+            return True
+    return False
+
+
+def _filled_ratio(table: dict) -> float:
+    rows = table.get("rows") or []
+    total = sum(len(row) for row in rows)
+    if not total:
+        return 0.0
+    filled = sum(
+        1
+        for row in rows
+        for cell in row
+        if str(cell or "").strip()
+    )
+    return filled / total
+
+
+def _matching_rows(table: dict, metric: str) -> list[tuple[int, str]]:
+    matches: list[tuple[int, str]] = []
+    for index, row in enumerate(table.get("rows") or []):
+        label = FinanceStore._row_label(row)
+        if label and _metric_matches(label, metric):
+            matches.append((index, label))
+    return matches
 
 # 截断注入的长度。制度库用 12 字，因为那里一个 chunk 25–70 字；
 # 金融这里要短到"数字必坏"：`456,451,731` 是 11 个字符，12 字截断等于不截断。
@@ -191,6 +262,8 @@ class FinanceToolset:
         self._read_cache: dict[tuple[str, str], ToolOutcome] = {}
         #: 检索工具剩余预算；覆盖修复时由 runner 临时加
         self._search_budget = MAX_SEARCH_CALLS
+        #: 读失败换表的额外检索额度（每条任务最多 2 次）
+        self._budget_grants = 0
 
     # ------------------------------------------------------------------
     # 注入与复用
@@ -207,6 +280,7 @@ class FinanceToolset:
         self._tool_calls = {}
         self._read_cache = {}
         self._search_budget = MAX_SEARCH_CALLS
+        self._budget_grants = 0
 
     @property
     def planned_injections(self) -> int:
@@ -286,19 +360,185 @@ class FinanceToolset:
             if item.get("doc_id")
         }
         gaps: list[str] = []
+        missing_doc_ids: set[str] = set()
         seen: set[str] = set()
         for doc in required:
             doc_id = str(doc.get("doc_id") or "")
             if not doc_id or doc_id in seen or doc_id in evidence_doc_ids:
                 continue
             seen.add(doc_id)
+            missing_doc_ids.add(doc_id)
             label = _DOC_TYPE_LABELS.get(
                 str(doc.get("doc_type")), str(doc.get("doc_type") or "文档")
             )
             gaps.append(
                 f"{doc.get('company')} {doc.get('period')} 年{label}（{doc_id}）"
             )
-        return gaps
+
+        # 指标/表级覆盖：文档读到了，不等于问题要的那张表读到了。
+        # FIN-12 实测：2024 年报读了 t0023（研发人员），但没读 t0024（研发投入金额），
+        # 文档级检查因此放行，模型最后答「无法判定」。
+        metrics = scope_metrics(text)
+        if not metrics or not companies:
+            return gaps
+
+        if years and explicit_multi_doc:
+            target_years = years
+        elif years:
+            # 同比/上期数在同一张表的对比列里，不强制再读上一年年报。
+            target_years = [max(years)]
+        else:
+            target_years = []
+        quarter_hint = bool(re.search(r"季度|Q[1-4]", text, re.IGNORECASE))
+
+        for company in companies:
+            company_docs = [d for d in docs if d.get("company") == company]
+            if not company_docs:
+                continue
+            if target_years:
+                year_docs = [
+                    d for d in company_docs
+                    if str(d.get("period")) in target_years
+                ]
+            else:
+                latest = max(
+                    {str(d.get("period")) for d in company_docs if d.get("period")},
+                    default="",
+                )
+                year_docs = [
+                    d for d in company_docs if str(d.get("period")) == latest
+                ]
+            for doc in year_docs:
+                doc_id = str(doc.get("doc_id") or "")
+                # 整份文档没读：文档级 gap 已经说过，不重复。
+                if not doc_id or doc_id in missing_doc_ids:
+                    continue
+                if doc_id not in evidence_doc_ids:
+                    continue
+                for metric in metrics:
+                    if self._doc_covers_metric(doc_id, metric, evidence):
+                        continue
+                    candidate = self._metric_candidate(
+                        doc_id,
+                        metric,
+                        years=target_years,
+                        quarter_hint=quarter_hint,
+                        evidence=evidence,
+                    )
+                    if not candidate:
+                        continue
+                    suffix = (
+                        "已在章节中定位但未读取"
+                        if candidate["located"]
+                        else "尚未读取"
+                    )
+                    gaps.append(
+                        f"{company} {doc.get('period')} 年{metric}"
+                        f"（候选表 {candidate['table_id']} 第 {candidate['page']} 页，"
+                        f"行名：{candidate['row']}；{suffix}）"
+                    )
+
+        return list(dict.fromkeys(gaps))
+
+    def _doc_covers_metric(
+        self, doc_id: str, metric: str, evidence: list[dict]
+    ) -> bool:
+        """该文档里是否已经用「行/单元格」读过这个指标。"""
+        for item in evidence or []:
+            if str(item.get("doc_id") or "") != doc_id:
+                continue
+            kind = str(item.get("kind") or "")
+            row_name = str(item.get("row_name") or "")
+            if kind == "cell":
+                if row_name and _metric_matches(row_name, metric):
+                    return True
+                continue
+            table_id = str(item.get("table_id") or "")
+            if not table_id:
+                continue
+            try:
+                table = self.toolbox.store.get_table(table_id)
+            except Exception:  # noqa: BLE001 - 覆盖检查不能阻断主流程
+                table = None
+            if table is None:
+                continue
+            rows = table.get("rows") or []
+            indices = item.get("row_indices")
+            if isinstance(indices, list) and indices:
+                subset = [
+                    rows[index]
+                    for index in indices
+                    if isinstance(index, int) and 0 <= index < len(rows)
+                ]
+            else:
+                subset = rows
+            if any(
+                _metric_matches(FinanceStore._row_label(row), metric)
+                for row in subset
+            ):
+                return True
+        return False
+
+    def _metric_candidate(
+        self,
+        doc_id: str,
+        metric: str,
+        *,
+        years: list[str],
+        quarter_hint: bool,
+        evidence: list[dict],
+    ) -> dict | None:
+        """在文档的表里找最可能承载该指标的一张，并说明是否已定位未读取。"""
+        try:
+            document = self.toolbox.store.get_document(doc_id)
+        except Exception:  # noqa: BLE001
+            return None
+        located_tables: set[str] = set()
+        for item in evidence or []:
+            if str(item.get("doc_id") or "") == doc_id:
+                located_tables.update(str(value) for value in item.get("table_ids") or [])
+
+        section_paths = {
+            str(section.get("section_id") or ""): " > ".join(
+                str(part) for part in (section.get("path") or [])
+            )
+            for section in document.get("sections") or []
+        }
+        best: tuple[float, dict, str] | None = None
+        for table in document.get("tables") or []:
+            matches = _matching_rows(table, metric)
+            if not matches:
+                continue
+            columns = [str(name) for name in table.get("columns") or []]
+            section_path = section_paths.get(str(table.get("section_id") or ""), "")
+            heading = f"{table.get('caption') or ''} {section_path}"
+            score = _filled_ratio(table) + 0.2 * len(matches)
+            # 优先「主要会计数据和财务指标」表：它是最标准的读数出处，
+            # 也是同比/上期列的集中地。合并利润表也能查到，但不是首选。
+            if "主要会计" in heading or "主要财务指标" in heading:
+                score += 0.5
+            if metric == "研发投入" and "研发投入" in heading:
+                # 优先「公司研发投入情况」专表，而不是管理层讨论里的「费用」表：
+                # 后者可能把同一笔钱写成「研发费用」，答错科目名（FIN-12 实测）。
+                score += 0.8
+            if any("增减" in name for name in columns):
+                score += 0.2
+            if quarter_hint and any("季度" in name for name in columns):
+                score += 2.0
+            score += 0.3 * sum(
+                1 for year in years if any(str(year) in name for name in columns)
+            )
+            if best is None or score > best[0]:
+                best = (score, table, matches[0][1])
+        if best is None:
+            return None
+        _, table, row_label = best
+        return {
+            "table_id": str(table.get("table_id") or ""),
+            "page": table.get("page"),
+            "row": row_label,
+            "located": str(table.get("table_id") or "") in located_tables,
+        }
 
     def unsupported_periods(self, question: str) -> list[str]:
         """问题要求晚于本地语料最新报告期的年份（如 2026 Q1）。
@@ -365,7 +605,7 @@ class FinanceToolset:
         self._tool_calls[name] = self._tool_calls.get(name, 0) + 1
         # 检索预算：只拦检索工具，读原文/取单元格/计算都不限次。
         # 返回 ok=False 而不是空结果，是为了让 trace 能区分"预算用完"和"没搜到"。
-        if name in ("search_sections", "search_blocks"):
+        if name in ("search_sections", "search_blocks", "search_tables"):
             if self._search_budget <= 0:
                 return ToolOutcome(
                     tool=name,
@@ -393,6 +633,15 @@ class FinanceToolset:
 
         outcome = await self.toolbox.call(name, arguments)
         if not outcome.ok:
+            # 读失败通常意味着选错了表/行名。给一次额外检索额度换表，
+            # 否则模型只能在错误表上反复猜，最后预算耗尽拒答（FIN-S01 实测）。
+            if (
+                name in ("get_rows", "get_cell")
+                and outcome.error_kind == "not_found"
+                and self._budget_grants < 2
+            ):
+                self._search_budget += 1
+                self._budget_grants += 1
             return ToolOutcome(
                 tool=name,
                 ok=False,
@@ -462,6 +711,8 @@ class FinanceToolset:
             return [str(item.get("section_id") or "") for item in data], len(data)
         if name == "search_blocks" and isinstance(data, list):
             return [str(item.get("block_id") or "") for item in data], len(data)
+        if name == "search_tables" and isinstance(data, list):
+            return [str(item.get("table_id") or "") for item in data], len(data)
         if name == "read_block" and isinstance(data, dict):
             return [str(data.get("block_id") or "")], 1
         if name == "read_section" and isinstance(data, dict):
@@ -516,6 +767,42 @@ class FinanceToolset:
                         section_id=item.get("section_id"),
                         row_indices=item.get("row_indices"),
                         column_indices=item.get("column_indices"),
+                    )
+                )
+            return rows
+
+        if name == "search_tables" and isinstance(data, list):
+            rows = []
+            for item in data:
+                if not isinstance(item, dict) or not item.get("table_id"):
+                    continue
+                matched = "、".join(
+                    str(value) for value in item.get("matched_rows") or []
+                )
+                content = (
+                    f"表 {item.get('table_id')}｜{item.get('caption') or '无标题'}"
+                    f"｜PDF 第 {item.get('page')} 页"
+                    f"｜列：{'、'.join(str(value) for value in item.get('columns') or [])}"
+                    f"｜行：{'、'.join(str(value) for value in item.get('row_labels') or [])}"
+                )
+                if matched:
+                    content += f"｜匹配行：{matched}"
+                rows.append(
+                    evidence_item(
+                        chunk_id=f"{item.get('table_id')}#table_locator",
+                        title=(
+                            f"{item.get('company') or ''} {item.get('period') or ''}"
+                            f"｜表目录｜{item.get('caption') or item.get('table_id')}"
+                        ),
+                        content=content[:600],
+                        kind="table_locator",
+                        page=item.get("page"),
+                        citable=False,
+                        table_id=item.get("table_id"),
+                        table_caption=item.get("caption") or "",
+                        doc_id=item.get("doc_id"),
+                        row_labels=item.get("row_labels"),
+                        matched_rows=item.get("matched_rows"),
                     )
                 )
             return rows

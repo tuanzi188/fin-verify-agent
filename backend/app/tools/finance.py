@@ -16,7 +16,7 @@ from typing import Any, Optional
 from app.finance.block_index import BlockIndex
 from app.finance.calc import CalculationError
 from app.finance.calc import calculate as run_calculation
-from app.finance.store import FinanceStore, FinanceStoreError
+from app.finance.store import FinanceStore, FinanceStoreError, _tokenize
 
 
 @dataclass
@@ -39,6 +39,15 @@ def _error_kind(exc: Exception) -> str:
             return "not_found"
         return "bad_args"
     return "upstream_error"
+
+
+def _table_fill_ratio(table: dict) -> float:
+    rows = table.get("rows") or []
+    total = sum(len(row) for row in rows)
+    if not total:
+        return 0.0
+    filled = sum(1 for row in rows for cell in row if str(cell or "").strip())
+    return filled / total
 
 
 class FinanceToolbox:
@@ -96,6 +105,104 @@ class FinanceToolbox:
     def read_block(self, block_id: str) -> dict:
         return self.block_index.get_block(block_id)
 
+    def search_tables(
+        self,
+        query: str,
+        *,
+        doc_id: str | None = None,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """在表格目录里按表名/章节/行名/列名定位，返回候选表而不返回数值。
+
+        为什么单独做一个工具：年报里很多表没有 caption（如「分季度主要财务指标」
+        解析后 caption 为空），search_sections 只看章节正文，模型根本不知道表存在。
+        FIN-S01 实测：季度表 t0008 就在语料里，四季度相加正好等于全年，但模型
+        在章节检索里找不到它，最后只能拒答。
+        """
+        text = str(query or "").strip()
+        if not text:
+            return []
+        try:
+            bounded = max(1, min(int(top_k), 5))
+        except (TypeError, ValueError):
+            bounded = 5
+        terms = _tokenize(text)
+        if not terms:
+            return []
+
+        if doc_id:
+            documents = [self.store.get_document(doc_id)]
+        else:
+            documents = [
+                self.store.get_document(str(item.get("doc_id")))
+                for item in self.store.list_documents()
+            ]
+
+        hits: list[tuple[float, dict]] = []
+        for document in documents:
+            section_paths = {
+                str(section.get("section_id") or ""): " > ".join(
+                    str(part) for part in (section.get("path") or [])
+                )
+                for section in document.get("sections") or []
+            }
+            for table in document.get("tables") or []:
+                rows = table.get("rows") or []
+                row_labels = [
+                    self.store._row_label(row)
+                    for row in rows[:40]
+                ]
+                row_labels = [label for label in row_labels if label]
+                columns = [str(name) for name in table.get("columns") or []]
+                haystack = " ".join(
+                    [
+                        # 公司/期间也是定位信息：模型常把「美的集团 2025 年…」整句
+                        # 传给 search_tables，不带上元数据会排到别家公司的同形表。
+                        str(document.get("company") or ""),
+                        str(document.get("period") or ""),
+                        str(table.get("caption") or ""),
+                        section_paths.get(str(table.get("section_id") or ""), ""),
+                        " ".join(row_labels),
+                        " ".join(columns),
+                    ]
+                )
+                haystack_terms = _tokenize(haystack)
+                if not haystack_terms:
+                    continue
+                overlap = terms & haystack_terms
+                if not overlap:
+                    continue
+                score = len(overlap) / max(1, len(terms))
+                matched_rows = [
+                    label
+                    for label in row_labels
+                    if any(term in label for term in terms if len(term) >= 2)
+                ]
+                if matched_rows:
+                    score += 0.15
+                if score < 0.2:
+                    continue
+                hits.append(
+                    (
+                        score + 0.2 * _table_fill_ratio(table),
+                        {
+                            "table_id": table.get("table_id"),
+                            "doc_id": document.get("doc_id"),
+                            "company": document.get("company"),
+                            "period": document.get("period"),
+                            "page": table.get("page"),
+                            "caption": table.get("caption") or "",
+                            "columns": columns[:8],
+                            "row_labels": row_labels[:8],
+                            "matched_rows": matched_rows[:5],
+                            "score": round(score, 3),
+                            "filled_ratio": round(_table_fill_ratio(table), 2),
+                        },
+                    )
+                )
+        hits.sort(key=lambda item: item[0], reverse=True)
+        return [item[1] for item in hits[:bounded]]
+
     def calculate(self, expression: str, inputs: dict[str, Any] | None = None) -> dict:
         return run_calculation(expression, inputs)
 
@@ -114,6 +221,12 @@ class FinanceToolbox:
             elif name == "search_blocks":
                 data = self.search_blocks(
                     str(arguments.get("query") or ""),
+                    top_k=int(arguments.get("top_k") or 5),
+                )
+            elif name == "search_tables":
+                data = self.search_tables(
+                    str(arguments.get("query") or ""),
+                    doc_id=arguments.get("doc_id") or None,
                     top_k=int(arguments.get("top_k") or 5),
                 )
             elif name == "read_block":
@@ -219,8 +332,31 @@ SEARCH_BLOCKS_SPEC = {
     },
 }
 
-READ_BLOCK_SPEC = {
+SEARCH_TABLES_SPEC = {
     "type": "function",
+    "function": {
+        "name": "search_tables",
+        "description": (
+            "在表格目录里按表名、所属章节、行名或列名找表，返回 table_id、页码、"
+            "列名、行名和匹配行。它只负责定位，不是证据；查数必须再用 get_rows / "
+            "get_cell 读取。适用于不知道数字在哪张表、或章节正文里没有表的情况。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "关键词，尽量带公司/年份/指标名，如「分季度 营业收入」",
+                },
+                "doc_id": {"type": "string", "description": "限定某份文档；不传则全库找表"},
+                "top_k": {"type": "integer", "minimum": 1, "maximum": 5, "default": 5},
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+READ_BLOCK_SPEC = {    "type": "function",
     "function": {
         "name": "read_block",
         "description": (
@@ -346,6 +482,7 @@ FINANCE_TOOL_SPECS = [
     LIST_DOCUMENTS_SPEC,
     SEARCH_SECTIONS_SPEC,
     SEARCH_BLOCKS_SPEC,
+    SEARCH_TABLES_SPEC,
     READ_SECTION_SPEC,
     READ_BLOCK_SPEC,
     GET_TABLE_SPEC,

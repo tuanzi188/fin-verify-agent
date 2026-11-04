@@ -14,6 +14,63 @@ _SCOPE_METRIC = re.compile(
     r"营业收入|营业成本|归母净利润|净利润|经营活动(?:产生的)?现金流量净额|现金流|毛利率|净利率|净资产收益率|每股收益|研发投入|研发费用|总资产|总负债|资产负债率|应收账款|存货|商誉|股权激励|分红|派息|股息|转股|收入|利润|资产|负债"
 )
 
+# 槽位级覆盖用的「可直接落到表格行」的指标词表。
+# 顺序有意义：归母净利润必须排在净利润前面，命中前者后不再重复生成后者。
+_SLOT_METRIC_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("研发投入", ("研发投入", "研发费用", "研发支出", "研发相关", "研发")),
+    ("归母净利润", ("归母净利润", "归属于上市公司股东的净利润", "归属于母公司所有者的净利润")),
+    ("净利润", ("净利润",)),
+    ("营业收入", ("营业收入", "营业总收入")),
+    ("营业成本", ("营业成本", "营业总成本")),
+    ("经营活动产生的现金流量净额", ("经营活动产生的现金流量净额", "经营现金流", "经营活动现金流")),
+    ("总资产", ("总资产", "资产总计")),
+    ("净资产", ("净资产",)),
+    ("每股收益", ("每股收益",)),
+)
+
+
+def _all_occurrences_in_ratio_phrase(text: str, keyword: str) -> bool:
+    """关键词的每一次出现是否都落在「X 率 / X 比例 / X 占比」里。
+
+    「净资产收益率」不该生成「净资产」槽位，「研发投入占营业收入比例」也不该
+    生成「研发投入」「营业收入」两个槽位——这些题要的是比率行，不是基础科目。
+    但「归母净利率（归母净利润 ÷ 营业收入）」里的构成项不在比率短语内，要保留。
+    """
+    total = 0
+    ratio = 0
+    for match in re.finditer(re.escape(keyword), text):
+        total += 1
+        tail = text[match.end(): match.end() + 14]
+        tail = re.split(r"[，。；？?]", tail, maxsplit=1)[0]
+        if any(word in tail for word in ("率", "比例", "占比", "比重")):
+            ratio += 1
+    return total > 0 and ratio == total
+
+
+def scope_metrics(question: str) -> list[str]:
+    """问题点名、且能直接对应表格行的指标（去重、保留词表顺序）。
+
+    只收可验证的报表科目，不把「净利率/毛利率」这类派生指标单独当槽位：
+    它们由构成科目算出来，强行要求一行「净利率」会制造假缺口。
+    """
+    text = str(question or "")
+    found: list[str] = []
+    for metric, keywords in _SLOT_METRIC_KEYWORDS:
+        matched_keywords = [word for word in keywords if word in text]
+        if not matched_keywords:
+            continue
+        if all(
+            _all_occurrences_in_ratio_phrase(text, word)
+            for word in matched_keywords
+        ):
+            continue
+        if metric == "净利润" and "归母净利润" in found:
+            continue
+        if metric == "研发投入" and "研发费用" in found:
+            continue
+        found.append(metric)
+    return found
+
 
 @dataclass(frozen=True)
 class FinanceQuestionScope:
