@@ -379,6 +379,28 @@ async def test_improved_is_a_supported_variant(monkeypatch):
     assert result["variant"] == "improved"
 
 
+async def test_both_variants_share_result_schema(monkeypatch):
+    """返回结构是契约：variant 差异只能出现在 usage/trace 内容里，不能增减顶层字段。"""
+    _patch_llm(
+        monkeypatch,
+        tool_calls=[_search_call()],
+        text="",
+        final_answer="住宿标准为每晚不超过五百元 [1]。",
+    )
+    _patch_dispatch(monkeypatch, [_evidence_item()])
+    baseline = await run(_TASK)
+
+    _patch_improved_llm(
+        monkeypatch,
+        rounds=[("住宿标准为每晚不超过五百元 [1]。", [])],
+        coverage_reply='{"covered": true, "missing": [], "next_query": ""}',
+        final_reply="",
+    )
+    improved = await run(_TASK, variant="improved")
+
+    assert set(baseline) == set(improved)
+
+
 async def test_improved_auto_retries_after_empty_search(monkeypatch):
     """空结果必须自动改写 query 补一次，而不是直接拒答。"""
     payloads = [[], [_evidence_item()]]
