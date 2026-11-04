@@ -12,15 +12,21 @@ read_when: 引用任何 pass@1 / token / 命中率数字前
 
 ## A. 可引用基线（引用这些，但看清绑定条件）
 
-> **重要**：答案层 64.3% 绑定的是 2026-11-03 的 runs（`221318d`）与任务卡，
-> **不能代表当前代码**。2026-11-04 合入的行列解析、指标槽位覆盖、`search_tables`、
-> 正文 JSON 工具调用回注尚未产出新 runs/report。11 题 blocks 子集复测落盘后，
-> 在 §D 增加新产物，并把本条标为 `superseded`。
+> **重要（2026-11-04 更新）**：答案层 64.3% 绑定 2026-11-03 的 runs（`221318d`）、
+> `sections` 模式、42 题合并卡与 `--reuse-judgments` 零 token 重判，**不能代表当前代码**。
+> 11 题 blocks 子集复测已落盘（`finance_ms11_20261104.json` +
+> `finance_ms11_report_20261104.json`，见 §D），产出一份**绑定当前代码 `d9707b1` 的新剖面**。
+> 但两者 `corpus_hash` 虽一致，`search_mode` / 任务卡 / judge 模式 / commit 均不同，
+> **不是严格 A/B**：64.3% 标 `unique（旧代码基线）` 保留、不删不回改；
+> 引用新剖面时不得写成「从 2/11 提升到 7/11」或「pass@1 提升 X 个百分点」。
+> 新剖面也是 `runs_per_task=1` 的单次能力剖面，无 pass^k，不外推全量验收。
 
 | 口径 | 产物 | 读数 | 绑定条件 |
 |---|---|---|---|
-| 答案层 pass@1（**旧代码基线**，非当前代码） | [finance_answer_report_20261103_rejudged.json](finance_answer_report_20261103_rejudged.json) | **27/42 = 64.3%** | 42 题 dev；绑定 `221318d` 的 runs；`--reuse-judgments` 零 token 重判；任务卡含 5 题等价表；`tasks_sha256=c376e1c9`；语料 `42597900ed95`。**只代表改动前代码，当前能力待 11 题复测** |
+| 答案层 pass@1（**旧代码基线**，非当前代码） | [finance_answer_report_20261103_rejudged.json](finance_answer_report_20261103_rejudged.json) | **27/42 = 64.3%** | 42 题 dev；绑定 `221318d` 的 runs（`sections`）；`--reuse-judgments` 零 token 重判；任务卡含 5 题等价表；`tasks_sha256=c376e1c9`；语料 `42597900ed95`。**只代表改动前代码** |
+| 多步 11 题剖面（**当前代码**，非全量验收） | [finance_ms11_report_20261104.json](finance_ms11_report_20261104.json) | **7/11 pass@1**，硬红线全 0 | 11 题 dev 子集；`blocks`；`tasks_sha256=6f514608`；真实 judge；runs `run_config.git=d9707b1`（`dirty=true`）；语料 `42597900ed95`。**单次、不同条件，不与 64.3% 相减** |
 | 缓存记账 / 成本口径 | [COST_OPTIMIZATION_PLAN_20261104.md](../COST_OPTIMIZATION_PLAN_20261104.md) §2 | 有效输入 = (tokens_in − hit) + 0.1×hit | `CACHE_HIT_PRICE_RATIO=0.1` 是**计价假设**，报告带 `effective_input_is_estimate: true` |
+| 工具循环缓存命中（修复后实测） | [finance_ms11_20261104.json](finance_ms11_20261104.json) | 全价命中占比 65.3%，有效输入估算 226,093 | 11 题逐题 `hit+miss==tokens_in`；合计 588,011 token 未超 ≤1.2M 预算；**估算非网关实测** |
 | 网关缓存行为判定 | [gateway_cache_probe_20261104.json](gateway_cache_probe_20261104.json) | H1/H2 均不成立 | 8 次短请求；带 tools 请求 hit 立即可见 |
 | 检索层最新快照 | [eval_retrieval_20261103.md](eval_retrieval_20261103.md) | 主集 69.7% / 复杂 50.0% / 压力 33.3% | first_search@5，零模型；重解析后语料；掉点为稀释性挤出 |
 | 路由判据 | [ROUTING_POLICY.md](../ROUTING_POLICY.md) | v2 | 无真实问题金标，未报告新准确率 |
@@ -42,6 +48,12 @@ read_when: 引用任何 pass@1 / token / 命中率数字前
 
 硬门禁在 50% 与 64.3% 两份报告里均未过（fabrication 2 / false_refusal 1 /
 citation_errors 2），**两者都不能当验收结论**。
+
+**另有一份不是同一批 runs 的剖面**：`finance_ms11_report_20261104.json` 的 7/11
+是 11 题 `blocks` 子集、真实 judge、新代码（`d9707b1`）的单次结果，硬红线
+fabrication / false_refusal / citation_errors / crashes 全为 0、数值幻觉率 0.0%。
+它与上表四个数字**不同语料状态以外的绑定条件也全不同**（见 §A 告警），
+不要并进同一张表算「提升」，也不要拿 11 题子集的全绿去宣称 42 题红线已过。
 
 ## C. 复现方式（合并任务卡问题）
 
@@ -98,6 +110,10 @@ python -m evaluation.score_agent_runs \
 | `finance_probe_cache_20261104.json` | probe | 11-04 | historical | **修复前**读数；tool_round 0 命中是客户端漏字段假象，需重跑 |
 | `gateway_cache_probe_20261104.json` | probe | 11-04 | **current** | 网关行为判定，8 次短请求 |
 | `ms11_tasks_20261104.jsonl` | tasks | 11-04 | **current（复测输入）** | 11 道多步题合并输入卡，由 `evaluation/rebuild_ms11_tasks.py` 生成；供 blocks 子集复测用 |
+| `finance_ms11_20261104.json` | runs | 11-04 | **current（11 题剖面）** | 11 题全 `answered`；`run_config.git=d9707b1`（`dirty=true`）；逐题 `hit+miss==tokens_in`；合计 588,011 token |
+| `finance_ms11_20261104.tasks.jsonl` | tasks snapshot | 11-04 | current | 随 runs 自动落盘的实际任务集快照，`run_config.tasks_file` 指向它 |
+| `finance_ms11_report_20261104.json` | report | 11-04 | **current（11 题剖面）** | `pass@1=7/11`、真实 judge、硬红线全 0；**单次、不同条件，不与 64.3% 相减** |
+| `finance_ms11_badcases_20261104.jsonl` | badcase | 11-04 | current | 4 条 badcase，主因「参数错误 / 检索无命中」 |
 
 ## E. 基线登记规则
 
@@ -106,7 +122,9 @@ python -m evaluation.score_agent_runs \
 2. `status=current` 每种口径一条；旧条目标 `historical`/`superseded` 并写 `supersedes` 链。
    **没有绑定当前代码的产物时，不要硬标 `current`**：用 `unique（旧基线）` 并写明
    绑定的 commit。产物清单的 `run_config.git`（新产物自带）是判断依据；
-   旧产物看 `manifest.code.commit`。
+   旧产物看 `manifest.code.commit`。2026-11-04 的 11 题 runs 就靠这个字段判定
+   绑定 `d9707b1`，而 11-03 旧 runs 缺该字段、只能靠 `manifest.code.commit=221318d`。
+   `dirty=true` 也要照记：说明运行时工作区有未跟踪产物，不是干净 checkout。
 3. **收益不跨基线叠加**：sections→blocks 的机制收益已兑现进 blocks 基线，
    不得在后续优化里再算一遍。
 4. 全价 token（预注册 ≤20k 红线口径）与有效输入估算分两列报，不混写「降了 X%」。

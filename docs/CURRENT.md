@@ -30,38 +30,50 @@ read_when: 接手第一步
 
 已完成：缓存字段提取 / 逐调用累加 / 有效输入折算 / 报告自声明、
 H1/H2 网关判定实验（两假设均证伪，真因是客户端漏字段，已修复）、
-零 token 重判报告落盘。
+零 token 重判报告落盘、**11 题 blocks 子集复测（runs + 真实 judge 报告）落盘**。
 
 未闭环（按优先级）：
 
-1. **11 题 blocks 子集复测**（真实模型，先报预算）：验证 P0+P1+P2-1 的合并效果，
-   重点看多步拆解是否离开 2/11，以及覆盖率闸门 / `search_tables` 带来的 token 与延迟增量。
-   **预算上限：≤1.2M token**（11 题旧读数合计 594,676，均值 54,061/题；
-   新增槽位覆盖与表目录检索会增加检索轮次，按约 2 倍留余量）。
-   11 题分散在三套任务卡（主集 5 / 复杂 2 / 压力 4），`run_finance_eval --tasks`
-   只收单文件，需先按下面命令合并一个 11 题输入卡，再跑：
+1. **11 题 blocks 子集复测**（已完成，2026-11-04）：产物与读数见
+   [docs/evidence/INDEX.md](evidence/INDEX.md) §A / §D。
+   - runs：`finance_ms11_20261104.json`（11 题全 `answered`）、判分：`finance_ms11_report_20261104.json`、
+     badcase：`finance_ms11_badcases_20261104.jsonl`，任务集快照随 runs 落盘。
+   - 合计 588,011 token（in 547,847 / out 40,164），**未超 ≤1.2M 预算**；
+     11 题逐题 `hit + miss == tokens_in`，缓存字段透传修复稳定生效；
+     全价命中占比、有效输入估算等具体读数见
+     [docs/evidence/INDEX.md](evidence/INDEX.md) §A（**估算非实测**）。
+   - 这批 11 题 `pass@1 = 7/11`，3 条硬红线（fabrication / false_refusal /
+     citation_errors）与数值幻觉率全部为 0。
+   - **可比性限制（务必照写）**：旧 2/11 来自 11-03 `sections` + 42 题卡 +
+     `--reuse-judgments` 零 token 重判；新剖面是 `blocks` + 11 题卡 + 真实 judge +
+     含工具层改动的新代码（`run_config.git=d9707b1`，`dirty=true`）。`corpus_hash` 一致但
+     search_mode / 任务卡 / judge 模式 / commit 均不同，**不是严格 A/B，不写「提升 X 个百分点」**，
+     只作不同条件下的定性观察。且 `runs_per_task=1`，无 pass^k，不外推全量验收。
+   - 复现命令（已执行，保留备查）：
 
    ```bash
    cd backend
-   # 1) 合并 11 题输入卡（零模型）：`python -m evaluation.rebuild_ms11_tasks`
-   #    从三套任务卡按固定 id 取并集、顺序与 11-03 runs 一致，产物已落盘为
-   #    docs/evidence/ms11_tasks_20261104.jsonl，供第 2 步直接引用。
+   # 1) 输入卡（零模型）：docs/evidence/ms11_tasks_20261104.jsonl
+   #    由 python -m evaluation.rebuild_ms11_tasks 从三套任务卡按固定 id 生成
    # 2) 只跑不判（blocks 模式，排除留出集）
    python -m evaluation.run_finance_eval \
      --tasks ../docs/evidence/ms11_tasks_20261104.jsonl \
      --search-mode blocks --holdout exclude --runs 1 \
      --out ../docs/evidence/finance_ms11_20261104.json
-   # 3) 判分：代码已改、答案必然变化，不能复用旧 judge 结论，走真实 judge
+   # 3) 判分：答案已变，走真实 judge（不能 --reuse-judgments）
    python -m evaluation.score_agent_runs \
      --runs ../docs/evidence/finance_ms11_20261104.json \
      --tasks ../docs/evidence/ms11_tasks_20261104.jsonl --corpus finance \
-     --out ../docs/evidence/finance_ms11_report_20261104.json
+     --holdout exclude --out ../docs/evidence/finance_ms11_report_20261104.json \
+     --badcases ../docs/evidence/finance_ms11_badcases_20261104.jsonl
    ```
 
    逐题对比用 `compare_agent_reports` 前先确认两份报告 `tasks_sha256` /
-   `corpus_hash` 一致，否则标 `incomparable`（旧报告绑定 11-03 语料状态）。
+   `corpus_hash` 一致，否则标 `incomparable`（旧报告绑定 11-03 语料状态与不同判分口径）。
 2. 修复字段透传后**重跑 4 题探针**（真实模型，先报预算），拿 tool_round
    真实缓存命中率与有效输入；旧的「−60%」推算已作废。
+   注：11 题复测已顺带证明工具循环缓存记账生效（逐题 hit+miss 恒等），
+   但 4 题探针的 `tool_round` 分阶段命中率仍需单独重跑。
 3. **32 题 blocks 基线 runs 落盘**（当前只在本地审计过，三套基线对照不可复现）。
 4. 检索结构化匹配（指标词 → 行名先验）：直接打多步短板。
 5. 全量重跑 + 留出集验收 + pass^k（约 3 倍预算），此后才谈发布闸门。
@@ -82,8 +94,13 @@ H1/H2 网关判定实验（两假设均证伪，真因是客户端漏字段，�
   要求使用真正的 function call；未知工具名会回显可用工具清单。
 - 离线验证：后端全量 `pytest` 通过、三套任务卡 lint 0 error（通过数会变，
   跑 `python -m pytest -q` 看当前值）。
-- **尚未跑真模型**：多步拆解是否提升、覆盖率闸门带来的 token/延迟增量，
-  都必须等 11 题 blocks 子集复测后再写结论。
+- **已做 11 题 blocks 子集复测**（见上文第 1 项）：11 题全 `answered`、
+  `pass@1 = 7/11`、3 条硬红线转绿、数值幻觉率 0.0%。
+  但这是**不同条件下的单次剖面**（`sections`→`blocks`、任务卡 / judge / commit 均变），
+  不能写成「工具层改动使多步提升 X」；仍 fail 的 FIN-11 / CX-08 / FIN-S06 / FIN-S10
+  是下一轮检索结构化匹配的靶点，FIN-11 仍是打转题（20 步 / 126,897 in）。
+  覆盖率闸门 / `search_tables` 的 token 与延迟增量：11 题合计 588,011、
+  中位延迟 29.5s、平均 13.73 步，与旧 42 题均值口径不同，不直接相减。
 
 ## 已知未修的产品缺陷
 
