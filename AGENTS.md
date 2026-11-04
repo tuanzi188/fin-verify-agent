@@ -37,7 +37,9 @@ cd ../frontend && npm run typecheck && npm test -- --run
 python -m evaluation.lint_finance_tasks --check-refs --check-routing   # 在 backend 下
 ```
 
-CI 跑同样四项。通过数会变，不要记在文档里。真实查证需要可用的模型 API。
+CI 跑同样四项；其中任务卡 lint 只跑 `--check-routing`（`--check-refs` 需要本地
+`data/finance` 语料，CI 不携带，改动引用坐标后必须在本地补跑）。通过数会变，
+不要记在文档里。真实查证需要可用的模型 API。
 
 ## 4. 模块地图（改东西去哪）
 
