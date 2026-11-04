@@ -124,7 +124,10 @@ def calculate(expression: str, inputs: dict[str, Any] | None = None) -> dict:
     """
     formula = str(expression or "").strip()
     if not formula:
-        raise CalculationError("expression 不能为空")
+        raise CalculationError(
+            "expression 不能为空；请传 expression（也兼容 formula），"
+            "例如 (a-b)/b"
+        )
     if len(formula) > MAX_EXPRESSION_LENGTH:
         raise CalculationError(f"expression 超过 {MAX_EXPRESSION_LENGTH} 字符")
     if inputs is not None and not isinstance(inputs, dict):

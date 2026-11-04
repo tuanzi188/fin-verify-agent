@@ -144,6 +144,18 @@ def _render_rows(rows: dict) -> str:
             "None" if value is None else str(value) for value in row.get("values") or []
         )
         lines.append(f"{row.get('row')} | {values}")
+    if rows.get("skipped_rows"):
+        notes = "；".join(
+            f"{item.get('input')}（{item.get('reason')}）"
+            for item in rows.get("skipped_rows")[:5]
+        )
+        lines.append(f"未读取行：{notes}")
+    if rows.get("suspected_misalignment"):
+        notes = "；".join(
+            f"{item.get('row_name')} 的「{item.get('column')}」：{item.get('reason')}"
+            for item in rows.get("suspected_misalignment")[:5]
+        )
+        lines.append(f"警告：以下单元格疑似表头错位，勿直接引用：{notes}")
     if rows.get("footnote"):
         lines.append(f"脚注：{rows.get('footnote')}")
     return "\n".join(lines)
@@ -633,8 +645,18 @@ class FinanceToolset:
                 f"｜{data.get('row_name')} 的「{data.get('column')}」= {data.get('cell_text')}"
                 f"（单位：{data.get('unit') or '未标注'}，来源：{data.get('unit_source') or 'table'}）"
             )
+            misalignment = data.get("misalignment") or {}
+            if misalignment.get("suspected"):
+                quote += (
+                    f"\n警告：该单元格疑似表头错位（{misalignment.get('reason')}），"
+                    "请改用 get_rows 或换行列名核对，勿直接引用。"
+                )
             content, truncated = _truncate(quote, MAX_CELL_CHARS)
             anchor = f"{data.get('table_id')}#{data.get('row')}#{data.get('column')}"
+            extra = {}
+            if misalignment.get("suspected"):
+                extra["misaligned"] = True
+                extra["misalignment_reason"] = misalignment.get("reason")
             return [
                 evidence_item(
                     chunk_id=anchor,
@@ -651,6 +673,7 @@ class FinanceToolset:
                     statement_scope=data.get("statement_scope") or "",
                     statement_type=data.get("statement_type") or "",
                     doc_id=data.get("doc_id"),
+                    **extra,
                 )
             ]
 

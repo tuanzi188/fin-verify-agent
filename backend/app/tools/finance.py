@@ -9,11 +9,13 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.finance.block_index import BlockIndex
-from app.finance.calc import CalculationError, calculate as run_calculation
+from app.finance.calc import CalculationError
+from app.finance.calc import calculate as run_calculation
 from app.finance.store import FinanceStore, FinanceStoreError
 
 
@@ -136,10 +138,23 @@ class FinanceToolbox:
                     arguments.get("columns"),
                 )
             elif name == "calculate":
-                data = self.calculate(
-                    str(arguments.get("expression") or ""),
-                    arguments.get("inputs") or {},
-                )
+                # 不同模型对参数名的叫法不一致：expression / formula / expr 都见过
+                # （2026-11-03 FIN-11 连发 4 次 formula，全部因 expression 为空失败）。
+                # 这里做一次确定性别名归一化，不改变计算语义。
+                expression = arguments.get("expression")
+                if expression in (None, ""):
+                    expression = arguments.get("formula") or arguments.get("expr") or ""
+                inputs = arguments.get("inputs") or {}
+                if isinstance(inputs, str):
+                    try:
+                        inputs = json.loads(inputs)
+                    except json.JSONDecodeError as exc:
+                        raise CalculationError(
+                            "inputs 必须是对象，例如 {\"current\": \"12.34\"}"
+                        ) from exc
+                if not isinstance(inputs, dict):
+                    raise CalculationError("inputs 必须是对象")
+                data = self.calculate(str(expression or ""), inputs)
             else:
                 raise CalculationError(f"未知工具: {name}")
         except Exception as exc:  # noqa: BLE001 - 工具层必须可归因
@@ -253,7 +268,9 @@ GET_ROWS_SPEC = {
         "description": (
             "按 table_id 读取指定的相关行，返回表名、列名、每行数值、行号、列号、单位、脚注和页码。"
             "普通查数优先用它：比 get_cell 多给同组上下文，又比 get_table 少读无关行。"
-            "rows 必须显式列出首列行名或行号（1–20 行）；columns 可只选相关列，省略则读全部列。"
+            "rows 必须显式列出首列行名或行号（1–20 行）；行名可省略单位括号（写「营业收入」即可匹配"
+            "「营业收入（千元）」），也接受常用别名；columns 可只选相关列，省略则读全部列。"
+            "个别行号越界不会让整次调用失败，会在 skipped_rows 里说明。"
         ),
         "parameters": {
             "type": "object",
@@ -285,7 +302,8 @@ GET_CELL_SPEC = {
         "name": "get_cell",
         "description": (
             "按 table_id + 行 + 列读单元格，返回数值、行名、列名、表格标题、页码和 bbox。"
-            "行可以传行号，也可以传首列名称（如“营业收入”）；列可以传列号或列名（如“2025”）。"
+            "行可以传行号，也可以传首列名称（如「营业收入」，可省略单位括号）；"
+            "列可以传列号或列名（如「2025」或「2025 年」）。"
             "回答里的证据必须带 table_caption/row_name/column/cell_text/page，不能只写 cell 编号。"
         ),
         "parameters": {
@@ -306,8 +324,8 @@ CALCULATE_SPEC = {
         "name": "calculate",
         "description": (
             "执行四则运算，返回公式、输入和结果。所有比率、同比、环比、勾稽都必须调用它，"
-            "不要心算。inputs 是变量表，例如 {\"current\": \"12.34\", \"previous\": \"10.00\"}；"
-            "百分数可以写成 \"23.4%\"。"
+            "不要心算。expression 必填（兼容 formula/expr 别名）；inputs 是变量表，"
+            "例如 {\"current\": \"12.34\", \"previous\": \"10.00\"}；百分数可以写成 \"23.4%\"。"
         ),
         "parameters": {
             "type": "object",

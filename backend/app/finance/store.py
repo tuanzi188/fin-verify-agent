@@ -35,10 +35,124 @@ from __future__ import annotations
 import json
 import math
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
 
 _RUN_RE = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]+")
+
+# 行名/列名的归一化：
+# - 财报表格的行标签常把单位写在括号里（营业收入（千元）），模型通常只写「营业收入」；
+# - 列名常写「2025 年」，模型常只写「2025」；
+# - 部分表行标签带「一、」「其中：」「减：」前缀，或落在第 2/3 列。
+# 这里只做确定性的字符串归一化，不做语义猜测；匹配不到时把候选回显给模型。
+_UNIT_TAIL_RE = re.compile(
+    r"[（(][^（）()]{0,16}(?:元/股|百万元|千元|万元|亿元|元|股|%|％|倍)"
+    r"[^（）()]{0,8}[)）]\s*$"
+)
+_LABEL_PREFIX_RE = re.compile(
+    r"^(?:[一二三四五六七八九十百]+[、.．]|其中[:：]|加[:：]|减[:：]|注\s*\d*\s*[:：]?)\s*"
+)
+_FOUR_DIGIT_YEAR_RE = re.compile(r"^(\d{4})\s*年?$")
+_NUMERIC_CELL_RE = re.compile(r"^[-+−]?[\d,，.]+\s*(?:%|％)?$")
+
+# 常用财务科目别名。键和值都按 _normalize_label 归一化后的形式书写。
+# 只收「同一科目在不同表/不同公司里的常见写法」，不把不同口径（营业总收入 vs 营业收入）
+# 混为一谈；命中不了就走模糊匹配并回显候选。
+_ROW_ALIASES: dict[str, tuple[str, ...]] = {
+    "营业收入": ("营业收入", "营业总收入", "营业收入合计", "营业总收入合计"),
+    "营业总收入": ("营业总收入", "营业收入", "营业总收入合计"),
+    "营业收入合计": ("营业收入合计", "营业总收入合计", "营业收入", "营业总收入"),
+    "营业成本": ("营业成本", "营业总成本"),
+    "营业总成本": ("营业总成本", "营业成本"),
+    "归母净利润": (
+        "归属于上市公司股东的净利润",
+        "归属于母公司所有者的净利润",
+        "归属于母公司股东的净利润",
+    ),
+    "归属于上市公司股东的净利润": (
+        "归属于上市公司股东的净利润",
+        "归属于母公司所有者的净利润",
+        "归属于母公司股东的净利润",
+    ),
+    "归属于母公司所有者的净利润": (
+        "归属于母公司所有者的净利润",
+        "归属于上市公司股东的净利润",
+        "归属于母公司股东的净利润",
+    ),
+    "研发投入": (
+        "研发投入金额",
+        "研发投入",
+        "研发投入合计",
+        "研发费用金额",
+        "研发费用",
+    ),
+    "研发费用": (
+        "研发费用",
+        "研发费用金额",
+        "研发投入金额",
+        "研发投入",
+    ),
+    "总资产": ("总资产", "资产总计"),
+    "资产总计": ("资产总计", "总资产"),
+    "净资产": (
+        "归属于上市公司股东的净资产",
+        "净资产",
+        "归属于母公司所有者权益合计",
+    ),
+    "每股收益": ("基本每股收益", "稀释每股收益"),
+}
+
+
+def _normalize_label(value: object) -> str:
+    """把行名/列名归一化成可比较的键。只做确定性字符串处理。"""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = text.replace("\u3000", " ")
+    text = re.sub(r"\s+", "", text)
+    text = _LABEL_PREFIX_RE.sub("", text)
+    # 单位后缀可能连续出现（如「营业收入（千元）（经重述）」），最多剥两层。
+    for _ in range(2):
+        stripped = _UNIT_TAIL_RE.sub("", text)
+        if stripped == text:
+            break
+        text = stripped
+    year = _FOUR_DIGIT_YEAR_RE.match(text)
+    if year:
+        return year.group(1)
+    return text.casefold()
+
+
+def _looks_numeric(value: object) -> bool:
+    text = str(value or "").strip()
+    return bool(text) and bool(_NUMERIC_CELL_RE.match(text))
+
+
+def _row_labels(values: list) -> list[str]:
+    """一行里可能作为行名的前三个单元格（跳过表头/数字/编号空串）。"""
+    labels: list[str] = []
+    for cell in list(values or [])[:3]:
+        text = str(cell or "").strip()
+        if not text or _looks_numeric(text):
+            continue
+        labels.append(text)
+    return labels
+
+
+def _row_fill_score(values: list) -> int:
+    """数值填充度：用于在模糊候选里优先选真正有数据的行，而不是小节标题行。"""
+    return sum(1 for cell in values or [] if _looks_numeric(cell))
+
+
+def _is_label_column(name: object) -> bool:
+    """行标签列本身就会返回行名，不能据此判定「单元格错位」。"""
+    normalized = _normalize_label(name)
+    if not normalized:
+        return False
+    if normalized in {"项目", "科目", "指标", "行名", "报表项目"}:
+        return True
+    return bool(re.fullmatch(r"col\d+", normalized))
 
 
 def _tokenize(text: str) -> set[str]:
@@ -355,6 +469,42 @@ class FinanceStore:
             "rows": [list(row) for row in (table.get("rows") or [])],
         }
 
+    @staticmethod
+    def _cell_suspicion(
+        value: object,
+        row_name: str,
+        column_name: str,
+        columns: list[str],
+    ) -> str:
+        """识别「解析错位」的典型症状，避免把表头/行标签当数值证据。
+
+        只做确定性判断，宁可少报也不猜：返回值等于行名/列名/其他列名，
+        或金额行返回百分比，都说明行列可能错位。
+        """
+        text = str(value).strip() if value is not None else ""
+        if _is_label_column(column_name):
+            return ""
+        # 空单元格不叫「错位」：稀疏表里大量存在，标出来只会淹没真正的错位。
+        if not text:
+            return ""
+        normalized = _normalize_label(text)
+        if normalized and normalized == _normalize_label(row_name):
+            return "返回值等于行名"
+        if normalized and normalized == _normalize_label(column_name):
+            return "返回值等于列名"
+        for name in columns:
+            if str(name).strip() and normalized == _normalize_label(name):
+                return "返回值是表头列名"
+        ratio_words = (
+            "率", "比例", "占比", "比重", "增减", "增长", "下降", "变动",
+            "同比", "环比", "幅度", "%", "％",
+        )
+        if text.endswith(("%", "％")) and not any(
+            word in str(row_name) or word in str(column_name) for word in ratio_words
+        ):
+            return "金额行返回百分比"
+        return ""
+
     def get_cell(self, table_id: str, row: int | str, column: int | str) -> dict:
         table = self.get_table(table_id)
         columns = table["columns"]
@@ -368,7 +518,9 @@ class FinanceStore:
             raise FinanceStoreError(f"列越界: {column}")
 
         value = rows[row_index][column_index] if column_index < len(rows[row_index]) else None
-        return {
+        row_name = self._row_label(rows[row_index])
+        suspicion = self._cell_suspicion(value, row_name, columns[column_index], columns)
+        result = {
             "doc_id": table["doc_id"],
             "title": table["title"],
             "table_id": table["table_id"],
@@ -380,7 +532,7 @@ class FinanceStore:
             "statement_scope": table.get("statement_scope") or "",
             "statement_type": table.get("statement_type") or "",
             "row": row_index,
-            "row_name": self._row_label(rows[row_index]),
+            "row_name": row_name,
             "column": columns[column_index],
             "column_index": column_index,
             "value": value,
@@ -388,6 +540,9 @@ class FinanceStore:
             "bbox": table.get("bbox"),
             "row_values": rows[row_index],
         }
+        if suspicion:
+            result["misalignment"] = {"suspected": True, "reason": suspicion}
+        return result
 
     def get_rows(
         self,
@@ -410,13 +565,33 @@ class FinanceStore:
             raise FinanceStoreError("rows 一次最多 20 行")
 
         row_indices: list[int] = []
+        skipped_rows: list[dict] = []
+        first_error: FinanceStoreError | None = None
         for row in rows:
-            index = self._resolve_row(all_rows, row)
+            try:
+                index = self._resolve_row(all_rows, row)
+            except FinanceStoreError as exc:
+                # 部分成功：一行拼错不应该让整次读取失败。把失败原因回显给模型，
+                # 有效行照常返回（FIN-S01 实测：rows=[10..14] 里只有 13 越界，
+                # 旧实现直接抛错，模型只能重新检索，最后预算耗尽拒答）。
+                if first_error is None:
+                    first_error = exc
+                skipped_rows.append({"input": row, "reason": str(exc)[:200]})
+                continue
             if index >= len(all_rows):
-                raise FinanceStoreError(f"行越界: {row}")
+                exc = FinanceStoreError(
+                    f"行越界: {row}；该表共 {len(all_rows)} 行（0–{len(all_rows) - 1}）"
+                )
+                if first_error is None:
+                    first_error = exc
+                skipped_rows.append({"input": row, "reason": str(exc)[:200]})
+                continue
             if index in row_indices:
                 raise FinanceStoreError(f"重复行: {row}")
             row_indices.append(index)
+
+        if not row_indices:
+            raise first_error or FinanceStoreError("没有可读取的行")
 
         if columns is None:
             column_indices = list(range(len(all_columns)))
@@ -435,20 +610,36 @@ class FinanceStore:
                 column_indices.append(index)
 
         output_rows = []
+        suspected_cells: list[dict] = []
         for index in row_indices:
             values = all_rows[index]
-            cells = [
-                {
-                    "column": all_columns[column_index],
-                    "column_index": column_index,
-                    "value": values[column_index] if column_index < len(values) else None,
-                }
-                for column_index in column_indices
-            ]
+            row_name = self._row_label(values)
+            cells = []
+            for column_index in column_indices:
+                value = values[column_index] if column_index < len(values) else None
+                cells.append(
+                    {
+                        "column": all_columns[column_index],
+                        "column_index": column_index,
+                        "value": value,
+                    }
+                )
+                suspicion = self._cell_suspicion(
+                    value, row_name, all_columns[column_index], all_columns
+                )
+                if suspicion:
+                    suspected_cells.append(
+                        {
+                            "row": index,
+                            "row_name": row_name,
+                            "column": all_columns[column_index],
+                            "reason": suspicion,
+                        }
+                    )
             output_rows.append(
                 {
                     "row": index,
-                    "row_name": self._row_label(values),
+                    "row_name": row_name,
                     "values": [
                         values[column_index] if column_index < len(values) else None
                         for column_index in column_indices
@@ -457,7 +648,7 @@ class FinanceStore:
                 }
             )
 
-        return {
+        result = {
             "doc_id": table["doc_id"],
             "title": table["title"],
             "table_id": table["table_id"],
@@ -476,59 +667,188 @@ class FinanceStore:
             "row_indices": row_indices,
             "total_rows": len(all_rows),
         }
+        if skipped_rows:
+            result["skipped_rows"] = skipped_rows
+        if suspected_cells:
+            result["suspected_misalignment"] = suspected_cells[:10]
+        return result
 
     @staticmethod
     def _row_label(values: list[str]) -> str:
-        """行名：首列优先；首列为空时取第二列（合并单元格表常见）。"""
-        for cell in values[:2]:
+        """行名：优先取前三个单元格里第一个「有意义的」标签。
+
+        合并单元格表常把编号前缀（「一、」「其中：」）放在首列、行名放在第 2 列；
+        这些前缀归一化后为空，不能当行名。纯数字单元格（页码/序号）也跳过。
+        """
+        for cell in list(values or [])[:3]:
             text = str(cell).strip()
-            if text:
+            if not text or _looks_numeric(text):
+                continue
+            if _normalize_label(text):
                 return text
         return ""
 
-    @staticmethod
-    def _resolve_row(rows: list[list[str]], row: int | str) -> int:
+    @classmethod
+    def _resolve_row(cls, rows: list[list[str]], row: int | str) -> int:
         if isinstance(row, bool):
             raise FinanceStoreError("row 不能是布尔值")
         if isinstance(row, int):
             if row < 0:
                 raise FinanceStoreError("row 必须 >= 0")
-            return row
+            if row < len(rows):
+                return row
+            # 模型常把年份当行号传（如 2025）；先按行名再判越界。
+            matched = cls._match_row_text(rows, str(row))
+            if matched is not None:
+                return matched
+            raise FinanceStoreError(
+                f"行越界: {row}；该表共 {len(rows)} 行（0–{len(rows) - 1}）"
+            )
         text = str(row).strip()
-        # 先按首列名称匹配，再退回行号：金融表格里“2024”既可能是列名，也可能是行号。
+        if not text:
+            raise FinanceStoreError("行名不能为空")
+        matched = cls._match_row_text(rows, text)
+        if matched is not None:
+            return matched
+        raise FinanceStoreError(f"找不到行: {row}；{cls._row_hint(rows)}")
+
+    @classmethod
+    def _match_row_text(cls, rows: list[list[str]], text: str) -> int | None:
+        """按「原样 → 归一化 → 别名 → 模糊」四层匹配行名。"""
+        # 1) 原样：首列优先（保留旧行为，包括数字行号）；行名落到第 2/3 列时，
+        # 只匹配非数字标签，避免把「45」这类页码/序号当成行名。
         for index, values in enumerate(rows):
             if values and str(values[0]).strip() == text:
                 return index
-        # 有些表的行标签落在第 2 列：首列是合并单元格/空列，行名在下一列。
-        # 2026-11-03 实测比亚迪「营业收入构成」t0013：`营业收入合计` 在 col2，
-        # 按首列查会全部 not_found。只在首列为空的行上回退，避免误命中。
+        if not _looks_numeric(text):
+            for index, values in enumerate(rows):
+                for cell in list(values or [])[1:3]:
+                    cell_text = str(cell).strip()
+                    if cell_text == text and not _looks_numeric(cell_text):
+                        return index
+
+        normalized = _normalize_label(text)
+        if not normalized:
+            return None
+
+        # 2) 归一化：去掉单位括号、空格、编号前缀，并把「2025 年」视为「2025」。
         for index, values in enumerate(rows):
-            if (
-                len(values) > 1
-                and not str(values[0]).strip()
-                and str(values[1]).strip() == text
-            ):
-                return index
+            for label in _row_labels(values):
+                if _normalize_label(label) == normalized:
+                    return index
+
+        # 3) 别名：营业收入 ↔ 营业总收入、归母净利润 ↔ 归属于上市公司股东的净利润。
+        for alias in _ROW_ALIASES.get(normalized, ()):
+            target = _normalize_label(alias)
+            if not target:
+                continue
+            for index, values in enumerate(rows):
+                for label in _row_labels(values):
+                    if _normalize_label(label) == target:
+                        return index
+
+        # 4) 纯数字仍按行号解析（证据锚点 `doc#t1#0#1` 的 row_token 是字符串）。
         if text.isdigit():
-            return int(text)
-        raise FinanceStoreError(f"找不到行: {row}")
+            index = int(text)
+            return index if 0 <= index < len(rows) else None
+
+        # 5) 模糊：只在相似度足够高时命中；用数值填充度打破平局。
+        candidates: list[tuple[float, int, int]] = []
+        for index, values in enumerate(rows):
+            labels = _row_labels(values)
+            if not labels:
+                continue
+            best = 0.0
+            for label in labels:
+                target = _normalize_label(label)
+                score = SequenceMatcher(None, normalized, target).ratio()
+                if len(normalized) >= 3 and (
+                    normalized in target or target in normalized
+                ):
+                    score = max(score, 0.82)
+                best = max(best, score)
+            if best >= 0.72:
+                candidates.append((best, _row_fill_score(values), index))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (item[0], item[1], -item[2]), reverse=True)
+        return candidates[0][2]
 
     @staticmethod
-    def _resolve_column(columns: list[str], column: int | str) -> int:
+    def _row_hint(rows: list[list[str]]) -> str:
+        labels: list[str] = []
+        for values in rows:
+            for label in _row_labels(values):
+                if label not in labels:
+                    labels.append(label)
+            if len(labels) >= 8:
+                break
+        head = f"该表共 {len(rows)} 行"
+        if not labels:
+            return f"{head}，没有可用行名"
+        return f"{head}；可用行名: {'、'.join(labels[:8])}"
+
+    @classmethod
+    def _resolve_column(cls, columns: list[str], column: int | str) -> int:
         if isinstance(column, bool):
             raise FinanceStoreError("column 不能是布尔值")
         if isinstance(column, int):
             if column < 0:
                 raise FinanceStoreError("column 必须 >= 0")
-            return column
+            if column < len(columns):
+                return column
+            # 模型常把列名写成整数（column=2025），先按列名匹配再判越界。
+            matched = cls._match_column_text(columns, str(column))
+            if matched is not None:
+                return matched
+            raise FinanceStoreError(
+                f"列越界: {column}；该表共 {len(columns)} 列"
+                f"（0–{len(columns) - 1}）；{cls._column_hint(columns)}"
+            )
         text = str(column).strip()
-        # 列名优先：金融表的列名经常就是“2025”“2024”，不能先当列号解析。
+        if not text:
+            raise FinanceStoreError("列名不能为空")
+        matched = cls._match_column_text(columns, text)
+        if matched is not None:
+            return matched
+        raise FinanceStoreError(f"找不到列: {column}；{cls._column_hint(columns)}")
+
+    @classmethod
+    def _match_column_text(cls, columns: list[str], text: str) -> int | None:
         for index, name in enumerate(columns):
             if str(name).strip() == text:
                 return index
+        normalized = _normalize_label(text)
+        if not normalized:
+            return None
+        for index, name in enumerate(columns):
+            if _normalize_label(name) == normalized:
+                return index
+        # 纯数字仍按列号解析（证据锚点里的 column_token 是字符串）。
         if text.isdigit():
-            return int(text)
-        raise FinanceStoreError(f"找不到列: {column}")
+            index = int(text)
+            return index if 0 <= index < len(columns) else None
+        candidates: list[tuple[float, int]] = []
+        for index, name in enumerate(columns):
+            target = _normalize_label(name)
+            score = SequenceMatcher(None, normalized, target).ratio()
+            if len(normalized) >= 2 and (
+                normalized in target or target in normalized
+            ):
+                score = max(score, 0.82)
+            if score >= 0.8:
+                candidates.append((score, index))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+        return candidates[0][1]
+
+    @staticmethod
+    def _column_hint(columns: list[str]) -> str:
+        names = [str(name).strip() for name in columns if str(name).strip()]
+        if not names:
+            return "该表没有可用列名"
+        return f"可用列名: {'、'.join(names[:8])}"
 
     # ------------------------------------------------------------------
     # 检索（v1：IDF + 路径加权 + 长度归一；结构路由在 Phase 4）
