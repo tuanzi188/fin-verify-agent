@@ -77,9 +77,15 @@ def base_chunk_id(chunk_id: str) -> str:
 # 工具约束
 # ---------------------------------------------------------------------------
 
-# 产品默认检索入口已从 sections 切到 blocks；旧任务卡仍写 search_sections。
-# 约束检查只关心“有没有检索”，两个工具视为同一个动作，避免把正确运行判成没检索。
-_SEARCH_TOOL_ALIASES = {"search_blocks": "search_sections"}
+# 产品默认检索入口已从 sections 切到 blocks，后又加入 search_tables（表目录检索）。
+# 三个工具在 FinanceToolset 里共用同一份检索预算（finance_set.py 的 _search_budget），
+# 约束检查只关心「有没有检索」，视为同一个动作，避免把正确运行判成没检索。
+# 2026-11-04 实测：漏折 search_tables 让 FIN-11 / FIN-S06 / FIN-S10 的
+# tool_call_count 全部误判（实际搜了 4–6 次，记成 0–1 次）。
+_SEARCH_TOOL_ALIASES = {
+    "search_blocks": "search_sections",
+    "search_tables": "search_sections",
+}
 
 
 def _canonical_tool(name: object) -> str:

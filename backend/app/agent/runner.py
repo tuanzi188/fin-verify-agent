@@ -176,15 +176,35 @@ def _normalize_max_steps(raw: Any) -> int:
     return max(1, min(value, MAX_STEPS_CEILING))
 
 
+# 答案里的"数值断言"：用于判断表级引用要不要补单元格，也用于补算闸门。
+_TABLE_NUMBER_PATTERN = re.compile(
+    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?"
+    r"|\d[\d,]*\.?\d*\s*(?:%|％|亿元|万元|千元|元|倍|个百分点)"
+)
+
 # 比率 / 占比 / 百分点 / 倍数：答案里一旦出现，就必须要么来自原文、要么来自 calculate
 _RATIO_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:%|％|个百分点|倍)")
 
+# 问题里的「派生数值」信号：合计 / 换算 / 增长 / 平均 / 排序比较。
+# 这些题的答案里必然有一个原文没有的数（两数相加、单位换算、年均、差值），
+# 2026-11-04 复测 FIN-S10（两公司营业收入合计 + 千元换算元）答案算对了，
+# 却因为整轮没调 calculate 被判失败——旧闸门只看比率，漏掉这一类。
+_DERIVED_SIGNAL_PATTERN = re.compile(
+    r"合计|共计|总额|换算|折合|折成|增加多少|增长多少|减少多少|"
+    r"平均每年|年均|相差|之差|之和|从高到低|从低到高|哪个更|比较"
+)
 
-def needs_calc_repair(answer: str, evidence: list[dict], calcs: list[dict]) -> bool:
-    """答案里有"证据原文里没有的比率"，而本轮一次 calculate 都没调 → 需要补做。
 
-    为什么不能只看有没有 `%`：年报本来就写着"同比 12.11%""占比 3.90%"，
-    照抄不是手算。只有"答案里的比率在证据原文里找不到"才说明这个数是模型自己算的。
+def needs_calc_repair(
+    answer: str, evidence: list[dict], calcs: list[dict], question: str = ""
+) -> bool:
+    """答案里有"证据原文里没有的派生数值"，而本轮一次 calculate 都没调 → 需要补做。
+
+    两类信号，任一命中即补：
+    - 比率（% / 百分点 / 倍）不在证据原文里（原有逻辑，照抄年报的百分比不算）；
+    - 问题点名了合计 / 换算 / 增长 / 平均，而答案里出现了数值断言、
+      且本轮没有 calculate 记录（2026-11-04 补，覆盖 FIN-S10 这类「手算对了」）。
+
     `calcs` 非空就不再追问——闸门只管"一次都没算过"，不管算得对不对（那是判分的事）。
     """
     if calcs or not answer:
@@ -195,6 +215,10 @@ def needs_calc_repair(answer: str, evidence: list[dict], calcs: list[dict]) -> b
         literal = match.group(0).replace(" ", "").replace(",", "")
         if literal in haystack:
             continue
+        return True
+    # 合计 / 换算类：问题点名 + 答案里有数值断言 → 必须走一次 calculate。
+    # 不拿答案里的数字当触发源，避免「照抄原文一个数」被误判成手算。
+    if _DERIVED_SIGNAL_PATTERN.search(question or "") and _TABLE_NUMBER_PATTERN.search(answer):
         return True
     return False
 
@@ -235,13 +259,6 @@ _PAGE_REFERENCE_PATTERN = re.compile(r"(?:PDF\s*)?第\s*\d+\s*页")
 # doc_id / table_id / section_id 这类标识符里的数字不是金额：
 # cninfo-000333-2025-annual、t0006、s0009 都要先剥掉再判泄漏。
 _IDENTIFIER_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_#-]*\d[A-Za-z0-9_#-]*")
-
-# 答案里的"数值断言"：用于判断表级引用要不要补单元格。
-_TABLE_NUMBER_PATTERN = re.compile(
-    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?"
-    r"|\d[\d,]*\.?\d*\s*(?:%|％|亿元|万元|千元|元|倍|个百分点)"
-)
-
 
 def _numeric_leaks(answer: str) -> list[str]:
     """拒答文本里的具体数值。年份、页码、引用编号和 id 数字都不算。"""
@@ -387,7 +404,7 @@ def _answer_gate(
 
     if not fired.get("calc"):
         calcs = getattr(toolbox, "calcs", None)
-        if calcs is not None and needs_calc_repair(text, evidence, calcs):
+        if calcs is not None and needs_calc_repair(text, evidence, calcs, question):
             fired["calc"] = True
             return CALC_REPAIR_HINT, "calc_repair"
 

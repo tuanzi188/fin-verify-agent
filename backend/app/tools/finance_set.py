@@ -32,9 +32,12 @@ from app.tools.toolset import Injector, ToolOutcome, evidence_item
 MAX_SECTION_CHARS = 4000
 MAX_TABLE_CHARS = 1500
 MAX_CELL_CHARS = 400
-# 检索预算：超过这个次数后不再执行 search_sections，逼模型去读已定位的内容。
+# 检索预算：超过这个次数后不再执行 search_*，逼模型去读已定位的内容。
 # 2026-10-28 实测 CX-11 搜了 9 次、CX-12 搜了 7 次，token 全花在换关键词上。
-MAX_SEARCH_CALLS = 5
+# 2026-11-04 复测：跨 3 家公司的题（FIN-11）每家都要先定位表，5 次不够，
+# 预算耗尽后模型仍想搜、又打满 20 步。提到 8 给多文档题余量；同时预算耗尽时
+# 回显「已定位的 chunk 清单」（见 call()），让模型直接读已定位内容而不是空转。
+MAX_SEARCH_CALLS = 8
 #: 读取类工具的重复调用缓存；同一参数不重复回填正文。
 READ_CACHE_TOOLS = ("get_table", "get_rows", "get_cell", "read_section", "read_block")
 
@@ -264,6 +267,8 @@ class FinanceToolset:
         self._search_budget = MAX_SEARCH_CALLS
         #: 读失败换表的额外检索额度（每条任务最多 2 次）
         self._budget_grants = 0
+        #: 本次任务已定位到的 chunk（检索结果），预算耗尽时回显给模型
+        self._located_ids: list[str] = []
 
     # ------------------------------------------------------------------
     # 注入与复用
@@ -281,6 +286,7 @@ class FinanceToolset:
         self._read_cache = {}
         self._search_budget = MAX_SEARCH_CALLS
         self._budget_grants = 0
+        self._located_ids = []
 
     @property
     def planned_injections(self) -> int:
@@ -607,13 +613,18 @@ class FinanceToolset:
         # 返回 ok=False 而不是空结果，是为了让 trace 能区分"预算用完"和"没搜到"。
         if name in ("search_sections", "search_blocks", "search_tables"):
             if self._search_budget <= 0:
+                # 回显已定位清单：模型此时往往已经搜到目标表，只是想再换关键词确认。
+                # 给出具体 id 让它直接 read_*，比干巴巴一句「预算用完」更能止住空转
+                # （FIN-11 实测：6 次 search_tables 后被打回，随后 20 步打满）。
+                located = "、".join(self._located_ids[-12:]) or "（本条任务尚无成功检索结果）"
                 return ToolOutcome(
                     tool=name,
                     ok=False,
                     error_kind="unavailable",
                     error_detail=(
                         "检索预算已用完；请改用 read_block / read_section / get_rows / "
-                        "get_table / get_cell 读取已定位的内容，不要再用同义关键词检索"
+                        "get_table / get_cell 读取下面已定位的内容，不要再用同义关键词检索。\n"
+                        f"已定位：{located}"
                     ),
                 )
             self._search_budget -= 1
@@ -660,6 +671,11 @@ class FinanceToolset:
                 }
             )
         ids, count = self._summarize(name, data)
+        if name in ("search_sections", "search_blocks", "search_tables"):
+            for chunk_id in ids or []:
+                text = str(chunk_id)
+                if text and text not in self._located_ids:
+                    self._located_ids.append(text)
         result = ToolOutcome(tool=name, ok=True, data=data, result_ids=ids, result_count=count)
         if cache_key is not None:
             self._read_cache[cache_key] = result
@@ -787,6 +803,15 @@ class FinanceToolset:
                 )
                 if matched:
                     content += f"｜匹配行：{matched}"
+                content = content[:600]
+                caption = str(item.get("caption") or "")
+                # 选表引导（2026-11-04）：CX-08 实测模型放着金标「主要会计数据」
+                # 汇总表不读，转头读「营业收入构成」叙述表，导致 4 个要点只有 1 个
+                # 被引用。这里按 caption 特征标出标准读数出处，不写死任何表号/公司名，
+                # 只是把「哪张表更适合查数」显式交给模型判断。追加在截断之后，
+                # 避免被 content[:600] 切掉。
+                if "主要会计" in caption or "主要财务指标" in caption:
+                    content += "｜【推荐】主要会计数据/财务指标汇总表，查数优先读此表"
                 rows.append(
                     evidence_item(
                         chunk_id=f"{item.get('table_id')}#table_locator",
@@ -794,7 +819,7 @@ class FinanceToolset:
                             f"{item.get('company') or ''} {item.get('period') or ''}"
                             f"｜表目录｜{item.get('caption') or item.get('table_id')}"
                         ),
-                        content=content[:600],
+                        content=content,
                         kind="table_locator",
                         page=item.get("page"),
                         citable=False,

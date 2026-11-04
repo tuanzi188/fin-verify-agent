@@ -567,6 +567,10 @@ class FinanceStore:
         row_indices: list[int] = []
         skipped_rows: list[dict] = []
         first_error: FinanceStoreError | None = None
+        # 记录「哪个输入解析到了哪一行」，用来区分两种重复：
+        # - 两个不同的行名（别名/模糊）撞到同一行 → 跳过，部分成功；
+        # - 同一个行名原样写两遍 → 仍是调用错误，抛错让模型知道传重了。
+        resolved: dict[str, int] = {}
         for row in rows:
             try:
                 index = self._resolve_row(all_rows, row)
@@ -586,8 +590,20 @@ class FinanceStore:
                     first_error = exc
                 skipped_rows.append({"input": row, "reason": str(exc)[:200]})
                 continue
-            if index in row_indices:
+            key = str(row)
+            if key in resolved and resolved[key] == index:
+                # 同一个行名原样重复：保留旧契约，抛错（既有测试覆盖）。
                 raise FinanceStoreError(f"重复行: {row}")
+            if index in row_indices:
+                # 不同行名经别名/模糊匹配解析到同一行（「营业收入」与「营业总收入」）。
+                # 旧实现直接抛错，模型只能整次重读并换关键词重试，实测 FIN-S06
+                # 连报 4 次「重复行」、FIN-11 因此打满 20 步。这里跳过并回显，
+                # 有效行照常返回。
+                skipped_rows.append({"input": row, "reason": f"重复行: {row}（已跳过，与前面的行名解析到同一行）"})
+                if first_error is None:
+                    first_error = FinanceStoreError(f"重复行: {row}")
+                continue
+            resolved[key] = index
             row_indices.append(index)
 
         if not row_indices:
