@@ -120,7 +120,11 @@ export interface paths {
         /** List Finance Documents */
         get: operations["list_finance_documents_api_v1_finance_documents_get"];
         put?: never;
-        post?: never;
+        /**
+         * Upload Finance Document
+         * @description 上传一份 PDF：解析 → QC → 并入运行时语料。单用户演示级，不做 per-user ACL。
+         */
+        post: operations["upload_finance_document_api_v1_finance_documents_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -395,6 +399,31 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** Body_upload_finance_document_api_v1_finance_documents_post */
+        Body_upload_finance_document_api_v1_finance_documents_post: {
+            /** File */
+            file: string;
+            /**
+             * Company
+             * @default
+             */
+            company: string;
+            /**
+             * Period
+             * @default
+             */
+            period: string;
+            /**
+             * Doc Type
+             * @default annual_report
+             */
+            doc_type: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+        };
         /** CalcRecord */
         CalcRecord: {
             /** Formula */
@@ -564,10 +593,44 @@ export interface components {
              */
             footnote: string;
             /**
+             * Statement Scope
+             * @default
+             */
+            statement_scope: string;
+            /**
+             * Statement Type
+             * @default
+             */
+            statement_type: string;
+            /**
              * Content
              * @default
              */
             content: string;
+            /**
+             * Quote
+             * @default
+             */
+            quote: string;
+            /**
+             * Quote Verified
+             * @default false
+             */
+            quote_verified: boolean;
+            /**
+             * Quote Occurrences
+             * @default 0
+             */
+            quote_occurrences: number;
+            /**
+             * Quote Ambiguous
+             * @default false
+             */
+            quote_ambiguous: boolean;
+            /** Locator */
+            locator?: {
+                [key: string]: unknown;
+            };
             /** Source Spans */
             source_spans?: components["schemas"]["SourceSpan"][];
             table_preview?: components["schemas"]["TablePreview"] | null;
@@ -679,6 +742,45 @@ export interface components {
             /** Marker */
             marker: number;
             evidence: components["schemas"]["EvidenceRef"];
+        };
+        /**
+         * FinanceDocumentUploadResponse
+         * @description 上传解析结果：只回传用户能判断“能不能用”的字段。
+         */
+        FinanceDocumentUploadResponse: {
+            /** Doc Id */
+            doc_id: string;
+            /** Filename */
+            filename: string;
+            /** Status */
+            status: string;
+            /**
+             * Sections
+             * @default 0
+             */
+            sections: number;
+            /**
+             * Tables
+             * @default 0
+             */
+            tables: number;
+            /**
+             * Raw Chars
+             * @default 0
+             */
+            raw_chars: number;
+            /**
+             * Pipeline Version
+             * @default
+             */
+            pipeline_version: string;
+            /** Warnings */
+            warnings?: string[];
+            /**
+             * Message
+             * @default
+             */
+            message: string;
         };
         /** FinanceEvidenceResponse */
         FinanceEvidenceResponse: {
@@ -1107,6 +1209,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    upload_finance_document_api_v1_finance_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_finance_document_api_v1_finance_documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceDocumentUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

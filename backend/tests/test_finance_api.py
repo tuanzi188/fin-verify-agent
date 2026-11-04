@@ -277,7 +277,11 @@ async def test_run_finance_query_maps_claims_citations_and_calc(demo_store, monk
 
 
 @pytest.mark.asyncio
-async def test_finance_chat_uses_scoped_conversation_and_returns_contract(api_app, monkeypatch):
+async def test_finance_chat_uses_scoped_conversation_and_returns_contract(
+    api_app, demo_store, monkeypatch
+):
+    # 该用例只验 HTTP 契约，不应依赖本地 data/finance；CI 没有语料，必须用临时 store。
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
     captured = {}
 
     async def fake_run(**kwargs):

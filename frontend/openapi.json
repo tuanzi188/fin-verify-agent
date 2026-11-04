@@ -287,6 +287,51 @@
             "HTTPBearer": []
           }
         ]
+      },
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "summary": "Upload Finance Document",
+        "description": "上传一份 PDF：解析 → QC → 并入运行时语料。单用户演示级，不做 per-user ACL。",
+        "operationId": "upload_finance_document_api_v1_finance_documents_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_finance_document_api_v1_finance_documents_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceDocumentUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/finance/evidence": {
@@ -892,6 +937,40 @@
         ],
         "title": "AuditLogQueryResponse"
       },
+      "Body_upload_finance_document_api_v1_finance_documents_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company",
+            "default": ""
+          },
+          "period": {
+            "type": "string",
+            "title": "Period",
+            "default": ""
+          },
+          "doc_type": {
+            "type": "string",
+            "title": "Doc Type",
+            "default": "annual_report"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_finance_document_api_v1_finance_documents_post"
+      },
       "CalcRecord": {
         "properties": {
           "formula": {
@@ -926,6 +1005,31 @@
             "type": "string",
             "title": "Note",
             "default": ""
+          },
+          "calculation_id": {
+            "type": "string",
+            "title": "Calculation Id",
+            "default": ""
+          },
+          "result_scale": {
+            "type": "string",
+            "title": "Result Scale",
+            "default": "1"
+          },
+          "input_sources": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Sources"
+          },
+          "grounding_status": {
+            "type": "string",
+            "title": "Grounding Status",
+            "default": "unverified"
+          },
+          "recomputed": {
+            "type": "boolean",
+            "title": "Recomputed",
+            "default": false
           }
         },
         "type": "object",
@@ -1256,10 +1360,45 @@
             "title": "Footnote",
             "default": ""
           },
+          "statement_scope": {
+            "type": "string",
+            "title": "Statement Scope",
+            "default": ""
+          },
+          "statement_type": {
+            "type": "string",
+            "title": "Statement Type",
+            "default": ""
+          },
           "content": {
             "type": "string",
             "title": "Content",
             "default": ""
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote",
+            "default": ""
+          },
+          "quote_verified": {
+            "type": "boolean",
+            "title": "Quote Verified",
+            "default": false
+          },
+          "quote_occurrences": {
+            "type": "integer",
+            "title": "Quote Occurrences",
+            "default": 0
+          },
+          "quote_ambiguous": {
+            "type": "boolean",
+            "title": "Quote Ambiguous",
+            "default": false
+          },
+          "locator": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Locator"
           },
           "source_spans": {
             "items": {
@@ -1293,6 +1432,17 @@
               }
             ],
             "title": "Note"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           }
         },
         "type": "object",
@@ -1441,6 +1591,16 @@
             },
             "type": "array",
             "title": "Notes"
+          },
+          "verification": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Verification"
+          },
+          "resolved_query": {
+            "type": "string",
+            "title": "Resolved Query",
+            "default": ""
           }
         },
         "type": "object",
@@ -1462,6 +1622,62 @@
           "evidence"
         ],
         "title": "FinanceCitation"
+      },
+      "FinanceDocumentUploadResponse": {
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "title": "Doc Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "sections": {
+            "type": "integer",
+            "title": "Sections",
+            "default": 0
+          },
+          "tables": {
+            "type": "integer",
+            "title": "Tables",
+            "default": 0
+          },
+          "raw_chars": {
+            "type": "integer",
+            "title": "Raw Chars",
+            "default": 0
+          },
+          "pipeline_version": {
+            "type": "string",
+            "title": "Pipeline Version",
+            "default": ""
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "filename",
+          "status"
+        ],
+        "title": "FinanceDocumentUploadResponse",
+        "description": "上传解析结果：只回传用户能判断“能不能用”的字段。"
       },
       "FinanceEvidenceResponse": {
         "properties": {
