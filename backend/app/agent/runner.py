@@ -30,6 +30,7 @@ from app.agent.prompts import (
     COVERAGE_CHECK_TEMPLATE,
     COVERAGE_REPAIR_HINT,
     ROUND_EVIDENCE_TEMPLATE,
+    TEXT_TOOL_CALL_HINT,
     UNSUPPORTED_PERIOD_HINT,
 )
 from app.services import model_provider
@@ -301,9 +302,124 @@ _TOOL_MARKUP_PATTERN = re.compile(
 )
 
 
+def _iter_json_objects(text: str):
+    """按括号配对找出文本里的 JSON 对象，跳过字符串内的括号。"""
+    index = 0
+    length = len(text)
+    while index < length:
+        start = text.find("{", index)
+        if start < 0:
+            break
+        depth = 0
+        in_string = False
+        escaped = False
+        end = -1
+        for pos in range(start, length):
+            char = text[pos]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    end = pos + 1
+                    break
+        if end < 0:
+            break
+        yield start, end, text[start:end]
+        index = end
+
+
+def _extract_text_tool_call(text: str) -> dict | None:
+    """从正文里找出「模型把工具调用写成 JSON」的形态。
+
+    只认两类形状，避免误伤普通 JSON：
+    - `{"tool": "search_kb", "query": "..."}`
+    - `{"name": "get_rows", "arguments": {...}}`
+    """
+    for start, end, raw in _iter_json_objects(str(text or "")):
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        has_tool = isinstance(data.get("tool"), str)
+        has_name = (
+            isinstance(data.get("name"), str)
+            and isinstance(data.get("arguments"), dict)
+        )
+        if not (has_tool or has_name):
+            continue
+        name = data.get("tool") if has_tool else data.get("name")
+        if not str(name or "").strip():
+            continue
+        if isinstance(data.get("arguments"), dict):
+            arguments = data["arguments"]
+        else:
+            arguments = {
+                key: value
+                for key, value in data.items()
+                if key not in ("tool", "name", "arguments")
+            }
+        return {
+            "name": str(name).strip(),
+            "arguments": arguments,
+            "span": (start, end),
+        }
+    return None
+
+
+def _available_tool_names(toolbox: Any) -> str:
+    try:
+        specs = toolbox.specs()
+    except Exception:  # noqa: BLE001 - 提示词生成失败不能阻断主流程
+        return "（未知）"
+    names = [
+        str((spec.get("function") or {}).get("name") or "")
+        for spec in specs
+        if isinstance(spec, dict)
+    ]
+    return "、".join(name for name in names if name) or "（未知）"
+
+
+_FENCED_BLOCK_PATTERN = re.compile(
+    r"```[A-Za-z0-9_-]*[ \t]*\r?\n?(.*?)\r?\n?```",
+    re.DOTALL,
+)
+
+
+def _strip_fenced_tool_calls(text: str) -> str:
+    """整块删掉只包含工具调用 JSON 的代码围栏，别留下空的 ``` 壳。"""
+
+    def replace(match: re.Match) -> str:
+        return "" if _extract_text_tool_call(match.group(1)) else match.group(0)
+
+    return _FENCED_BLOCK_PATTERN.sub(replace, text)
+
+
 def _strip_tool_markup(answer: str) -> tuple[str, bool]:
-    cleaned = _TOOL_MARKUP_PATTERN.sub("", answer or "")
-    return cleaned.strip(), cleaned != (answer or "")
+    original = answer or ""
+    cleaned = _TOOL_MARKUP_PATTERN.sub("", original)
+    cleaned = _strip_fenced_tool_calls(cleaned)
+    # 裸 JSON 形式的工具调用也要剥掉，否则会当成答案输出给用户。
+    while True:
+        embedded = _extract_text_tool_call(cleaned)
+        if embedded is None:
+            break
+        start, end = embedded["span"]
+        cleaned = cleaned[:start] + cleaned[end:]
+    cleaned = cleaned.strip()
+    return cleaned, cleaned != original
 
 
 # 修复回合预算：闸门发现"该做没做"时，最多追加 3 个模型回合。
@@ -954,6 +1070,7 @@ async def _run_improved(
         "abstain": False,
         "calc": False,
         "cell": False,
+        "text_tool_call": False,
     }
     repair_rounds = 0
     repair_pending = False
@@ -1016,6 +1133,32 @@ async def _run_improved(
 
             if not tool_calls:
                 text = (text or "").strip()
+                # 模型把工具调用写成正文 JSON（CX-08 的 ```json {"tool": "search_kb"}```）。
+                # 不执行它，也不直接当答案；回注一次，要求用真正的 function call。
+                embedded_call = (
+                    None
+                    if fired.get("text_tool_call")
+                    else _extract_text_tool_call(text)
+                )
+                if embedded_call is not None and executed < max_steps:
+                    fired["text_tool_call"] = True
+                    notes.append("text_tool_call")
+                    if repair_rounds < REPAIR_ROUND_BUDGET:
+                        repair_rounds += 1
+                        max_rounds += 1
+                    repair_pending = True
+                    messages.append({"role": "assistant", "content": text})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": TEXT_TOOL_CALL_HINT.format(
+                                name=embedded_call["name"],
+                                tools=_available_tool_names(toolbox),
+                            ),
+                        }
+                    )
+                    continue
+
                 hint, gate = _answer_gate(
                     text=text,
                     evidence=evidence,

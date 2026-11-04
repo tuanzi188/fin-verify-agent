@@ -269,7 +269,12 @@ class FinanceToolbox:
                     raise CalculationError("inputs 必须是对象")
                 data = self.calculate(str(expression or ""), inputs)
             else:
-                raise CalculationError(f"未知工具: {name}")
+                available = "、".join(
+                    spec["function"]["name"] for spec in FINANCE_TOOL_SPECS
+                )
+                raise CalculationError(
+                    f"未知工具: {name}；可用工具: {available}"
+                )
         except Exception as exc:  # noqa: BLE001 - 工具层必须可归因
             return FinanceOutcome(
                 tool=name,

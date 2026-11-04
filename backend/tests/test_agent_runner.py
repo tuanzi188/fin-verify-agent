@@ -1083,6 +1083,57 @@ def test_strip_tool_markup_removes_leaked_calls():
     assert cleaned == "营业收入 12.34 万元 [1]"
 
 
+def test_extract_text_tool_call_recognizes_json_forms():
+    fenced = '前置\n```json\n{"tool": "search_kb", "query": "住宿"}\n```'
+    call = runner._extract_text_tool_call(fenced)
+    assert call["name"] == "search_kb"
+    assert call["arguments"] == {"query": "住宿"}
+
+    wrapped = '{"name": "get_rows", "arguments": {"table_id": "t1"}}'
+    call = runner._extract_text_tool_call(wrapped)
+    assert call["name"] == "get_rows"
+    assert call["arguments"] == {"table_id": "t1"}
+
+    assert runner._extract_text_tool_call('{"foo": "bar"}') is None
+
+
+def test_strip_tool_markup_removes_fenced_json_tool_call():
+    cleaned, hit = runner._strip_tool_markup(
+        '结论\n```json\n{"tool": "search_kb", "query": "x"}\n```'
+    )
+    assert hit is True
+    assert "search_kb" not in cleaned
+    assert cleaned == "结论"
+
+
+async def test_text_tool_call_triggers_one_repair_round(monkeypatch):
+    """正文 JSON 工具调用不执行、不落答案；回注一次后要求真正的 function call。"""
+    calls = {"n": 0}
+
+    async def fake_chat_with_tools(messages, tools, tool_choice=None, reasoning_mode="flash",
+                                   temperature=0.1, max_tokens=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return '```json\n{"tool": "search_kb", "query": "住宿"}\n```', [], None, _usage()
+        if calls["n"] == 2:
+            return "", [_search_call()], None, _usage()
+        return "住宿标准为每晚不超过五百元 [1]。", [], None, _usage()
+
+    async def fake_chat(messages, reasoning_mode="flash", temperature=0.1, max_tokens=None):
+        return "住宿标准为每晚不超过五百元 [1]。", None, _usage()
+
+    monkeypatch.setattr("app.services.model_provider.chat_with_tools", fake_chat_with_tools)
+    monkeypatch.setattr("app.services.model_provider.chat", fake_chat)
+    _patch_dispatch(monkeypatch, [_evidence_item()])
+
+    result = await run(_TASK, variant="improved")
+
+    assert result["status"] == "answered"
+    assert "search_kb" not in result["answer"]
+    assert "text_tool_call" in result["trace"][-1]["note"]
+    assert result["usage"]["steps"] == 1
+
+
 async def test_tool_markup_leak_is_stripped_and_noted(monkeypatch):
     """兜底答案里残留的裸工具调用必须剥掉并留痕（2026-11-03 FIN-04 / CX-05）。"""
     _patch_llm(

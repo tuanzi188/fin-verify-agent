@@ -52,7 +52,9 @@ H1/H2 网关判定实验（两假设均证伪，真因是客户端漏字段，�
 - `calculate` 接受 `formula` / `expr` 别名与 JSON 字符串 `inputs`。
 - 覆盖检查从文档级扩展到「公司 × 期间 × 指标」槽位；新增 `search_tables`
   表目录定位；读失败补一次检索预算；章节正文数字触发补单元格。
-- 离线验证：backend `pytest` 598 passed，任务卡 lint 0 error。
+- 正文 JSON 工具调用（如 `{"tool":"search_kb"}`）不再落进答案：检测到后回注一次，
+  要求使用真正的 function call；未知工具名会回显可用工具清单。
+- 离线验证：backend `pytest` 602 passed，任务卡 lint 0 error。
 - **尚未跑真模型**：多步拆解是否从 18.2% 提升、覆盖率闸门带来的 token/延迟增量，
   都必须等 11 题 blocks 子集复测后再写结论。
 

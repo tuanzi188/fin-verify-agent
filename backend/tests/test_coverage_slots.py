@@ -216,6 +216,15 @@ def test_coverage_gaps_does_not_flag_ratio_questions_as_components(store):
     assert toolset.coverage_gaps(question, evidence) == []
 
 
+async def test_unknown_finance_tool_lists_available_tools(store):
+    toolbox = FinanceToolbox(store)
+    outcome = await toolbox.call("search_kb", {"query": "营业收入"})
+    assert outcome.ok is False
+    assert outcome.error_kind == "bad_args"
+    assert "search_tables" in outcome.error_detail
+    assert "get_rows" in outcome.error_detail
+
+
 async def test_read_failure_grants_extra_search_budget(store):
     toolset = FinanceToolset(store, search_mode="sections")
     before = toolset._search_budget
