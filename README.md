@@ -201,7 +201,7 @@ cp backend/.env.example backend/.env
 
 ```bash
 cd backend
-pip install -r requirements.txt
+pip install -r requirements.lock            # 可复现安装；改依赖请改 requirements.txt
 python -m scripts.fetch_finance_corpus      # 可选：拉取年报/募集说明书
 python -m scripts.ingest_finance_corpus     # 解析、建块索引
 python -m scripts.verify_finance_corpus     # 校验文档/章节/表格数量
@@ -312,7 +312,7 @@ fin-verify-agent/
 
 ```bash
 cd backend
-pip install -r requirements.txt
+pip install -r requirements.lock
 pip install pytest pytest-asyncio
 python -m pytest -q
 
@@ -324,7 +324,10 @@ npm run build
 ```
 
 通过数会随迭代变化，不在此写死；接手时的验证命令见 [AGENTS.md](AGENTS.md) §3。
-CI 运行后端测试、前端测试、类型检查与生产构建。
+依赖锁由 `uv pip compile requirements.txt --python-version 3.10 --no-header -o requirements.lock`
+生成；CI 与 Docker 只安装 lock，改依赖请改 `requirements.txt` 后重新生成。
+CI 在所有分支的 push 与 PR 上运行后端测试、任务卡 lint、检索回归门禁、
+前端测试/类型检查/生产构建。
 
 ## License
 

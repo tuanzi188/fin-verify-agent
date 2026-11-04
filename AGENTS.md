@@ -19,6 +19,7 @@
 ```bash
 git status --short                          # 看当前未提交改动
 git log --oneline -10                       # 看最近在做什么
+git config core.hooksPath scripts/hooks     # 启用文档一致性 pre-commit 钩子（每个 clone 一次）
 ```
 
 然后按顺序读：
@@ -54,6 +55,7 @@ CI 跑同样四项。通过数会变，不要记在文档里。真实查证需�
 | 三层评测 / 报告 | `backend/evaluation/retrieval_metrics.py`、`routing_metrics.py`、`eval_report.py`、`agent_report.py` |
 | 工作台 / 证据检查器 | `frontend/src/components/EvidenceInspector.tsx`、`WorkbenchTurns.tsx`、`FinanceConclusion.tsx` |
 | 语料入库 / 解析 | `backend/scripts/ingest_finance_corpus.py`、`app/finance/ingest.py` |
+| 依赖 / 锁文件 | `backend/requirements.txt`（人工输入）、`requirements.lock`（uv 生成，勿手改） |
 
 ## 5. 硬性纪律（这个项目反复踩的坑）
 

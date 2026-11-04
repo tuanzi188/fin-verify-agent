@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import fitz
@@ -153,7 +153,7 @@ def save_and_parse(
         raise UploadError("未识别到表格；年报/募集说明书的查数会退化为读正文")
 
     document["origin"] = "upload"
-    document["uploaded_at"] = datetime.now(UTC).isoformat()
+    document["uploaded_at"] = datetime.now(timezone.utc).isoformat()
     write_document(document, root)
 
     warnings: list[str] = []

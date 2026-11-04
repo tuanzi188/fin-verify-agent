@@ -153,4 +153,10 @@ def test_application_boots_and_core_subsystems_are_healthy():
             import shutil
             shutil.rmtree(data_dir, ignore_errors=True)
         if os.path.exists(log_path):
-            os.remove(log_path)
+            # Windows 上子进程退出后文件句柄可能短暂未释放；清理失败不该让冒烟测试变红。
+            for _ in range(5):
+                try:
+                    os.remove(log_path)
+                    break
+                except PermissionError:
+                    time.sleep(0.2)
