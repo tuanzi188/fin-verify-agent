@@ -1,0 +1,3 @@
+# 钩子脚本必须保持 LF，否则 sh 解释器会因 \r 报错
+scripts/hooks/* text eol=lf
+scripts/*.sh text eol=lf

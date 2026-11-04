@@ -5,7 +5,7 @@ authoritative_for: 哪份文档可信
 read_when: 接手时、引用任何设计/评测结论前
 ---
 
-# 文档索引（10 份 + 导航）
+# 文档索引（12 份 + 导航）
 
 `status: normative` = 当前权威口径，改代码前必读。
 `status: active` = 当前工作记录。

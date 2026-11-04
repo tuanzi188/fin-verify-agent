@@ -132,3 +132,35 @@ def test_top_level_docs_are_registered():
         if path.name != "INDEX.md" and path.name not in index
     ]
     assert not missing, f"docs/INDEX.md 未登记：{missing}"
+
+
+def test_docs_index_count_matches_entries():
+    """标题里的「N 份」必须等于表格实际登记条数，防止删/加文档后计数过期。"""
+    index = _read(ROOT / "docs" / "INDEX.md")
+    match = re.search(r"#\s*文档索引（(\d+)\s*份", index)
+    assert match, "docs/INDEX.md 标题缺少「N 份」计数"
+    registered = [
+        line for line in index.splitlines() if line.startswith("| [")
+    ]
+    assert int(match.group(1)) == len(registered), (
+        f"docs/INDEX.md 标题写 {match.group(1)} 份，实际登记 {len(registered)} 份"
+    )
+
+
+_EVIDENCE_FILE_RE = re.compile(r"`([A-Za-z0-9_.\-]+\.(?:json|jsonl|md))`")
+
+
+def test_current_evidence_entries_have_artifacts():
+    """标记 current 的产物必须真实存在，否则索引本身不可信。"""
+    index = _read(ROOT / "docs" / "evidence" / "INDEX.md")
+    evidence_dir = ROOT / "docs" / "evidence"
+    missing: list[str] = []
+    for line in index.splitlines():
+        if not line.startswith("|") or "current" not in line:
+            continue
+        for name in _EVIDENCE_FILE_RE.findall(line):
+            if name.startswith(".") or "/" in name:
+                continue
+            if not (evidence_dir / name).exists():
+                missing.append(name)
+    assert not missing, f"evidence/INDEX.md 标记 current 的产物不存在：{sorted(set(missing))}"

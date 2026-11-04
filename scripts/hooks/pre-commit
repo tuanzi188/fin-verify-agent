@@ -1,0 +1,8 @@
+#!/bin/sh
+# 提交前文档一致性检查（离线，约 1 秒）。
+# 全量检查见 AGENTS.md §9.7；CI 会跑完整 pytest。
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root/backend"
+python -m pytest tests/test_docs_consistency.py -q

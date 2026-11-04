@@ -2,9 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: ["**"]
   pull_request:
-    branches: [main, master]
 
 jobs:
   backend-tests:
@@ -24,6 +23,8 @@ jobs:
           pip install pytest pytest-asyncio pytest-cov httpx
       - name: Run tests
         run: pytest --cov=app --cov-report=xml -v
+      - name: Lint finance tasks
+        run: python -m evaluation.lint_finance_tasks --check-refs --check-routing
       - name: Verify OpenAPI schema is up to date
         run: |
           python scripts/generate_schema.py

@@ -157,6 +157,14 @@ CI 跑同样四项。通过数会变，不要记在文档里。真实查证需�
 
 ### 9.7 提交前的最小检查
 
+新 clone 先启用仓库内钩子（只跑文档一致性，约 1 秒）：
+
+```bash
+sh scripts/setup-hooks.sh        # git config core.hooksPath scripts/hooks
+```
+
+完整检查：
+
 ```bash
 cd backend && python -m pytest -q
 python -m pytest tests/test_docs_consistency.py -q
@@ -164,4 +172,5 @@ python -m evaluation.lint_finance_tasks --check-refs --check-routing
 cd ../frontend && npm run typecheck && npm test -- --run
 ```
 
-文档改动也要跑一致性测试；不要只在本地打开 Markdown 看一眼。
+文档改动也要跑一致性测试；不要只在本地打开 Markdown 看一眼。CI 对**所有分支**的 push
+与 PR 都跑上述检查，feature 分支不再有豁免。
