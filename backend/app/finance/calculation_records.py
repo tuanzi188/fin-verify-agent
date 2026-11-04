@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import ast
+import logging
 import re
 from decimal import Decimal, InvalidOperation
 
 from app.finance.calc import CalculationError, calculate
 from app.finance.references import calculation_markers, strip_references
 from app.models.finance import CalcRecord, FinanceCitation
+
+logger = logging.getLogger(__name__)
 
 _FINANCIAL_NUMBER = re.compile(
     r"(?<![\d.])(?P<value>[-−]?\d[\d,，]*(?:\.\d+)?)\s*"
@@ -185,8 +188,9 @@ def build_calculation_records(
         try:
             result = calculate(formula, inputs)["result"]
             recomputed = True
-        except (CalculationError, InvalidOperation):
-            pass
+        except (CalculationError, InvalidOperation) as exc:
+            # 复算失败时保留模型给的 result，只记诊断信息，不改变降级语义。
+            logger.debug("calc recompute failed: formula=%r err=%s", formula, exc)
         if result is not None and scale != 1:
             try:
                 result = format(Decimal(str(result)) * scale, "f")
@@ -223,8 +227,9 @@ def build_calculation_records(
                     for node in ast.walk(arithmetic)
                 ):
                     unit = str(next(iter(source_units)) or "")
-            except (SyntaxError, ValueError):
-                pass
+            except (SyntaxError, ValueError) as exc:
+                # 单位推断是 best-effort，失败时留空；保留日志便于排查异常公式。
+                logger.debug("unit inference failed: formula=%r err=%s", formula, exc)
         records.append(
             CalcRecord(
                 formula=formula,

@@ -73,6 +73,14 @@ docs/evidence/holdout_usage.json
 .docker/
 
 # ===========================
+# Tooling caches
+# ===========================
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.tmp/
+
+# ===========================
 # Coverage & Test
 # ===========================
 htmlcov/
