@@ -17,7 +17,7 @@ read_when: 接手时、引用任何设计/评测结论前
 |---|---|---|---|
 | [CURRENT.md](CURRENT.md) | active | 唯一滚动状态：阶段判定 + 未闭环项 | 接手第一步 |
 | [ANSWER_EQUIVALENCE_RUBRIC.md](ANSWER_EQUIVALENCE_RUBRIC.md) | normative | 数值/单位/方向等价判据 | 改判分容差或 rubric 前 |
-| [ROUTING_POLICY.md](ROUTING_POLICY.md) | normative | 路由判据 v2、证据充分清单、升级白名单 | 改 `finance_router.py` 前 |
+| [ROUTING_POLICY.md](ROUTING_POLICY.md) | normative | 路由判据 v2、证据充分清单、升级白名单 | 改 `routing_policy.py` 前 |
 | [COST_OPTIMIZATION_PLAN_20261104.md](COST_OPTIMIZATION_PLAN_20261104.md) | active | 缓存记账 + 当前待办（§5） | 接手成本优化、引用 token 数字前 |
 | [evidence/INDEX.md](evidence/INDEX.md) | active | 产物清单 + 当前有效基线登记 | 引用任何评测读数前 |
 

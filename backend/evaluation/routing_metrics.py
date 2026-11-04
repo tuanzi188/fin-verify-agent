@@ -1,4 +1,4 @@
-"""路由层指标：`finance_router` 自动选路选对了没有。
+"""路由层指标：`initial_decision` 自动选路选对了没有。
 
 产品默认路径是「简单查数走结构检索 / 复杂查证走多步 Agent」。路由错选有两种
 代价完全不同的错误：
@@ -37,8 +37,8 @@ if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
 from app.finance.block_index import companies_for_question
+from app.finance.routing_policy import initial_decision
 from app.finance.store import FinanceStore
-from app.services.finance_router import decide_strategy
 from evaluation._runner_common import load_tasks
 from evaluation.agent_metrics import ratio, wilson_interval
 
@@ -120,6 +120,17 @@ def expected_arm(task: dict) -> tuple[Optional[str], str]:
 
     # 未知 query_type：不猜
     return None, f"excluded:unknown_query_type:{query_type}"
+
+
+def decide_strategy(query: str, store: FinanceStore) -> tuple[str, str]:
+    """评测口径的两臂映射：澄清/拒答也归到 structured_rag，便于混淆矩阵比较。"""
+    decision = initial_decision(query, store.list_documents())
+    strategy = (
+        decision.initial_path
+        if decision.initial_path in ARMS
+        else "structured_rag"
+    )
+    return strategy, decision.reason
 
 
 def route(task: dict, store: FinanceStore) -> dict:

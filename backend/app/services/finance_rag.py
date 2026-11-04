@@ -7,7 +7,7 @@
 - 只有一次 LLM 调用，不提供工具、不计算、不多轮；
 - 固定窗 RAG 不在这里，产品也不会路由到它。
 
-它回答不了的问题应该升级到 Agent；上游由 `finance_router.decide_strategy` 决定。
+它回答不了的问题应该升级到 Agent；上游由 `routing_policy.initial_decision` 决定。
 """
 
 from __future__ import annotations

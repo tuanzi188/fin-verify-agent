@@ -2,7 +2,7 @@
 status: normative
 scope: 金融查证 / 路由判据 v2
 authoritative_for: 自动选路规则、一次检索证据充分清单、升级白名单
-read_when: 改动 finance_router.py 或 routing_metrics 回归前
+read_when: 改动 routing_policy.py 或 routing_metrics 回归前
 note: 无真实问题金标，禁止据单元测试宣称正确率提升（见本文 §5）
 ---
 

@@ -39,7 +39,7 @@
 
 ## 一次查证发生什么
 
-1. **自动选路**（`backend/app/services/finance_router.py`）
+1. **自动选路**（`backend/app/finance/routing_policy.py`）
    - 单公司 / 单期间 / 单指标 → 结构感知 RAG；
    - 对比、计算、跨文档、跨期间、未来期间、多个子问题 → 多步 Agent。
 2. **结构检索**：块级混合检索（向量 + BM25 + RRF），按问题识别公司与期间过滤，一次 LLM 生成，证据转成 `EvidenceRef`。

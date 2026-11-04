@@ -176,7 +176,7 @@ warning: §3 的 H1/H2 假设已判定不成立，−60% 推算作废；修复�
   phase0 边界题 5/6 过度升级到 Agent。
 - **动作**：按 ROUTING_POLICY v2 把"同比/占比/多问号"从硬信号降级为
   "是否必须跨表/跨文档/计算"；改完 `routing_metrics` 回归。
-- **回滚**：router 规则独立成 `finance_router.py`，git revert 即回。
+- **回滚**：router 规则集中在 `routing_policy.py`，git revert 即回。
 
 ### E. 尾部两题（FIN-11 + CX-10，占 14.3%）
 

@@ -45,13 +45,13 @@ CI 跑后端测试、前端测试与检索回归门禁。任务卡 lint 不在 C
 
 | 要改 | 文件 |
 |---|---|
-| 自动选路 / 升级判定 | `backend/app/services/finance_router.py`、`app/finance/routing_policy.py`、`docs/ROUTING_POLICY.md` |
+| 自动选路 / 升级判定 | `backend/app/finance/routing_policy.py`、`docs/ROUTING_POLICY.md` |
 | Agent 工具循环 | `backend/app/agent/runner.py`、`app/tools/finance_set.py` |
 | 行列名解析 / 表访问 | `backend/app/finance/store.py`（单位后缀、别名、模糊匹配、错位自校验） |
 | 覆盖槽位 / 表目录检索 | `backend/app/tools/finance_set.py`、`app/finance/query_scope.py`、`app/tools/finance.py` |
 | 正文 JSON 工具调用 / 回答闸门 | `backend/app/agent/runner.py`、`app/agent/prompts.py` |
 | 结构检索 / 块索引 | `backend/app/finance/block_index.py`、`app/services/finance_rag.py` |
-| 证据 / 引用 / 计算 | `backend/app/finance/references.py`、`calc.py`、`calculation_records.py`、`claim_consistency.py` |
+| 证据 / 引用 / 计算 | `backend/app/finance/references.py`、`calc.py`、`calculation_records.py` |
 | 模型客户端 / 缓存记账 | `backend/app/services/openai_client.py`、`evaluation/agent_metrics.py`、`evaluation/audit_run_cost.py` |
 | 任务集 / 判分 / 闸门 | `backend/evaluation/finance_tasks*.jsonl`、`score_agent_runs.py`、`release_gate.py`、`lint_finance_tasks.py` |
 | 三层评测 / 报告 | `backend/evaluation/retrieval_metrics.py`、`routing_metrics.py`、`eval_report.py`、`agent_report.py` |

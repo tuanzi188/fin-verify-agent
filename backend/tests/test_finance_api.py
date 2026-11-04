@@ -27,7 +27,7 @@ from app.models.finance import (
     FinanceChatResponse,
     FinanceCitation,
 )
-from app.services import finance_entry, finance_router
+from app.services import finance_entry
 
 _ALICE = {"Authorization": "Bearer " + "a" * 32}
 
@@ -317,25 +317,13 @@ async def test_finance_chat_uses_scoped_conversation_and_returns_contract(
     assert captured["corpus_fingerprint"] == "fp-test"
 
 
-def test_decide_strategy_simple_lookup_uses_structured_rag(demo_store):
-    strategy, reason = finance_router.decide_strategy("XX股份 2025 年营业收入是多少？", demo_store)
-    assert strategy == "structured_rag"
-    assert "结构检索" in reason
-
-
-def test_decide_strategy_calculation_uses_agent(demo_store):
-    strategy, reason = finance_router.decide_strategy(
-        "XX股份 2025 年智能家居收入占公司营业收入多少？毛利率高多少个百分点？",
-        demo_store,
-    )
-    assert strategy == "agent"
-    assert "计算" in reason
-
-
 def test_decide_strategy_future_period_does_not_use_agent(demo_store):
-    strategy, reason = finance_router.decide_strategy("2026 年第一季度营业收入是多少？", demo_store)
-    assert strategy == "structured_rag"
-    assert "本地最新覆盖" in reason
+    # 路由判据的详细覆盖在 test_routing_policy.py；这里只保留 API 层用到的入口行为。
+    from app.finance.routing_policy import initial_decision
+
+    decision = initial_decision("2026 年第一季度营业收入是多少？", demo_store.list_documents())
+    assert decision.initial_path != "agent"
+    assert "本地最新覆盖" in decision.reason
 
 
 @pytest.mark.asyncio

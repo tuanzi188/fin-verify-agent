@@ -1,20 +1,7 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import uuid
-
-
-class ReasoningMode(str, Enum):
-    non_think = "non_think"
-    think_high = "think_high"
-    think_max = "think_max"
-
-
-class ChatMode(str, Enum):
-    """问答模式。默认 rag，保持现有行为不变。"""
-
-    rag = "rag"
-    agent = "agent"
 
 
 class ChunkingStrategy(str, Enum):
@@ -30,21 +17,6 @@ class DocumentChunk(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="文档信息+内容信息+权限信息")
     embedding: Optional[List[float]] = None
     sparse_embedding: Optional[Dict[str, float]] = None
-
-
-class ChatRequest(BaseModel):
-    # 禁止请求体夹带 mock/inject：故障注入只属于评测，不能从公网打开。
-    model_config = ConfigDict(extra="forbid")
-
-    query: str = Field(..., min_length=1, max_length=10000, description="用户问题")
-    conversation_id: Optional[str] = None
-    reasoning_mode: Optional[ReasoningMode] = None
-    top_k: Optional[int] = Field(default=5, ge=1, le=20)
-    temperature: Optional[float] = Field(default=0.1, ge=0.0, le=2.0)
-    use_fallback: Optional[bool] = None
-    # rag = 现有固定流水线；agent = 工具调用循环 + trace。默认 rag，老客户端无感。
-    mode: ChatMode = ChatMode.rag
-    max_steps: Optional[int] = Field(default=3, ge=1, le=5, description="agent 模式的最大工具步数")
 
 
 class Citation(BaseModel):
@@ -104,56 +76,6 @@ class ChatResponse(BaseModel):
     trace: Optional[List[AgentTraceStep]] = None
     variant: Optional[str] = None
     duration_ms: Optional[int] = None
-
-
-class DocumentUploadResponse(BaseModel):
-    document_id: str
-    filename: str
-    status: str
-    chunks_count: int = 0
-    message: str = ""
-    task_id: Optional[str] = None
-    owner: Optional[str] = None
-    is_public: Optional[bool] = False
-
-
-class DocumentInfo(BaseModel):
-    document_id: str
-    filename: str
-    title: str
-    author: Optional[str] = None
-    department: Optional[str] = None
-    classification: Optional[str] = None
-    file_type: str
-    file_size: int
-    upload_time: str
-    chunks_count: int
-    status: str
-    owner: Optional[str] = None
-    is_public: Optional[bool] = False
-    allowed_users: Optional[List[str]] = []
-    allowed_departments: Optional[List[str]] = []
-    allowed_roles: Optional[List[str]] = []
-
-
-class SearchRequest(BaseModel):
-    query: str = Field(..., min_length=1)
-    top_k: int = Field(default=10, ge=1, le=50)
-    filters: Optional[dict] = None
-    query_type: Optional[str] = Field(default="综合分析", description="检索权重类型，如 概念解释、精确查找、综合分析")
-
-
-class SearchResult(BaseModel):
-    document_id: str
-    content: str
-    score: float
-    metadata: dict
-
-
-class SearchResponse(BaseModel):
-    results: List[SearchResult]
-    total: int
-    query: str
 
 
 class ConversationTurn(BaseModel):
