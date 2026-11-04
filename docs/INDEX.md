@@ -43,3 +43,6 @@ read_when: 接手时、引用任何设计/评测结论前
    与「现在是多少」是两件事，靠本表与 frontmatter 区分。
 3. 新增文档必须带 frontmatter（status / scope / read_when），并登记到本表。
 4. 实施记录按日期只增不改；需要更正时在原文加「补记」段落，不静默改写。
+5. 其他 agent 回填内容前先读 [AGENTS.md](../AGENTS.md) §9「文档回填纪律」：
+   类型映射、数字三件套、单点状态入口、代码同步清单都在那里；
+   提交前跑 `backend/tests/test_docs_consistency.py` 兜底。

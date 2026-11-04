@@ -11,7 +11,8 @@
 前端 React 18 + TS + AntD 5 + Vite；后端 FastAPI；检索为结构块混合索引
 （向量 + BM25 + RRF）；模型走 DeepSeek / 百炼，本地网关 `127.0.0.1:7863`（wb2api）。
 
-产品只有一条主路径 `/finance/*`，`/lab` 只读离线评测产物，网页不提供上传。
+产品只有一条主路径 `/finance/*`，`/lab` 只读离线评测产物。文档页有上传入口（实验特性），
+上传件与 `data/finance` 官方语料分目录存放，评测只读官方语料。
 
 ## 2. 接手第一步（不要写死状态，跑命令）
 
@@ -101,3 +102,66 @@ CI 跑同样四项。通过数会变，不要记在文档里。真实查证需�
 - 不要因为「让数字一致」去回改历史文档：它们绑定不同条件，靠索引表区分。
 - 不要删 `evaluation/legacy/` 与历史实验目录：它们是回归对照。
 - 不要在未跑 `lint_finance_tasks` 前改任务卡的 `answer_points[].chunk_ids`。
+
+## 9. 文档回填纪律（其他 agent 必读）
+
+改代码可以只改一个文件，回填文档必须按下面的映射走；**写错位置比不写更糟**。
+
+### 9.1 先判类型，再动笔
+
+| 你要回填的内容 | 写到哪里 | 不要写到哪里 |
+|---|---|---|
+| 当前阶段、活跃待办、未闭环项 | `docs/CURRENT.md` | README、archive |
+| 产品行为、页面、API、工具清单 | `README.md` | CURRENT |
+| 接手导航、模块地图、硬纪律、陷阱 | `AGENTS.md` | archive |
+| 评测读数、基线、产物状态 | `docs/evidence/INDEX.md` + 具体产物 | CURRENT、README |
+| 设计史、已被取代的方案 | `docs/archive/`（只增不改） | 顶层活文件 |
+| 路由 / 等价判据等 normative 规则 | `docs/ROUTING_POLICY.md`、`docs/ANSWER_EQUIVALENCE_RUBRIC.md` | 随意新建文档 |
+
+### 9.2 数字三件套（缺一不可）
+
+任何对外数字必须同时带：
+
+1. **产物路径**（`docs/evidence/...` 或具体 run 文件）；
+2. **绑定条件**（`corpus_hash` / `tasks_sha256` / git commit / `runs_per_task` / judge mode）；
+3. **状态**（`current` / `historical` / `superseded`）。
+
+没有产物就写 `unverified`，不要写进结论；缺数据记 `insufficient_data`，**不要拿 0 顶替**。
+
+### 9.3 一个状态只有一个入口
+
+- 活跃待办只在 `docs/CURRENT.md` 有索引；`COST_OPTIMIZATION_PLAN` 等 active 文档只放细节，
+  并在 CURRENT 留一行链接。
+- 更新待办时同步改 CURRENT 的那一行；不要只改细节文件。
+- `CURRENT.md` 不写死 `pass@1`、`token/题`、百分比读数；要写就链接到 `docs/evidence/INDEX.md`。
+
+### 9.4 改动代码时的同步清单
+
+新增 / 删除工具或 API 路由时，至少同步四处：
+
+1. `backend/app/tools/finance.py` 的 `FINANCE_TOOL_SPECS`；
+2. `README.md` 的工具循环 / API 表；
+3. `AGENTS.md` 的模块地图；
+4. 跑 `python -m pytest tests/test_docs_consistency.py -q`，让链接 / 清单 / frontmatter 检查兜底。
+
+### 9.5 归档只增不改
+
+- 历史文档不回改数字；需要更正时在原文加「补记」，并标 `superseded` / `historical`。
+- 新文档必须带 frontmatter：`status`、`scope`、`authoritative_for`、`read_when`。
+- 新文档登记到 `docs/INDEX.md`；未登记的文档视为不可信。
+
+### 9.6 未测就不写收益
+
+代码合入但没跑真模型时，只能写「已实现 / 未复测」，不能写「提升 X%」。
+真实模型调用先报预算，探针先行、全量后置；收益不跨基线叠加。
+
+### 9.7 提交前的最小检查
+
+```bash
+cd backend && python -m pytest -q
+python -m pytest tests/test_docs_consistency.py -q
+python -m evaluation.lint_finance_tasks --check-refs --check-routing
+cd ../frontend && npm run typecheck && npm test -- --run
+```
+
+文档改动也要跑一致性测试；不要只在本地打开 Markdown 看一眼。

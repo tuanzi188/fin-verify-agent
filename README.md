@@ -21,8 +21,8 @@
 - 会话落库时保留结构化载荷，重开还能继续核对；
 - 评测台只展示已落盘的实验产物，不在 Web 请求里跑模型。
 
-当前语料是本地预先准备的 **7 份年报/募集说明书（4 家公司）**，不走网页上传；
-入库、校验由脚本完成。
+当前语料是本地预先准备的 **7 份年报/募集说明书（4 家公司）**，入库、校验由脚本完成；
+文档页另有上传入口（实验特性），上传件与官方语料分目录存放，评测只读官方语料。
 
 ---
 
@@ -44,7 +44,7 @@
    - 对比、计算、跨文档、跨期间、未来期间、多个子问题 → 多步 Agent。
 2. **结构检索**：块级混合检索（向量 + BM25 + RRF），按问题识别公司与期间过滤，一次 LLM 生成，证据转成 `EvidenceRef`。
 3. **多步 Agent**：只读工具循环
-   `search_blocks` / `search_tables` / `read_block` / `read_section` / `get_rows` / `get_table` / `get_cell` / `calculate` / `list_documents`；
+   `search_blocks` / `search_tables` / `search_sections`（sections 模式）/ `read_block` / `read_section` / `get_rows` / `get_table` / `get_cell` / `calculate` / `list_documents`；
    空结果与失败会改写重试一次；覆盖检查按「公司 × 期间 × 指标」槽位补读，终轮做覆盖自检。
 4. **结构化输出**：`answer`、`claims`（要点 / 引用编号 / 计算下标 / 不确定性）、
    `citations`（坐标）、`calc`（公式 / 输入 / 结果 / 单位 / 口径）、`trace`、`status`、`route_reason`、`notes`。
@@ -208,7 +208,7 @@ python -m scripts.verify_finance_corpus     # 校验文档/章节/表格数量
 ```
 
 语料默认放在仓库根目录 `data/finance/`，已加入 `.gitignore`；
-网页不提供上传入口，避免把通用文档混进查证库。
+文档页上传入口仅用于本地补充材料，上传件单独存放，评测只读官方语料，避免把通用文档混进查证库。
 
 ### 3. 启动后端
 
@@ -247,6 +247,7 @@ Docker 使用 `DATA_DIR=/app/data`；需要先把 `data/finance` 挂载进容器
 | `/api/v1/finance/chat` | POST | 金融查证；`strategy=auto\|structured_rag\|agent` |
 | `/api/v1/finance/stats` | GET | 语料覆盖与索引指纹 |
 | `/api/v1/finance/documents` | GET | 文档清单 |
+| `/api/v1/finance/documents` | POST | 上传并解析文档（实验特性；`file` + `company` + `period`） |
 | `/api/v1/finance/evidence` | GET | 按 `evidence_id` 或表格坐标回查证据 |
 | `/api/v1/conversations` | GET | 会话列表 |
 | `/api/v1/conversations/{id}` | GET | 会话详情（含结构化 payload） |
