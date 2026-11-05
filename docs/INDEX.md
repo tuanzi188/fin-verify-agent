@@ -5,7 +5,7 @@ authoritative_for: 哪份文档可信
 read_when: 接手时、引用任何设计/评测结论前
 ---
 
-# 文档索引（12 份 + 导航）
+# 文档索引（13 份 + 导航）
 
 `status: normative` = 当前权威口径，改代码前必读。
 `status: active` = 当前工作记录。
@@ -34,6 +34,7 @@ read_when: 接手时、引用任何设计/评测结论前
 | [20261101_eval_upgrade_implementation.md](archive/20261101_eval_upgrade_implementation.md) | historical | 三层评测落地记录与首轮离线读数 | Phase 0 语料状态已变；答案层当时 `no_data` |
 | [20261102_finance_reliability.md](archive/20261102_finance_reliability.md) | historical | 2026-11-02 可靠性修复说明 | 实现边界仍可查 |
 | [20261103_finance_answer_eval.md](archive/20261103_finance_answer_eval.md) | historical | 答案层首次全量评测、6 个缺陷、检索加权实验 | **含三套判分口径，引用必须带产物名** |
+| [20261105_parse_layer_session.md](archive/20261105_parse_layer_session.md) | historical | 解析层三处修复（列对齐 / 跨页报表 / 表单位）+ 证据流分析器 | **解析质量数字为本地单次实测，未落盘，标 unverified** |
 
 ## 使用规则
 
