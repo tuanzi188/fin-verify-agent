@@ -26,6 +26,8 @@ import fitz
 # 一级：第X节 / 第X章；允许标题在同一行的后面
 SECTION_RE = re.compile(r"^第\s*([一二三四五六七八九十百零]+)\s*(节|章|部分)\s*[、.．：:]?\s*(.*)$")
 SECTION_BARE_RE = re.compile(r"^第\s*([一二三四五六七八九十百零]+)\s*(节|章|部分)\s*$")
+# 表单位声明。它会在几十页上重复出现，但属于内容而不是页眉，不能当水印剔掉。
+_UNIT_DECLARATION_RE = re.compile(r"^[（(]?\s*单位\s*[:：]")
 # 每个模式都显式捕获两段：编号 + 标题。别用 `\S.*` 兜住编号，
 # 否则 `(3).重大采购合同` 会把点号吃进标题里，标签变成 `(3) .重大采购合同`。
 # 二级：一、
@@ -139,11 +141,16 @@ def count_repeated_lines(lines: Iterable[Line], min_pages: int = 8) -> set[str]:
 
     cninfo 下载的报告页脚常带 `www.cninfo.com.cn`，混进正文会污染章节，
     也会在检索时把每一页都算成命中。
+
+    `单位：千元` 这类表单位声明也出现在几十页上，但它是内容不是页眉：
+    剔掉它会让 `_unit_for` 拿不到单位，数字回退成文档默认的「元」（差 1000 倍）。
     """
     page_seen: dict[str, set[int]] = {}
     for line in lines:
         text = line.text.strip()
         if len(text) > 60:
+            continue
+        if _UNIT_DECLARATION_RE.match(text):
             continue
         page_seen.setdefault(text, set()).add(line.page)
     return {text for text, pages in page_seen.items() if len(pages) >= min_pages}

@@ -44,7 +44,7 @@ PARSER_VERSION = "pymupdf-" + (fitz.__doc__ or "").split()[1].rstrip(":")
 TREE_VERSION = "v1"
 #: 解析规则版本。改 `_split_header` / `_align_columns` / 表头剥离等启发式时必须 bump；
 #: 它和 PARSER_VERSION（PyMuPDF 库版本）分开，否则规则变了产物却无法追溯。
-PIPELINE_VERSION = "2026-11-03.2"
+PIPELINE_VERSION = "2026-11-05.1"
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _UNIT_LINE_RE = re.compile(r"^[（(]?单位[：:）)]")
@@ -205,17 +205,47 @@ def _split_header(rows: list[list[str]]) -> tuple[list[str], list[list[str]]]:
     return _align_columns(header, body)
 
 
+def _dedupe_names(names: list[str]) -> list[str]:
+    """同名列表格列名去重：第二个起加 `#1`，空名补 `colN`。"""
+    seen: dict[str, int] = {}
+    unique: list[str] = []
+    for index, name in enumerate(names):
+        label = name or f"col{index + 1}"
+        if label in seen:
+            seen[label] += 1
+            label = f"{label}#{seen[label]}"
+        else:
+            seen[label] = 0
+        unique.append(label)
+    return unique
+
+
 def _align_columns(header: list[str], body: list[list[str]]) -> tuple[list[str], list[list[str]]]:
+    names, trimmed, _keep = _align_columns_raw(header, body)
+    if not names:
+        return [], []
+    return _dedupe_names(names), trimmed
+
+
+def _align_columns_raw(
+    header: list[str], body: list[list[str]]
+) -> tuple[list[str], list[list[str]], list[int]]:
+    """返回 (未去重的列名, 裁剪后的数据行, 保留下来的原始列号)。
+
+    列名对齐依赖"表头行与数据行共享列索引"这一假设，只做 ±1 的整体位移。
+    表头本身分段错位时（2026-11-05 宁德时代 t0007：左半段要 0、右半段要 -1），
+    这里必然选错一个方向；调用方可用 `_coord_column_names` 按单元格坐标覆盖列名。
+    """
     width = len(header)
     if not body or width < _MIN_COLS:
-        return [], []
+        return [], [], []
 
     fill = [
         sum(1 for row in body if index < len(row) and row[index]) / len(body)
         for index in range(width)
     ]
     if not any(fill):
-        return [], []
+        return [], [], []
 
     def score(shift: int) -> float:
         total = 0.0
@@ -233,29 +263,223 @@ def _align_columns(header: list[str], body: list[list[str]]) -> tuple[list[str],
 
     keep = [index for index in range(width) if fill[index] > 0]
     if len(keep) < _MIN_COLS:
-        return [], []
+        return [], [], []
 
-    columns: list[str] = []
+    names: list[str] = []
     for index in keep:
         source = index - shift
-        columns.append(header[source].strip() if 0 <= source < width else "")
+        names.append(header[source].strip() if 0 <= source < width else "")
     # 第一列是行标签列：财报里它常常没有表头名，给一个可寻址的固定名
-    if not columns[0]:
-        columns[0] = _ROW_LABEL_COLUMN
-
-    seen: dict[str, int] = {}
-    unique: list[str] = []
-    for index, name in enumerate(columns):
-        label = name or f"col{index + 1}"
-        if label in seen:
-            seen[label] += 1
-            label = f"{label}#{seen[label]}"
-        else:
-            seen[label] = 0
-        unique.append(label)
+    if not names[0]:
+        names[0] = _ROW_LABEL_COLUMN
 
     trimmed = [[row[index] if index < len(row) else "" for index in keep] for row in body]
-    return unique, trimmed
+    return names, trimmed, keep
+
+
+_COLUMN_ANCHOR_TOLERANCE = 8.0
+
+
+def _cell_anchor(x0: float, x1: float, text: str) -> float:
+    """数字右对齐取右边界，文本左对齐取左边界。"""
+    return x1 if _NUMBERY_RE.match(text.replace(" ", "")) else x0
+
+
+def _cluster_cells(cells: list[tuple[float, float, str]]) -> list[tuple[float, float, float]]:
+    """按锚点把单元格聚成列，返回 [(锚点, 左边界, 右边界)]。
+
+    用重叠度聚类会被跨列合并单元格串起来——2026-11-05 宁德时代 t0007 的
+    「2022 年调整前/调整后」就是被一个跨列单元格并成一列，丢掉调整后每股收益 7.18。
+    同一列在不同数据行里也可能漂移几个点（t0012 的占比列 292.2 vs 297.7），
+    所以按锚点距离聚类，容差 8pt。
+    """
+    anchored: list[tuple[float, float, float]] = []
+    for x0, x1, text in cells:
+        anchored.append((_cell_anchor(x0, x1, text), x0, x1))
+    anchored.sort()
+
+    clusters: list[list] = []
+    for anchor, x0, x1 in anchored:
+        if clusters and abs(anchor - clusters[-1][0]) <= _COLUMN_ANCHOR_TOLERANCE:
+            current = clusters[-1]
+            current[3].append(anchor)
+            current[0] = sum(current[3]) / len(current[3])
+            current[1] = min(current[1], x0)
+            current[2] = max(current[2], x1)
+        else:
+            clusters.append([anchor, x0, x1, [anchor]])
+    return [(anchor, left, right) for anchor, left, right, _anchors in clusters]
+
+
+def _is_header_like_row(row: list[str]) -> bool:
+    """段中第二段表头：短标签、无数字。宁德时代 t0007 下半段就是这种行。"""
+    filled = [cell.strip() for cell in row if cell and cell.strip()]
+    if len(filled) < 2:
+        return False
+    if any(_NUMBERY_RE.match(cell.replace(" ", "")) for cell in filled):
+        return False
+    return all(len(cell) <= 12 for cell in filled)
+
+
+def _split_table_by_cells(
+    cell_rows: list[list[tuple | None]],
+    text_rows: list[list[str]],
+) -> tuple[list[str], list[list[str]]]:
+    """按单元格 bbox 重建表格：列由 x 区间聚类决定，不由网格索引决定。
+
+    网格是版面识别的投影，表头行和数据行的列边界不一定一致，同一列在不同
+    数据行里也可能漂移（2026-11-05 宁德时代 t0012：占比值有的行落在第 6 列、
+    有的行落在第 7 列）。这里只信坐标：把所有非空数据单元格按 x 区间聚类成列，
+    再把每格按重叠度放回去；表头按"覆盖列中心"拼成层级列名。
+    """
+    if len(cell_rows) != len(text_rows) or len(text_rows) < _MIN_ROWS:
+        return [], []
+
+    header_index = 0
+    if (
+        sum(1 for cell in text_rows[0] if cell) < 2
+        and len(text_rows) > 2
+        and sum(1 for cell in text_rows[1] if _is_amount(cell)) < 2
+    ):
+        header_index = 1
+
+    header_rows = [header_index]
+    used = 0
+    for offset in range(_HEADER_FILL_MAX_EXTRA):
+        index = header_index + 1 + offset
+        if index >= len(text_rows) or len(text_rows) - used <= 1:
+            break
+        if not _is_header_continuation(text_rows[index]):
+            break
+        header_rows.append(index)
+        used += 1
+    data_start = header_index + 1 + used
+    # 段中第二段表头（如「项目 | 2024 年末 | 2023 年末 …」）不参与建列：
+    # 它的文字锚点会把数值列劈成两半，制造出重复列。
+    data_indices = [
+        index
+        for index in range(data_start, len(text_rows))
+        if not _is_header_like_row(text_rows[index])
+    ]
+    if len(data_indices) < 2:
+        return [], []
+
+    cells: list[tuple[int, float, float, str]] = []
+    for row_index in data_indices:
+        row_cells = cell_rows[row_index]
+        row_text = text_rows[row_index]
+        for column, bbox in enumerate(row_cells):
+            if bbox is None:
+                continue
+            text = row_text[column].strip() if column < len(row_text) else ""
+            if not text:
+                continue
+            cells.append((row_index, float(bbox[0]), float(bbox[2]), text))
+    if not cells:
+        return [], []
+
+    clusters = _cluster_cells([(x0, x1, text) for _row, x0, x1, text in cells])
+    if len(clusters) < _MIN_COLS:
+        return [], []
+    anchors = [cluster[0] for cluster in clusters]
+
+    def cluster_of(x0: float, x1: float, text: str) -> int:
+        anchor = _cell_anchor(x0, x1, text)
+        best = min(range(len(anchors)), key=lambda index: abs(anchor - anchors[index]))
+        if abs(anchor - anchors[best]) > _COLUMN_ANCHOR_TOLERANCE * 2:
+            return -1
+        return best
+
+    slot_of = {row_index: position for position, row_index in enumerate(data_indices)}
+    body = [[""] * len(clusters) for _ in data_indices]
+    for row_index, x0, x1, text in cells:
+        target = cluster_of(x0, x1, text)
+        slot = slot_of.get(row_index)
+        if target < 0 or slot is None:
+            continue
+        if not body[slot][target]:
+            body[slot][target] = text
+
+    headers: list[tuple[int, float, float, str]] = []
+    for row_index in header_rows:
+        row_cells = cell_rows[row_index]
+        row_text = text_rows[row_index]
+        for column, bbox in enumerate(row_cells):
+            if bbox is None:
+                continue
+            text = row_text[column].strip() if column < len(row_text) else ""
+            if text:
+                headers.append((row_index, float(bbox[0]), float(bbox[2]), text))
+
+    names: list[str] = []
+    for _anchor, left, right in clusters:
+        centre = (left + right) / 2
+        parts: list[str] = []
+        for _row, hx0, hx1, text in sorted(headers, key=lambda item: item[0]):
+            if hx0 <= centre <= hx1 and text not in parts:
+                parts.append(text)
+        names.append("".join(parts))
+
+    keep = [index for index in range(len(clusters)) if any(row[index] for row in body)]
+    if len(keep) < _MIN_COLS:
+        return [], []
+    body = [[row[index] for index in keep] for row in body]
+    names = [names[index] for index in keep]
+    if not names[0]:
+        names[0] = _ROW_LABEL_COLUMN
+    return _dedupe_names(names), body
+
+
+def _has_placeholder(names: list[str]) -> bool:
+    return any(_PLACEHOLDER_COLUMN_RE.match(str(name)) for name in names)
+
+
+def _split_header(
+    rows: list[list[str]],
+    cell_rows: list[list[tuple | None]] | None = None,
+) -> tuple[list[str], list[list[str]]]:
+    """把首行当表头，并对齐到数据列。
+
+    先走网格索引 + ±1 位移（旧逻辑）。只有网格结果里出现 `colN` 占位列名时，
+    才用单元格坐标重建覆盖它——简单规整的表走旧路径，避免无谓的行为变化；
+    坐标重建失败或仍有占位名，一律退回旧结果。
+    """
+    if len(rows) < _MIN_ROWS:
+        return [], []
+    header_index = 0
+    # 首行近空时第二行可能是真表头（`单位：元` 之类的横幅行），也可能是
+    # 第一条数据行（首行只有 `项目` 的无表头表）。数据行有两处以上金额，
+    # 把它升成表头会连行名带数值一起吃掉——旧 t0072 的 colN 就是这么来的。
+    if (
+        sum(1 for cell in rows[0] if cell) < 2
+        and len(rows) > 2
+        and sum(1 for cell in rows[1] if _is_amount(cell)) < 2
+    ):
+        header_index = 1
+    header = rows[header_index]
+    body = rows[header_index + 1:]
+    if not any(cell for cell in header):
+        header = [""] * len(rows[0])
+        body = rows[header_index:]
+    body = _drop_embedded_header_rows(body)
+    merged, filled_body, used = _fill_header_from_rows(header, body)
+    grid_columns: list[str] = []
+    grid_body: list[list[str]] = []
+    if used:
+        names, body_rows, _keep = _align_columns_raw(merged, filled_body)
+        if names and body_rows:
+            grid_columns, grid_body = _dedupe_names(names), body_rows
+    if not grid_columns:
+        names, body_rows, _keep = _align_columns_raw(header, body)
+        grid_columns, grid_body = _dedupe_names(names), body_rows
+    if not grid_columns or not grid_body:
+        return grid_columns, grid_body
+    if not _has_placeholder(grid_columns) or cell_rows is None:
+        return grid_columns, grid_body
+    columns, body_rows = _split_table_by_cells(cell_rows, rows)
+    if columns and body_rows and not _has_placeholder(columns):
+        return columns, body_rows
+    return grid_columns, grid_body
 
 
 def _drop_empty_columns(grid: list[list[str]]) -> list[list[str]]:
@@ -359,23 +583,32 @@ def extract_tables(doc: "fitz.Document", lines: list[Line]) -> tuple[list[dict],
             found = page.find_tables()
         except Exception:  # noqa: BLE001 - 个别畸形页解析失败不应中断整份文档
             continue
-        candidates: list[tuple[tuple, list[list[str]], bool]] = [
-            (tuple(float(value) for value in table.bbox), _normalize_grid(table.extract()), False)
-            for table in found.tables or []
-        ]
+        candidates: list[
+            tuple[tuple, list[list[str]], bool, list[list[tuple | None]] | None]
+        ] = []
+        for table in found.tables or []:
+            grid = _normalize_grid(table.extract())
+            # 单元格 bbox 只在行数未被 `_normalize_grid` 丢掉时可用；
+            # 行数对不上就退回纯网格推断，坐标映射宁可不做也不做错。
+            cell_rows = [list(row.cells) for row in table.rows]
+            if len(cell_rows) != len(grid):
+                cell_rows = None
+            candidates.append(
+                (tuple(float(value) for value in table.bbox), grid, False, cell_rows)
+            )
         # 矩形画线（rect）的 PDF，`lines` 策略识别率为 0：2026-11-02 实测美的 p132
         # 有 28 个 rect、0 条线段，整张资产负债表丢失。这两家 PDF 的文本层坐标是
         # 完整可用的，所以退回按坐标重建。只在官方策略一张表都没找到时启用。
         if not candidates:
             candidates = [
-                (bbox, grid, True) for bbox, grid in _rebuild_tables_from_words(page)
+                (bbox, grid, True, None) for bbox, grid in _rebuild_tables_from_words(page)
             ]
-        for bbox, grid, rebuilt in candidates:
+        for bbox, grid, rebuilt, cell_rows in candidates:
             if len(grid) < _MIN_ROWS:
                 continue
             if sum(1 for row in grid for cell in row if cell) < _MIN_FILLED_CELLS:
                 continue
-            columns, rows = _split_header(grid)
+            columns, rows = _split_header(grid, cell_rows)
             if not columns or not rows:
                 continue
             if not rebuilt:
@@ -400,6 +633,22 @@ def extract_tables(doc: "fitz.Document", lines: list[Line]) -> tuple[list[dict],
                 # 重建表的列名是启发式（`2025 年`），和原生识别不是一回事，
                 # 标出来让 QC 与审计能区分来源。
                 table["rebuilt"] = True
+            # 续页没有标题，也不会重复写"单位：千元"。同页或下一页、列数一致的
+            # 无标题表继承上一张表的单位；这是续表最常见的形态，不继承就会回退成
+            # 文档默认单位（差 1000 倍）。
+            if not table["unit"] and not table["caption"] and tables:
+                previous = tables[-1]
+                adjacent = table["page"] in (
+                    previous["page"],
+                    previous["page_end"],
+                    previous["page_end"] + 1,
+                )
+                if (
+                    adjacent
+                    and previous.get("unit")
+                    and len(previous["columns"]) == len(table["columns"])
+                ):
+                    table["unit"] = previous["unit"]
             tables.append(table)
 
     tables = _merge_continuations(tables, page_heights)
@@ -627,11 +876,16 @@ def _grid_from_words(words: list[tuple]) -> tuple[list[list[str]], tuple] | None
 
 
 def _merge_continuations(tables: list[dict], page_heights: dict[int, float]) -> list[dict]:
-    """把"页底只剩表头 + 一两行"的碎片接回下一页。
+    """把跨页的同一张表接起来。
 
-    只接碎片，不接整表。理由：接错比不接更危险——两段不同表的行拼在一起，
-    `get_cell(row_name)` 可能命中另一张表的同名行，给出一个**有页码的错误数字**。
-    这是查证类产品最坏的失败形态，所以宁可让长表保持分页可见，也不猜。
+    两条规则，按顺序尝试：
+
+    1. **碎片续接**（旧逻辑）：页底只剩表头 + 一两行的碎片接回下一页。
+       只接碎片，不接整表——接错比不接更危险。
+    2. **财务报表续页**：资产负债表/利润表/现金流量表天然跨页，每页都是几十行，
+       旧规则一律不接，于是每页变成一张没有表头的独立表（2026-11-05 宁德时代
+       t0119/t0120 的列名是从数据行推出来的）。这类表用更严的条件接：
+       表头在第一页、续页无标题、x 对齐、页边紧邻、首行是数据行、列数可对齐。
     """
     merged: list[dict] = []
     for table in tables:
@@ -644,8 +898,105 @@ def _merge_continuations(tables: list[dict], page_heights: dict[int, float]) -> 
                 previous["rows"].extend(rows)
                 previous["page_end"] = table["page"]
                 continue
+            statement = _is_statement_continuation(previous, table, page_heights)
+            if statement is not None:
+                previous["rows"].extend(statement["rows"])
+                previous["page_end"] = max(
+                    int(table.get("page") or 0), int(table.get("page_end") or 0)
+                )
+                continue
         merged.append(table)
     return merged
+
+
+_STATEMENT_COLUMN_RE = re.compile(
+    r"期末余额|期初余额|本期发生额|上期发生额|本年|上年|20\d{2}\s*年?"
+)
+_STATEMENT_MIN_COLS = 3
+
+
+def _looks_like_statement(table: dict) -> bool:
+    """表头是否像财务报表：行标签列 + 至少一个期间列，且不少于 3 列。"""
+    columns = [str(name) for name in table.get("columns") or []]
+    if len(columns) < _STATEMENT_MIN_COLS:
+        return False
+    # 行标签列有时被解析成 `项目一、经营活动产生的现金流量：`（表头和数据行黏在一起），
+    # 用前缀判断，不要求完全等于「项目」。
+    if not columns[0].startswith(_ROW_LABEL_COLUMN):
+        return False
+    return any(_STATEMENT_COLUMN_RE.search(name) for name in columns[1:])
+
+
+def _trim_leading_empty(table: dict, width: int) -> dict | None:
+    """把续页多出来的前导空列去掉；列数对不上就返回 None（不接）。
+
+    续页的网格常比首页多一列前导空格（宁德时代 t0120：`['', '长期借款', …]`），
+    但个别行的行名会落在这列上（`['股本', '', …]`）。所以按"标签主要集中在
+    第 2 列"判定前导列，并把落错位的行名搬回第 1 列，不直接丢掉。
+    """
+    columns = table.get("columns") or []
+    rows = table.get("rows") or []
+    if len(columns) == width:
+        return table
+    if len(columns) != width + 1 or not rows:
+        return None
+
+    def label_count(index: int) -> int:
+        return sum(
+            1
+            for row in rows
+            if index < len(row)
+            and str(row[index]).strip()
+            and not _NUMBERY_RE.match(str(row[index]).replace(" ", ""))
+        )
+
+    if label_count(1) <= label_count(0):
+        return None
+    empty_ratio = sum(1 for row in rows if not str(row[0]).strip()) / len(rows)
+    if empty_ratio < 0.8:
+        return None
+
+    shifted: list[list[str]] = []
+    for row in rows:
+        if row and str(row[0]).strip() and (len(row) < 2 or not str(row[1]).strip()):
+            shifted.append([row[0]] + row[2:])
+        else:
+            shifted.append(row[1:])
+    return {**table, "columns": columns[1:], "rows": shifted}
+
+
+def _is_statement_continuation(
+    previous: dict, table: dict, page_heights: dict[int, float]
+) -> dict | None:
+    """财务报表续页判定。返回对齐后的续页表，不接时返回 None。"""
+    if not _looks_like_statement(previous):
+        return None
+    if table["page"] != previous.get("page_end", previous["page"]) + 1:
+        return None
+    # 续页没有自己的标题；有标题说明是新的一张表（如「2、母公司资产负债表」）。
+    if table.get("caption"):
+        return None
+    if abs(table["bbox"][0] - previous["bbox"][0]) > _CONTINUE_X_TOLERANCE:
+        return None
+    if abs(table["bbox"][2] - previous["bbox"][2]) > _CONTINUE_X_TOLERANCE:
+        return None
+    bottom_gap = page_heights.get(previous["page"], 0.0) - previous["bbox"][3]
+    if bottom_gap > _CONTINUE_EDGE_MARGIN:
+        return None
+    if table["bbox"][1] > _CONTINUE_EDGE_MARGIN:
+        return None
+    trimmed = _trim_leading_empty(table, len(previous["columns"]))
+    if trimmed is None:
+        return None
+    rows = trimmed.get("rows") or []
+    if not rows:
+        return None
+    # 续页首行必须是数据行：有金额，且首列是行名。重复表头的续页不接。
+    if not any(_is_amount(cell) for cell in rows[0]):
+        return None
+    if not str(rows[0][0]).strip():
+        return None
+    return trimmed
 
 
 def _is_fragment_continuation(
