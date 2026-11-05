@@ -28,6 +28,7 @@ read_when: 新增或修改评测脚本、找入口前
 `metrics.py`、`retrieval_metrics.py`、`routing_metrics.py`、`agent_metrics.py`、
 `agent_checks.py`、`agent_judge.py`、`equivalence.py`、`numeric_audit.py`、
 `faithfulness.py`、`failure_taxonomy.py`、`trajectory_eval.py`、
+`evidence_flow.py`（定位→读取→引用的证据流转化，零 token，不需要任务卡）、
 `citation_anchor.py`、`calc_schema.py`、`agent_report.py`。
 
 ## 任务卡与维护
