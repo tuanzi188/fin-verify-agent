@@ -1,0 +1,2318 @@
+{
+ "schema": "finance_agent_runs/v1",
+ "generated_at": "2026-11-06T10:58:27",
+ "run_config": {
+  "variant": "improved",
+  "runs_per_task": 1,
+  "toolset": "finance",
+  "search_mode": "blocks",
+  "model": "cn:deepseek-v4.1-flash",
+  "model_provider": "deepseek",
+  "corpus_version": "finance-7docs-v1",
+  "tasks_file": "D:\\a工作空间\\.tmp\\probe3c_run_20261106.tasks.jsonl",
+  "tasks_sha256": "816d9bbadf0896825e4c82dc0de250014876cd46eebcd8a065a3ca5af1de5ca4",
+  "tasks_source_file": "D:\\a工作空间\\GitHub仓库\\fin-verify-agent\\backend\\..\\docs\\evidence\\ms11_tasks_20261104.jsonl",
+  "tasks_selection": {
+   "ids": "FIN-07,FIN-11,FIN-09",
+   "limit": null,
+   "task_count": 3
+  },
+  "task_snapshot": true,
+  "corpus_hash": "42597900ed9577667bd52711a85b07372045179cdba487dc25f2b71665aeb38d",
+  "holdout": "exclude",
+  "elapsed_seconds": 93.7,
+  "git": {
+   "commit": "a041a65227a2b911ae9ea05c85c35fc3fcbd184d",
+   "branch": "feat/routing-gate-and-eval-hygiene",
+   "dirty": true
+  }
+ },
+ "manifest": {
+  "schema": "finance_run_manifest/v1",
+  "generated_at": "2026-11-06T10:58:27",
+  "code": {
+   "commit": "a041a65227a2b911ae9ea05c85c35fc3fcbd184d",
+   "branch": "feat/routing-gate-and-eval-hygiene",
+   "dirty": true
+  },
+  "runtime": {
+   "python": "3.12.4",
+   "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "model": {
+   "provider": "deepseek",
+   "model": "cn:deepseek-v4.1-flash",
+   "max_tokens": 2048,
+   "configured_temperature": 0.1,
+   "endpoints": [
+    "http://127.0.0.1:7863/v1",
+    "https://dashscope.aliyuncs.com/compatible-mode/v1"
+   ]
+  },
+  "tasks": {
+   "path": "D:\\a工作空间\\.tmp\\probe3c_run_20261106.tasks.jsonl",
+   "sha256": "816d9bbadf0896825e4c82dc0de250014876cd46eebcd8a065a3ca5af1de5ca4"
+  },
+  "corpus": {
+   "sha256": "42597900ed9577667bd52711a85b07372045179cdba487dc25f2b71665aeb38d",
+   "stats": {
+    "version": "finance-7docs-v1",
+    "documents": 7
+   }
+  },
+  "index": {
+   "kind": "structured_blocks",
+   "index_version": "finance-blocks-v1",
+   "blocks": 6004,
+   "prose_blocks": 2363,
+   "table_blocks": 3641,
+   "documents": 7,
+   "fingerprint": "3f50d15ccd38ee1466ca788588b60a367731d65b72422d64ac61ab3a0987bff2",
+   "embed_model": "BAAI/bge-small-zh-v1.5",
+   "parameters": {
+    "index_version": "finance-blocks-v1",
+    "body_min_chars": 400,
+    "body_max_chars": 800,
+    "body_overlap_max_chars": 120,
+    "table_group_rows": 6,
+    "table_group_overlap_rows": 1,
+    "table_max_columns": 8,
+    "bm25_k1": 1.2,
+    "bm25_b": 0.75,
+    "rrf_k": 60,
+    "candidate_depth": 60,
+    "bge_query_prefix": "为这个句子生成表示以用于检索相关文章："
+   }
+  },
+  "chunking": {
+   "index_version": "finance-blocks-v1",
+   "body_min_chars": 400,
+   "body_max_chars": 800,
+   "body_overlap_max_chars": 120,
+   "table_group_rows": 6,
+   "table_group_overlap_rows": 1,
+   "table_max_columns": 8,
+   "bm25_k1": 1.2,
+   "bm25_b": 0.75,
+   "rrf_k": 60,
+   "candidate_depth": 60,
+   "bge_query_prefix": "为这个句子生成表示以用于检索相关文章："
+  },
+  "generation": {
+   "temperature": 0.1,
+   "final_max_tokens": 4096,
+   "default_max_steps": 3,
+   "max_steps_ceiling": 20,
+   "improved_max_tool_rounds": 3,
+   "improved_auto_retry_limit": 1,
+   "improved_self_check_limit": 1,
+   "repair_round_budget": 3,
+   "max_search_calls": 8,
+   "max_section_chars": 4000,
+   "max_table_chars": 1500,
+   "max_cell_chars": 400
+  },
+  "artifacts": {
+   "raw_traces": "results[*].trace",
+   "evidence": "results[*].evidence",
+   "answers": "results[*].answer"
+  },
+  "arm": "agent",
+  "agent": {
+   "variant": "improved",
+   "search_mode": "blocks",
+   "runs_per_task": 1,
+   "max_tool_rounds": 5
+  }
+ },
+ "corpus": [
+  {
+   "doc_id": "cninfo-000333-2024-annual",
+   "company": "美的集团",
+   "period": "2024",
+   "doc_type": "annual_report",
+   "sections": 208,
+   "tables": 184
+  },
+  {
+   "doc_id": "cninfo-000333-2025-annual",
+   "company": "美的集团",
+   "period": "2025",
+   "doc_type": "annual_report",
+   "sections": 205,
+   "tables": 167
+  },
+  {
+   "doc_id": "cninfo-002531-2025-prospectus",
+   "company": "天顺风能",
+   "period": "2025",
+   "doc_type": "prospectus",
+   "sections": 241,
+   "tables": 35
+  },
+  {
+   "doc_id": "cninfo-002594-2024-annual",
+   "company": "比亚迪",
+   "period": "2024",
+   "doc_type": "annual_report",
+   "sections": 579,
+   "tables": 253
+  },
+  {
+   "doc_id": "cninfo-002594-2025-annual",
+   "company": "比亚迪",
+   "period": "2025",
+   "doc_type": "annual_report",
+   "sections": 557,
+   "tables": 223
+  },
+  {
+   "doc_id": "cninfo-600519-2024-annual",
+   "company": "贵州茅台",
+   "period": "2024",
+   "doc_type": "annual_report",
+   "sections": 510,
+   "tables": 254
+  },
+  {
+   "doc_id": "cninfo-600519-2025-annual",
+   "company": "贵州茅台",
+   "period": "2025",
+   "doc_type": "annual_report",
+   "sections": 542,
+   "tables": 255
+  }
+ ],
+ "summary": {
+  "total": 3,
+  "status_counts": {
+   "answered": 3
+  },
+  "median_latency_ms": 30860,
+  "max_latency_ms": 38548,
+  "avg_steps": 12.67,
+  "injection_untriggered_runs": 0,
+  "schema_problem_runs": 0
+ },
+ "schema_problems": {},
+ "results": [
+  {
+   "task_id": "FIN-07",
+   "variant": "improved",
+   "run_index": 1,
+   "status": "answered",
+   "answer": "## 1. 增加额\n\n2025 年营业收入 456,451,731 千元 − 2024 年营业收入 407,149,600 千元 = **49,302,131 千元**（约 493.02 亿元）。\n\n两个年度的数据取自同一张表：[4] 美的集团 2025 年报“主要会计数据”表（PDF 第 9 页，单位：千元，合并口径），“营业收入（千元）”行 2025 年列 = 456,451,731 [5]、2024 年列 = 407,149,600 [4]。\n\n## 2. 自行计算的增长率\n\n(456,451,731 − 407,149,600) / 407,149,600 = 0.1210909… = **12.109%**\n\n## 3. 与年报披露对比\n\n| 口径 | 数值 | 出处 |\n|---|---|---|\n| 自行计算 | 12.109%（四舍五入 12.11%） | 计算式见上 |\n| 2025 年报“本年比上年增减” | 12.11% | [4] 同表第 5 列；[1] 同一表格块 |\n| 2025 年报“营业收入构成”表同比增减 | 12.11% | [2] PDF 第 49 页，“营业收入合计”行 |\n\n**一致。**自行计算的 12.1091% 保留两位小数即 12.11%，与年报“主要会计数据”表和“营业收入构成”表披露的增幅完全相同，无差异。\n\n另外核对基础数据：2025 年报 [4] 中列示的 2024 年营业收入 407,149,600 千元，与 2024 年报“主要会计数据”表 [3]（PDF 第 9 页）披露的 2024 年营业收入 407,149,600 千元一致，比较基期未被重述，因此该增长率可直接比较。作为参照，2024 年营业收入同比增幅为 9.44%（407,149,600 vs 372,037,280，[3]），2025 年增速较上年加快约 2.67 个百分点。",
+   "citations": [
+    {
+     "marker": 4,
+     "chunk_id": "cninfo-000333-2025-annual#t0006#rows#0#cols#0,1,2,3,4"
+    },
+    {
+     "marker": 5,
+     "chunk_id": "cninfo-000333-2025-annual#t0006#0#2025 年"
+    },
+    {
+     "marker": 1,
+     "chunk_id": "cninfo-000333-2025-annual#t0006"
+    },
+    {
+     "marker": 2,
+     "chunk_id": "cninfo-000333-2025-annual#t0011"
+    },
+    {
+     "marker": 3,
+     "chunk_id": "cninfo-000333-2024-annual#t0006#rows#0#cols#0,1,2,3,4,5"
+    }
+   ],
+   "trace": [
+    {
+     "step": 1,
+     "tool": "list_documents",
+     "args": {},
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2024-annual",
+      "cninfo-000333-2025-annual",
+      "cninfo-002531-2025-prospectus",
+      "cninfo-002594-2024-annual",
+      "cninfo-002594-2025-annual",
+      "cninfo-600519-2024-annual",
+      "cninfo-600519-2025-annual"
+     ],
+     "result_count": 7,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 361,
+     "payload_chars": 3244,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 361,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 2,
+     "tool": "search_tables",
+     "args": {
+      "query": "美的集团 2025 营业收入 营业总收入"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0095",
+      "cninfo-000333-2024-annual#t0111",
+      "cninfo-000333-2025-annual#t0022",
+      "cninfo-000333-2025-annual#t0091",
+      "cninfo-000333-2025-annual#t0006"
+     ],
+     "result_count": 5,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 89,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 1313,
+     "payload_chars": 2539,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 1313,
+     "duplicate_skipped": 0,
+     "new_result_count": 5
+    },
+    {
+     "step": 3,
+     "tool": "search_tables",
+     "args": {
+      "query": "美的集团 2025 营业收入 营业总收入",
+      "doc_id": "cninfo-000333-2025-annual"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0095",
+      "cninfo-000333-2025-annual#t0022",
+      "cninfo-000333-2025-annual#t0091",
+      "cninfo-000333-2025-annual#t0006",
+      "cninfo-000333-2025-annual#t0011"
+     ],
+     "result_count": 5,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 15,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 1271,
+     "payload_chars": 2486,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 159,
+     "duplicate_skipped": 4,
+     "new_result_count": 1
+    },
+    {
+     "step": 4,
+     "tool": "search_tables",
+     "args": {
+      "query": "美的集团 2024 营业收入 营业总收入",
+      "doc_id": "cninfo-000333-2024-annual"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2024-annual#t0111",
+      "cninfo-000333-2024-annual#t0024",
+      "cninfo-000333-2024-annual#t0013",
+      "cninfo-000333-2024-annual#t0006",
+      "cninfo-000333-2024-annual#t0008"
+     ],
+     "result_count": 5,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 17,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 875,
+     "payload_chars": 1966,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 674,
+     "duplicate_skipped": 1,
+     "new_result_count": 4
+    },
+    {
+     "step": 5,
+     "tool": "get_table",
+     "args": {
+      "table_id": "cninfo-000333-2025-annual#t0006"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0006"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 472,
+     "payload_chars": 865,
+     "evidence_chars_added": 472,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 6,
+     "tool": "get_table",
+     "args": {
+      "table_id": "cninfo-000333-2025-annual#t0011"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0011"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 763,
+     "payload_chars": 1231,
+     "evidence_chars_added": 763,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 7,
+     "tool": "calculate",
+     "args": {
+      "expression": "(current - prior) / prior",
+      "inputs": {
+       "current": "456451731",
+       "prior": "407149600"
+      }
+     },
+     "ok": true,
+     "result_ids": [
+      "calc-1"
+     ],
+     "result_count": 1,
+     "calc": {
+      "formula": "(current - prior) / prior",
+      "inputs": {
+       "current": "456451731",
+       "prior": "407149600"
+      },
+      "result": "0.1210909478972839467360400207",
+      "calculation_id": "calc-1"
+     },
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 0,
+     "payload_chars": 170,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0
+    },
+    {
+     "step": 8,
+     "tool": "calculate",
+     "args": {
+      "expression": "current - prior",
+      "inputs": {
+       "current": "456451731",
+       "prior": "407149600"
+      }
+     },
+     "ok": true,
+     "result_ids": [
+      "calc-2"
+     ],
+     "result_count": 1,
+     "calc": {
+      "formula": "current - prior",
+      "inputs": {
+       "current": "456451731",
+       "prior": "407149600"
+      },
+      "result": "49302131",
+      "calculation_id": "calc-2"
+     },
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 0,
+     "payload_chars": 138,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0
+    },
+    {
+     "step": 9,
+     "tool": "get_rows",
+     "args": {
+      "rows": [
+       "营业收入"
+      ],
+      "table_id": "cninfo-000333-2024-annual#t0006"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2024-annual#t0006#rows#0#cols#0,1,2,3,4,5"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 197,
+     "payload_chars": 948,
+     "evidence_chars_added": 197,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 10,
+     "tool": "get_rows",
+     "args": {
+      "rows": [
+       "营业收入"
+      ],
+      "table_id": "cninfo-000333-2025-annual#t0006"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0006#rows#0#cols#0,1,2,3,4"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 188,
+     "payload_chars": 882,
+     "evidence_chars_added": 188,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 11,
+     "tool": "get_cell",
+     "args": {
+      "column": "2025 年",
+      "row": "营业收入",
+      "table_id": "cninfo-000333-2025-annual#t0006"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0006#0#2025 年"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 56,
+     "payload_chars": 518,
+     "evidence_chars_added": 56,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 12,
+     "tool": "__final__",
+     "args": {},
+     "ok": true,
+     "result_ids": [],
+     "result_count": 0,
+     "injected": null,
+     "latency_ms": 6109,
+     "tokens_in": 8062,
+     "tokens_out": 762,
+     "self_eval": {
+      "checked": true,
+      "covered": true,
+      "missing": [],
+      "supplemented": false
+     },
+     "clarify": {
+      "mode": "none",
+      "signal": false
+     },
+     "finish_reason": "stop",
+     "note": "coverage_repair"
+    }
+   ],
+   "usage": {
+    "steps": 11,
+    "tokens_in": 36027,
+    "tokens_out": 2572,
+    "cache_hit_tokens": 27264,
+    "cache_miss_tokens": 8763,
+    "latency_ms": 24247,
+    "providers": [
+     "primary"
+    ],
+    "rounds": 7,
+    "auto_retries": 0,
+    "self_checks": 1,
+    "repair_rounds": 1,
+    "llm_calls": 8,
+    "max_context_tokens": 8062,
+    "final_context_tokens": 8062,
+    "max_messages_chars": 14557,
+    "tool_result_chars": 5496,
+    "tool_payload_chars": 14987,
+    "duplicate_skipped": 5
+   },
+   "llm_calls": [
+    {
+     "phase": "tool_round",
+     "round": 1,
+     "messages": 2,
+     "messages_chars": 2708,
+     "tokens_in": 2054,
+     "tokens_out": 69,
+     "total_tokens": 2123,
+     "cache_hit_tokens": 640,
+     "cache_miss_tokens": 1414,
+     "latency_ms": 2081,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 2,
+     "messages": 3,
+     "messages_chars": 4044,
+     "tokens_in": 2684,
+     "tokens_out": 168,
+     "total_tokens": 2852,
+     "cache_hit_tokens": 2048,
+     "cache_miss_tokens": 636,
+     "latency_ms": 2104,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 3,
+     "messages": 4,
+     "messages_chars": 5818,
+     "tokens_in": 3541,
+     "tokens_out": 192,
+     "total_tokens": 3733,
+     "cache_hit_tokens": 2560,
+     "cache_miss_tokens": 981,
+     "latency_ms": 2306,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 4,
+     "messages": 5,
+     "messages_chars": 8884,
+     "tokens_in": 5164,
+     "tokens_out": 302,
+     "total_tokens": 5466,
+     "cache_hit_tokens": 3456,
+     "cache_miss_tokens": 1708,
+     "latency_ms": 2671,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 5,
+     "messages": 6,
+     "messages_chars": 11167,
+     "tokens_in": 6265,
+     "tokens_out": 561,
+     "total_tokens": 6826,
+     "cache_hit_tokens": 5120,
+     "cache_miss_tokens": 1145,
+     "latency_ms": 3652,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 6,
+     "messages": 8,
+     "messages_chars": 12357,
+     "tokens_in": 6941,
+     "tokens_out": 204,
+     "total_tokens": 7145,
+     "cache_hit_tokens": 6144,
+     "cache_miss_tokens": 797,
+     "latency_ms": 2418,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 7,
+     "messages": 9,
+     "messages_chars": 14557,
+     "tokens_in": 8062,
+     "tokens_out": 762,
+     "total_tokens": 8824,
+     "cache_hit_tokens": 6912,
+     "cache_miss_tokens": 1150,
+     "latency_ms": 6109,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "self_check",
+     "round": 7,
+     "messages": 1,
+     "messages_chars": 1404,
+     "tokens_in": 1316,
+     "tokens_out": 314,
+     "total_tokens": 1630,
+     "cache_hit_tokens": 384,
+     "cache_miss_tokens": 932,
+     "latency_ms": 2763,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true
+    }
+   ],
+   "toolset": "finance",
+   "evidence": [
+    {
+     "chunk_id": "cninfo-000333-2025-annual#t0006",
+     "title": "美的集团2025年年度报告｜表 cninfo-000333-2025-annual#t0006",
+     "kind": "table",
+     "page": 9,
+     "truncated": false,
+     "content": "表 cninfo-000333-2025-annual#t0006｜无标题｜PDF 第 9 页｜单位：千元｜口径：合并｜报表：主要会计数据\n项目 | 2025 年 | 2024 年 | 本年比上年增减 | 2023 年\n营业收入（千元） | 456,451,731 | 407,149,600 | 12.11% | 372,037,280\n归属于上市公司股东的净利润（千元） | 43,945,411 | 38,537,237 | 14.03% | 33,719,935\n归属于上市公司股东的扣除非经常性损 | 41,267,233 | 35,741,418 | 15.46% | 32,974,908\n益的净利润（千元） |  |  |  | \n经营活动产生的现金流量净额（千元） | 53,345,930 | 60,511,572 | -11.84% | 57,902,611\n基本每股收益（元/",
+     "table_caption": "",
+     "unit": "千元",
+     "doc_id": "cninfo-000333-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-000333-2025-annual#t0011",
+     "title": "美的集团2025年年度报告｜表 cninfo-000333-2025-annual#t0011",
+     "kind": "table",
+     "page": 49,
+     "truncated": false,
+     "content": "表 cninfo-000333-2025-annual#t0011｜（1） 营业收入构成｜PDF 第 49 页｜单位：千元｜口径：合并\n项目 | 2025 年 | 占营业收入比重 | 2024 年 | 占营业收入比重#1 | 同比增减\n营业收入合计 | 456,451,731 | 100.00% | 407,149,600 | 100.00% | 12.11%\n分行业 |  |  |  |  | \n制造业 | 409,272,424 | 89.66% | 362,654,889 | 89.07% | 12.85%\n其他业务 | 47,179,307 | 10.34% | 44,494,711 | 10.93% | 6.03%\n分产品 |  |  |  |  | \n智能家居业务 | 299,927,239 | 65.71% | 269,532,353 | 66.20% | 11.28%\n商业",
+     "table_caption": "（1） 营业收入构成",
+     "unit": "千元",
+     "doc_id": "cninfo-000333-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-000333-2024-annual#t0006#rows#0#cols#0,1,2,3,4,5",
+     "title": "美的集团2024年年度报告｜表格",
+     "kind": "rows",
+     "page": 9,
+     "truncated": false,
+     "content": "表 cninfo-000333-2024-annual#t0006｜无标题｜PDF 第 9 页｜单位：千元（来源：table）｜口径：合并｜报表：主要会计数据\n行号 | 项目 | 2024 年 | 2023 年 | 本年比上年增减 | col5 | 2022 年\n0 | 营业收入（千元） | 407,149,600 | 372,037,280 | 9.44% |  | 343,917,531",
+     "table_id": "cninfo-000333-2024-annual#t0006",
+     "table_caption": "",
+     "row_name": "营业收入（千元）",
+     "row_indices": [
+      0
+     ],
+     "column_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "unit": "千元",
+     "doc_id": "cninfo-000333-2024-annual"
+    },
+    {
+     "chunk_id": "cninfo-000333-2025-annual#t0006#rows#0#cols#0,1,2,3,4",
+     "title": "美的集团2025年年度报告｜表格",
+     "kind": "rows",
+     "page": 9,
+     "truncated": false,
+     "content": "表 cninfo-000333-2025-annual#t0006｜无标题｜PDF 第 9 页｜单位：千元（来源：table）｜口径：合并｜报表：主要会计数据\n行号 | 项目 | 2025 年 | 2024 年 | 本年比上年增减 | 2023 年\n0 | 营业收入（千元） | 456,451,731 | 407,149,600 | 12.11% | 372,037,280",
+     "table_id": "cninfo-000333-2025-annual#t0006",
+     "table_caption": "",
+     "row_name": "营业收入（千元）",
+     "row_indices": [
+      0
+     ],
+     "column_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "unit": "千元",
+     "doc_id": "cninfo-000333-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-000333-2025-annual#t0006#0#2025 年",
+     "title": "美的集团2025年年度报告｜表格",
+     "kind": "cell",
+     "page": 9,
+     "truncated": false,
+     "content": "表格｜第 9 页｜营业收入（千元） 的「2025 年」= 456,451,731（单位：千元，来源：table）",
+     "table_id": "cninfo-000333-2025-annual#t0006",
+     "row_name": "营业收入（千元）",
+     "column": "2025 年",
+     "cell_text": "456,451,731",
+     "unit": "千元",
+     "doc_id": "cninfo-000333-2025-annual"
+    }
+   ],
+   "calc": [
+    {
+     "formula": "(current - prior) / prior",
+     "inputs": {
+      "current": "456451731",
+      "prior": "407149600"
+     },
+     "result": "0.1210909478972839467360400207",
+     "calculation_id": "calc-1"
+    },
+    {
+     "formula": "current - prior",
+     "inputs": {
+      "current": "456451731",
+      "prior": "407149600"
+     },
+     "result": "49302131",
+     "calculation_id": "calc-2"
+    }
+   ]
+  },
+  {
+   "task_id": "FIN-09",
+   "variant": "improved",
+   "run_index": 1,
+   "status": "answered",
+   "answer": "## 结论\n\n比亚迪 2024 年第四季度营业收入为 **274,851,143,000.00 元**（约 2,748.51 亿元）；2024 年全年营业收入为 **777,102,455,000.00 元**（约 7,771.02 亿元）。第四季度营业收入占全年营业收入的比重约为 **35.37%**，这是根据这两个数相除计算得出的结果，并非原文直接列示的项目。\n\n## 单元格级定位\n\n| 数字 | 表名 | 行名 | 列名 | 页码 | 单位/口径 |\n|---|---|---|---|---|---|\n| 274,851,143,000.00 | 八、分季度主要财务指标 | 营业收入 | 第四季度 | 第 11 页 [5] | 元 / 合并 |\n| 777,102,455,000.00 | 第 10 页「第二节 公司简介和主要财务指标」下的主要会计数据表（表目录未给该表标题） | 营业收入（元） | 2024 年 | 第 10 页 [6] | 元 / 合并 |\n\n- 第四季度营业收入：**「八、分季度主要财务指标」表中「营业收入」行，取「第四季度」列，第 11 页**，数值为 274,851,143,000.00 元 [5]。\n- 全年营业收入：**第 10 页主要会计数据表中「营业收入（元）」行，取「2024 年」列，第 10 页**，数值为 777,102,455,000.00 元 [6]。该表在表目录中没有登记标题，但可以从行名和列头唯一确定单元格位置。\n\n## 比重的来源说明\n\n35.37% 不是原文列示的数字，而是由上述两个单元格的值算出的派生量，没有对应的单元格，因此不给单元格定位：\n\n274,851,143,000.00 ÷ 777,102,455,000.00 = 0.353687… ≈ **35.37%**\n\n校验：分季度表中四个季度的营业收入相加（124,944,397,000 + 176,182,316,000 + 201,124,599,000 + 274,851,143,000）等于 777,102,455,000 元，与第 10 页全年数一致；两张表的单位均为元，口径均为合并，因此直接相除不存在口径或单位不匹配。\n\n注：年报第 287 页的「（1）营业收入和营业成本情况」表所列的主营业务收入 2,963,250 和其他业务收入 1,317,715 单位是万元，与上述元口径的全年数（合计约 4,280,965 万元）在量纲上不可直接混用，本回答未采用该表数据。",
+   "citations": [
+    {
+     "marker": 5,
+     "chunk_id": "cninfo-002594-2024-annual#t0009#0#第四季度"
+    },
+    {
+     "marker": 6,
+     "chunk_id": "cninfo-002594-2024-annual#t0007#0#2024 年"
+    }
+   ],
+   "trace": [
+    {
+     "step": 1,
+     "tool": "list_documents",
+     "args": {},
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2024-annual",
+      "cninfo-000333-2025-annual",
+      "cninfo-002531-2025-prospectus",
+      "cninfo-002594-2024-annual",
+      "cninfo-002594-2025-annual",
+      "cninfo-600519-2024-annual",
+      "cninfo-600519-2025-annual"
+     ],
+     "result_count": 7,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 361,
+     "payload_chars": 3244,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 361,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 2,
+     "tool": "search_blocks",
+     "args": {
+      "query": "比亚迪 2024 分季度 营业收入 第四季度",
+      "top_k": 5
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2024-annual#t0009#rows#5,6,7#cols#0,1,2,3,4",
+      "cninfo-002594-2024-annual#t0007#rows#0#cols#0,1,2,3,4",
+      "cninfo-002594-2024-annual#t0252#rows#0,1#cols#0,1,2",
+      "cninfo-002594-2024-annual#t0197#rows#0,1#cols#0,1",
+      "cninfo-002594-2024-annual#s0016#b000"
+     ],
+     "result_count": 5,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 6028,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 878,
+     "payload_chars": 4649,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 878,
+     "duplicate_skipped": 0,
+     "new_result_count": 5
+    },
+    {
+     "step": 3,
+     "tool": "search_tables",
+     "args": {
+      "query": "比亚迪 2024 分季度 营业收入",
+      "doc_id": "cninfo-002594-2024-annual",
+      "top_k": 5
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2024-annual#t0009",
+      "cninfo-002594-2024-annual#t0007",
+      "cninfo-002594-2024-annual#t0037",
+      "cninfo-002594-2024-annual#t0122",
+      "cninfo-002594-2024-annual#t0252"
+     ],
+     "result_count": 5,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 19,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 1155,
+     "payload_chars": 2159,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 1155,
+     "duplicate_skipped": 0,
+     "new_result_count": 5
+    },
+    {
+     "step": 4,
+     "tool": "get_table",
+     "args": {
+      "table_id": "cninfo-002594-2024-annual#t0009"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2024-annual#t0009"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 535,
+     "payload_chars": 943,
+     "evidence_chars_added": 535,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 5,
+     "tool": "read_block",
+     "args": {
+      "block_id": "cninfo-002594-2024-annual#s0016#b000"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2024-annual#s0016#b000"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 73,
+     "payload_chars": 685,
+     "evidence_chars_added": 73,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 6,
+     "tool": "get_rows",
+     "args": {
+      "rows": [
+       "营业收入",
+       "营业成本"
+      ],
+      "table_id": "cninfo-002594-2024-annual#t0007"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2024-annual#t0007#rows#0#cols#0,1,2,3,4"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 252,
+     "payload_chars": 1004,
+     "evidence_chars_added": 252,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 7,
+     "tool": "get_rows",
+     "args": {
+      "rows": [
+       0,
+       1
+      ],
+      "table_id": "cninfo-002594-2024-annual#t0252"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2024-annual#t0252#rows#0,1#cols#0,1,2"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 171,
+     "payload_chars": 965,
+     "evidence_chars_added": 171,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 8,
+     "tool": "calculate",
+     "args": {
+      "expression": "q4 / fy",
+      "inputs": {
+       "fy": "777102455000.00",
+       "q4": "274851143000.00"
+      }
+     },
+     "ok": true,
+     "result_ids": [
+      "calc-1"
+     ],
+     "result_count": 1,
+     "calc": {
+      "formula": "q4 / fy",
+      "inputs": {
+       "fy": "777102455000.00",
+       "q4": "274851143000.00"
+      },
+      "result": "0.3536871376889421871662984259",
+      "calculation_id": "calc-1"
+     },
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 0,
+     "payload_chars": 156,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0
+    },
+    {
+     "step": 9,
+     "tool": "get_cell",
+     "args": {
+      "column": "第四季度",
+      "row": "营业收入",
+      "table_id": "cninfo-002594-2024-annual#t0009"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2024-annual#t0009#0#第四季度"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 69,
+     "payload_chars": 579,
+     "evidence_chars_added": 69,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 10,
+     "tool": "get_cell",
+     "args": {
+      "column": "2024 年",
+      "row": "营业收入（元）",
+      "table_id": "cninfo-002594-2024-annual#t0007"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2024-annual#t0007#0#2024 年"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 62,
+     "payload_chars": 549,
+     "evidence_chars_added": 62,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 11,
+     "tool": "__final__",
+     "args": {},
+     "ok": true,
+     "result_ids": [],
+     "result_count": 0,
+     "injected": null,
+     "latency_ms": 5951,
+     "tokens_in": 6951,
+     "tokens_out": 941,
+     "self_eval": {
+      "checked": true,
+      "covered": true,
+      "missing": [],
+      "supplemented": false
+     },
+     "clarify": {
+      "mode": "none",
+      "signal": false
+     },
+     "finish_reason": "stop",
+     "note": "cell_repair"
+    }
+   ],
+   "usage": {
+    "steps": 10,
+    "tokens_in": 39559,
+    "tokens_out": 2779,
+    "cache_hit_tokens": 26496,
+    "cache_miss_tokens": 13063,
+    "latency_ms": 30860,
+    "providers": [
+     "primary"
+    ],
+    "rounds": 8,
+    "auto_retries": 0,
+    "self_checks": 1,
+    "repair_rounds": 1,
+    "llm_calls": 9,
+    "max_context_tokens": 7412,
+    "final_context_tokens": 6951,
+    "max_messages_chars": 15358,
+    "tool_result_chars": 3556,
+    "tool_payload_chars": 14933,
+    "duplicate_skipped": 0
+   },
+   "llm_calls": [
+    {
+     "phase": "tool_round",
+     "round": 1,
+     "messages": 2,
+     "messages_chars": 2685,
+     "tokens_in": 2040,
+     "tokens_out": 40,
+     "total_tokens": 2080,
+     "cache_hit_tokens": 1792,
+     "cache_miss_tokens": 248,
+     "latency_ms": 2005,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 2,
+     "messages": 3,
+     "messages_chars": 3430,
+     "tokens_in": 2374,
+     "tokens_out": 207,
+     "total_tokens": 2581,
+     "cache_hit_tokens": 1920,
+     "cache_miss_tokens": 454,
+     "latency_ms": 2046,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 3,
+     "messages": 4,
+     "messages_chars": 5536,
+     "tokens_in": 3423,
+     "tokens_out": 109,
+     "total_tokens": 3532,
+     "cache_hit_tokens": 2304,
+     "cache_miss_tokens": 1119,
+     "latency_ms": 1795,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 4,
+     "messages": 5,
+     "messages_chars": 8203,
+     "tokens_in": 4787,
+     "tokens_out": 263,
+     "total_tokens": 5050,
+     "cache_hit_tokens": 3328,
+     "cache_miss_tokens": 1459,
+     "latency_ms": 2133,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 5,
+     "messages": 6,
+     "messages_chars": 10450,
+     "tokens_in": 5950,
+     "tokens_out": 134,
+     "total_tokens": 6084,
+     "cache_hit_tokens": 4736,
+     "cache_miss_tokens": 1214,
+     "latency_ms": 1974,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 6,
+     "messages": 7,
+     "messages_chars": 12297,
+     "tokens_in": 5359,
+     "tokens_out": 457,
+     "total_tokens": 5816,
+     "cache_hit_tokens": 896,
+     "cache_miss_tokens": 4463,
+     "latency_ms": 2871,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true,
+     "tools": 9,
+     "tool_choice": "none"
+    },
+    {
+     "phase": "tool_round",
+     "round": 7,
+     "messages": 9,
+     "messages_chars": 13319,
+     "tokens_in": 7412,
+     "tokens_out": 198,
+     "total_tokens": 7610,
+     "cache_hit_tokens": 5888,
+     "cache_miss_tokens": 1524,
+     "latency_ms": 1895,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 8,
+     "messages": 10,
+     "messages_chars": 15358,
+     "tokens_in": 6951,
+     "tokens_out": 941,
+     "total_tokens": 7892,
+     "cache_hit_tokens": 5248,
+     "cache_miss_tokens": 1703,
+     "latency_ms": 5951,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true,
+     "tools": 9,
+     "tool_choice": "none"
+    },
+    {
+     "phase": "self_check",
+     "round": 8,
+     "messages": 1,
+     "messages_chars": 1340,
+     "tokens_in": 1263,
+     "tokens_out": 430,
+     "total_tokens": 1693,
+     "cache_hit_tokens": 384,
+     "cache_miss_tokens": 879,
+     "latency_ms": 4135,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true
+    }
+   ],
+   "toolset": "finance",
+   "evidence": [
+    {
+     "chunk_id": "cninfo-002594-2024-annual#t0009",
+     "title": "比亚迪2024年年度报告｜表 cninfo-002594-2024-annual#t0009",
+     "kind": "table",
+     "page": 11,
+     "truncated": false,
+     "content": "表 cninfo-002594-2024-annual#t0009｜八、分季度主要财务指标｜PDF 第 11 页｜单位：元｜口径：合并｜报表：主要会计数据\n项目 | 第一季度 | 第二季度 | 第三季度 | 第四季度\n营业收入 | 124,944,397,000.00 | 176,182,316,000.00 | 201,124,599,000.00 | 274,851,143,000.00\n归属于上市公司股东 | 4,568,793,000.00 | 9,062,464,000.00 | 11,606,858,000.00 | 15,016,231,000.00\n的净利润 |  |  |  | \n归属于上市公司股东 | 3,751,980,000.00 | 8,563,434,000.00 | 10,876,911,000.00 | 13,790,562,000.00\n的扣除非经常性损益",
+     "table_caption": "八、分季度主要财务指标",
+     "unit": "元",
+     "doc_id": "cninfo-002594-2024-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2024-annual#s0016#b000",
+     "title": "比亚迪 2024 annual_report｜paragraph",
+     "kind": "paragraph",
+     "page": 11,
+     "truncated": false,
+     "content": "第二节 公司简介和主要财务指标 > 八、分季度主要财务指标\n上述财务指标或其加总数是否与公司已披露季度报告、半年度报告相关财务指标存在重大差异11",
+     "row_name": "",
+     "unit": "",
+     "doc_id": "cninfo-002594-2024-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2024-annual#t0007#rows#0#cols#0,1,2,3,4",
+     "title": "比亚迪2024年年度报告｜表格",
+     "kind": "rows",
+     "page": 10,
+     "truncated": false,
+     "content": "表 cninfo-002594-2024-annual#t0007｜无标题｜PDF 第 10 页｜单位：元（来源：table）｜口径：合并｜报表：主要会计数据\n行号 | 项目 | 2024 年 | 2023 年 | 本年比上年增减 | 2022 年\n0 | 营业收入（元） | 777,102,455,000.00 | 602,315,354,000.00 | 29.02% | 424,060,635,000.00\n未读取行：营业成本（找不到行: 营业成本；该表共 1 行；可用行名: 营业收入（元））",
+     "table_id": "cninfo-002594-2024-annual#t0007",
+     "table_caption": "",
+     "row_name": "营业收入（元）",
+     "row_indices": [
+      0
+     ],
+     "column_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "unit": "元",
+     "doc_id": "cninfo-002594-2024-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2024-annual#t0252#rows#0,1#cols#0,1,2",
+     "title": "比亚迪2024年年度报告｜（1） 营业收入和营业成本情况",
+     "kind": "rows",
+     "page": 287,
+     "truncated": false,
+     "content": "表 cninfo-002594-2024-annual#t0252｜（1） 营业收入和营业成本情况｜PDF 第 287 页｜单位：元（来源：document）｜口径：合并\n行号 | 项目 | 收入 | 成本\n0 | 主营业务收入 | 2,963,250 | 2,927,810\n1 | 其他业务收入 | 1,317,715 | 830,495",
+     "table_id": "cninfo-002594-2024-annual#t0252",
+     "table_caption": "（1） 营业收入和营业成本情况",
+     "row_name": "主营业务收入、其他业务收入",
+     "row_indices": [
+      0,
+      1
+     ],
+     "column_indices": [
+      0,
+      1,
+      2
+     ],
+     "unit": "元",
+     "doc_id": "cninfo-002594-2024-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2024-annual#t0009#0#第四季度",
+     "title": "比亚迪2024年年度报告｜八、分季度主要财务指标",
+     "kind": "cell",
+     "page": 11,
+     "truncated": false,
+     "content": "八、分季度主要财务指标｜第 11 页｜营业收入 的「第四季度」= 274,851,143,000.00（单位：元，来源：document）",
+     "table_id": "cninfo-002594-2024-annual#t0009",
+     "row_name": "营业收入",
+     "column": "第四季度",
+     "cell_text": "274,851,143,000.00",
+     "unit": "元",
+     "doc_id": "cninfo-002594-2024-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2024-annual#t0007#0#2024 年",
+     "title": "比亚迪2024年年度报告｜表格",
+     "kind": "cell",
+     "page": 10,
+     "truncated": false,
+     "content": "表格｜第 10 页｜营业收入（元） 的「2024 年」= 777,102,455,000.00（单位：元，来源：table）",
+     "table_id": "cninfo-002594-2024-annual#t0007",
+     "row_name": "营业收入（元）",
+     "column": "2024 年",
+     "cell_text": "777,102,455,000.00",
+     "unit": "元",
+     "doc_id": "cninfo-002594-2024-annual"
+    }
+   ],
+   "calc": [
+    {
+     "formula": "q4 / fy",
+     "inputs": {
+      "fy": "777102455000.00",
+      "q4": "274851143000.00"
+     },
+     "result": "0.3536871376889421871662984259",
+     "calculation_id": "calc-1"
+    }
+   ]
+  },
+  {
+   "task_id": "FIN-11",
+   "variant": "improved",
+   "run_index": 1,
+   "status": "answered",
+   "answer": "## 2025 年营业收入排序（统一换算为人民币亿元）\n\n| 排名 | 公司 | 报表行 | 2025 年数值（原值） | 列报单位 | 换算（亿元） | 单元格定位 |\n|---|---|---|---|---|---|---|\n| 1 | 比亚迪 | 营业收入 | 803,964,958 | 千元（见表下说明） | **8,039.65** | 《2、合并利润表》，“营业收入”行 × “2025 年”列，第 126 页 [8] |\n| 2 | 美的集团 | 其中：营业收入 | 456,451,731 | 千元 | **4,564.52** | 《2025 年度合并及公司利润表》，“其中：营业收入”行 × “2025 年”列，第 135 页 [6] |\n| 3 | 贵州茅台 | 营业收入 | 168,838,102,514.79 | 元 | **1,688.38** | 《1、利润表及现金流量表相关科目变动分析表》，“营业收入”行 × “本期数”列，第 9 页 [10] |\n\n### 交叉验证单元格\n- 比亚迪主要会计数据表：《表格》（无标题），“营业收入（元）”行 × “2025 年”列，第 11 页 = 803,964,958,000.00 元 [9]，与利润表数值按 1000 倍换算后完全一致，即 8,039.65 亿元。\n- 美的营业总收入：《2025 年度合并及公司利润表》，“一、营业总收入”行 × “2025 年”列，第 135 页 = 458,502,407 千元 [7]，折合 4,585.02 亿元；该行与“其中：营业收入”的差额来自金融类业务收入，本答案统一采用“营业收入”口径。\n\n### 换算算式\n- 美的：456,451,731 千元 × 1000 ÷ 10⁸ = 4,564.51731 亿元 [6]\n- 比亚迪：803,964,958 千元 × 1000 ÷ 10⁸ = 8,039.64958 亿元 [8]；同时对照 803,964,958,000.00 元 ÷ 10⁸ = 8,039.64958 亿元 [9]\n- 贵州茅台：168,838,102,514.79 元 ÷ 10⁸ = 1,688.381025 亿元 [10]\n\n### 单位口径必须指出的问题\n《2、合并利润表》（比亚迪，第 126 页）页眉标注“单位：元”，但该表“营业收入”行数值 803,964,958 [8] 与同一报告第 11 页主要会计数据表的 803,964,958,000.00 元 [9] 相差 1000 倍，实际按千元列报，表头单位标注有误。美的利润表以千元列报 [6]；贵州茅台以元列报 [10]。三者若不换算直接比较，误差可达千倍。\n\n本答案所有数值均取自表格单元格，未使用章节正文中的数字。\n\n### 结论\n**比亚迪 8,039.65 亿元 > 美的集团 4,564.52 亿元 > 贵州茅台 1,688.38 亿元**；比亚迪约为美的的 1.76 倍、茅台的 4.76 倍。",
+   "citations": [
+    {
+     "marker": 8,
+     "chunk_id": "cninfo-002594-2025-annual#t0104#0#2025 年"
+    },
+    {
+     "marker": 6,
+     "chunk_id": "cninfo-000333-2025-annual#t0095#1#2025 年"
+    },
+    {
+     "marker": 10,
+     "chunk_id": "cninfo-600519-2025-annual#t0013#0#本期数"
+    },
+    {
+     "marker": 9,
+     "chunk_id": "cninfo-002594-2025-annual#t0007#0#2025 年"
+    },
+    {
+     "marker": 7,
+     "chunk_id": "cninfo-000333-2025-annual#t0095#0#2025 年"
+    }
+   ],
+   "trace": [
+    {
+     "step": 1,
+     "tool": "list_documents",
+     "args": {},
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2024-annual",
+      "cninfo-000333-2025-annual",
+      "cninfo-002531-2025-prospectus",
+      "cninfo-002594-2024-annual",
+      "cninfo-002594-2025-annual",
+      "cninfo-600519-2024-annual",
+      "cninfo-600519-2025-annual"
+     ],
+     "result_count": 7,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 361,
+     "payload_chars": 3244,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 361,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 2,
+     "tool": "search_tables",
+     "args": {
+      "doc_id": "cninfo-000333-2025-annual",
+      "query": "营业收入 营业总收入"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0095",
+      "cninfo-000333-2025-annual#t0022",
+      "cninfo-000333-2025-annual#t0091",
+      "cninfo-000333-2025-annual#t0006",
+      "cninfo-000333-2025-annual#t0011"
+     ],
+     "result_count": 5,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 12,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 1271,
+     "payload_chars": 2482,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 1271,
+     "duplicate_skipped": 0,
+     "new_result_count": 5
+    },
+    {
+     "step": 3,
+     "tool": "search_tables",
+     "args": {
+      "doc_id": "cninfo-002594-2025-annual",
+      "query": "营业收入"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2025-annual#t0028",
+      "cninfo-002594-2025-annual#t0099",
+      "cninfo-002594-2025-annual#t0007",
+      "cninfo-002594-2025-annual#t0110",
+      "cninfo-002594-2025-annual#t0104"
+     ],
+     "result_count": 5,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 11,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 1251,
+     "payload_chars": 2342,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 1251,
+     "duplicate_skipped": 0,
+     "new_result_count": 5
+    },
+    {
+     "step": 4,
+     "tool": "search_tables",
+     "args": {
+      "doc_id": "cninfo-600519-2025-annual",
+      "query": "营业收入"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-600519-2025-annual#t0010",
+      "cninfo-600519-2025-annual#t0013",
+      "cninfo-600519-2025-annual#t0016",
+      "cninfo-600519-2025-annual#t0017",
+      "cninfo-600519-2025-annual#t0175"
+     ],
+     "result_count": 5,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 13,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 738,
+     "payload_chars": 1783,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 738,
+     "duplicate_skipped": 0,
+     "new_result_count": 5
+    },
+    {
+     "step": 5,
+     "tool": "get_rows",
+     "args": {
+      "rows": [
+       "营业收入",
+       "营业总收入"
+      ],
+      "table_id": "cninfo-000333-2025-annual#t0095"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0095#rows#1,0#cols#0,1,2,3,4,5"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 277,
+     "payload_chars": 1482,
+     "evidence_chars_added": 277,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 6,
+     "tool": "get_rows",
+     "args": {
+      "rows": [
+       "营业收入",
+       "营业总收入"
+      ],
+      "table_id": "cninfo-002594-2025-annual#t0104"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2025-annual#t0104#rows#0#cols#0,1,2,3,4"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 212,
+     "payload_chars": 935,
+     "evidence_chars_added": 212,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 7,
+     "tool": "get_rows",
+     "args": {
+      "rows": [
+       "营业收入",
+       "营业总收入"
+      ],
+      "table_id": "cninfo-600519-2025-annual#t0013"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-600519-2025-annual#t0013#rows#0#cols#0,1,2,3"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 227,
+     "payload_chars": 918,
+     "evidence_chars_added": 227,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 8,
+     "tool": "calculate",
+     "args": {
+      "expression": "midea_ky * 1000 / 1e8",
+      "inputs": {
+       "midea_ky": "456451731"
+      }
+     },
+     "ok": true,
+     "result_ids": [
+      "calc-1"
+     ],
+     "result_count": 1,
+     "calc": {
+      "formula": "midea_ky * 1000 / 1e8",
+      "inputs": {
+       "midea_ky": "456451731"
+      },
+      "result": "4564.51731",
+      "calculation_id": "calc-1"
+     },
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 0,
+     "payload_chars": 125,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0
+    },
+    {
+     "step": 9,
+     "tool": "calculate",
+     "args": {
+      "expression": "byd / 1e8",
+      "inputs": {
+       "byd": "803964958"
+      }
+     },
+     "ok": true,
+     "result_ids": [
+      "calc-2"
+     ],
+     "result_count": 1,
+     "calc": {
+      "formula": "byd / 1e8",
+      "inputs": {
+       "byd": "803964958"
+      },
+      "result": "8.03964958",
+      "calculation_id": "calc-2"
+     },
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 0,
+     "payload_chars": 108,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0
+    },
+    {
+     "step": 10,
+     "tool": "calculate",
+     "args": {
+      "expression": "moutai / 1e8",
+      "inputs": {
+       "moutai": "168838102514.79"
+      }
+     },
+     "ok": true,
+     "result_ids": [
+      "calc-3"
+     ],
+     "result_count": 1,
+     "calc": {
+      "formula": "moutai / 1e8",
+      "inputs": {
+       "moutai": "168838102514.79"
+      },
+      "result": "1688.3810251479",
+      "calculation_id": "calc-3"
+     },
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 0,
+     "payload_chars": 125,
+     "evidence_chars_added": 0,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0
+    },
+    {
+     "step": 11,
+     "tool": "get_table",
+     "args": {
+      "table_id": "cninfo-002594-2025-annual#t0104"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2025-annual#t0104"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 1196,
+     "payload_chars": 1788,
+     "evidence_chars_added": 1196,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 12,
+     "tool": "get_rows",
+     "args": {
+      "rows": [
+       "营业收入",
+       "营业总收入"
+      ],
+      "table_id": "cninfo-002594-2025-annual#t0007"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2025-annual#t0007#rows#0#cols#0,1,2,3,4"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 435,
+     "payload_chars": 1187,
+     "evidence_chars_added": 435,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 13,
+     "tool": "get_cell",
+     "args": {
+      "column": "2025 年",
+      "row": "其中：营业收入",
+      "table_id": "cninfo-000333-2025-annual#t0095"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0095#1#2025 年"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 73,
+     "payload_chars": 558,
+     "evidence_chars_added": 73,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 14,
+     "tool": "get_cell",
+     "args": {
+      "column": "2025 年",
+      "row": "一、营业总收入",
+      "table_id": "cninfo-000333-2025-annual#t0095"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-000333-2025-annual#t0095#0#2025 年"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 73,
+     "payload_chars": 553,
+     "evidence_chars_added": 73,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 15,
+     "tool": "get_cell",
+     "args": {
+      "column": "2025 年",
+      "row": 0,
+      "table_id": "cninfo-002594-2025-annual#t0104"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2025-annual#t0104#0#2025 年"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 61,
+     "payload_chars": 514,
+     "evidence_chars_added": 61,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 16,
+     "tool": "get_cell",
+     "args": {
+      "column": "2025 年",
+      "row": "营业收入",
+      "table_id": "cninfo-002594-2025-annual#t0007"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-002594-2025-annual#t0007#0#2025 年"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 62,
+     "payload_chars": 549,
+     "evidence_chars_added": 62,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 17,
+     "tool": "get_cell",
+     "args": {
+      "column": "本期数",
+      "row": "营业收入",
+      "table_id": "cninfo-600519-2025-annual#t0013"
+     },
+     "ok": true,
+     "result_ids": [
+      "cninfo-600519-2025-annual#t0013#0#本期数"
+     ],
+     "result_count": 1,
+     "calc": null,
+     "injected": null,
+     "latency_ms": 0,
+     "tokens_in": 0,
+     "tokens_out": 0,
+     "result_chars": 76,
+     "payload_chars": 562,
+     "evidence_chars_added": 76,
+     "locator_chars_added": 0,
+     "duplicate_skipped": 0,
+     "new_result_count": 1
+    },
+    {
+     "step": 18,
+     "tool": "__final__",
+     "args": {},
+     "ok": true,
+     "result_ids": [],
+     "result_count": 0,
+     "injected": null,
+     "latency_ms": 6571,
+     "tokens_in": 8854,
+     "tokens_out": 1087,
+     "self_eval": {
+      "checked": true,
+      "covered": true,
+      "missing": [],
+      "supplemented": false
+     },
+     "clarify": {
+      "mode": "none",
+      "signal": false
+     },
+     "finish_reason": "stop",
+     "note": "cell_repair"
+    }
+   ],
+   "usage": {
+    "steps": 17,
+    "tokens_in": 44535,
+    "tokens_out": 5410,
+    "cache_hit_tokens": 27776,
+    "cache_miss_tokens": 16759,
+    "latency_ms": 38548,
+    "providers": [
+     "primary"
+    ],
+    "rounds": 8,
+    "auto_retries": 0,
+    "self_checks": 1,
+    "repair_rounds": 1,
+    "llm_calls": 9,
+    "max_context_tokens": 8854,
+    "final_context_tokens": 8854,
+    "max_messages_chars": 18665,
+    "tool_result_chars": 6313,
+    "tool_payload_chars": 19255,
+    "duplicate_skipped": 0
+   },
+   "llm_calls": [
+    {
+     "phase": "tool_round",
+     "round": 1,
+     "messages": 2,
+     "messages_chars": 2694,
+     "tokens_in": 2049,
+     "tokens_out": 55,
+     "total_tokens": 2104,
+     "cache_hit_tokens": 1792,
+     "cache_miss_tokens": 257,
+     "latency_ms": 1736,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 2,
+     "messages": 3,
+     "messages_chars": 3439,
+     "tokens_in": 2383,
+     "tokens_out": 195,
+     "total_tokens": 2578,
+     "cache_hit_tokens": 1920,
+     "cache_miss_tokens": 463,
+     "latency_ms": 2437,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 3,
+     "messages": 4,
+     "messages_chars": 5416,
+     "tokens_in": 3349,
+     "tokens_out": 229,
+     "total_tokens": 3578,
+     "cache_hit_tokens": 2304,
+     "cache_miss_tokens": 1045,
+     "latency_ms": 2413,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 4,
+     "messages": 5,
+     "messages_chars": 8279,
+     "tokens_in": 4849,
+     "tokens_out": 488,
+     "total_tokens": 5337,
+     "cache_hit_tokens": 3328,
+     "cache_miss_tokens": 1521,
+     "latency_ms": 3240,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 5,
+     "messages": 6,
+     "messages_chars": 10578,
+     "tokens_in": 5978,
+     "tokens_out": 788,
+     "total_tokens": 6766,
+     "cache_hit_tokens": 4736,
+     "cache_miss_tokens": 1242,
+     "latency_ms": 5696,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 6,
+     "messages": 7,
+     "messages_chars": 14400,
+     "tokens_in": 6532,
+     "tokens_out": 1327,
+     "total_tokens": 7859,
+     "cache_hit_tokens": 896,
+     "cache_miss_tokens": 5636,
+     "latency_ms": 7476,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true,
+     "tools": 9,
+     "tool_choice": "none"
+    },
+    {
+     "phase": "tool_round",
+     "round": 7,
+     "messages": 9,
+     "messages_chars": 15676,
+     "tokens_in": 8787,
+     "tokens_out": 819,
+     "total_tokens": 9606,
+     "cache_hit_tokens": 5888,
+     "cache_miss_tokens": 2899,
+     "latency_ms": 4653,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "tool_calls",
+     "has_reasoning": true,
+     "tools": 9
+    },
+    {
+     "phase": "tool_round",
+     "round": 8,
+     "messages": 10,
+     "messages_chars": 18665,
+     "tokens_in": 8854,
+     "tokens_out": 1087,
+     "total_tokens": 9941,
+     "cache_hit_tokens": 6528,
+     "cache_miss_tokens": 2326,
+     "latency_ms": 6571,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true,
+     "tools": 9,
+     "tool_choice": "none"
+    },
+    {
+     "phase": "self_check",
+     "round": 8,
+     "messages": 1,
+     "messages_chars": 2111,
+     "tokens_in": 1754,
+     "tokens_out": 422,
+     "total_tokens": 2176,
+     "cache_hit_tokens": 384,
+     "cache_miss_tokens": 1370,
+     "latency_ms": 4279,
+     "provider": "primary",
+     "model": "cn:deepseek-v4.1-flash",
+     "finish_reason": "stop",
+     "has_reasoning": true
+    }
+   ],
+   "toolset": "finance",
+   "evidence": [
+    {
+     "chunk_id": "cninfo-000333-2025-annual#t0095#rows#1,0#cols#0,1,2,3,4,5",
+     "title": "美的集团2025年年度报告｜2025 年度合并及公司利润表",
+     "kind": "rows",
+     "page": 135,
+     "truncated": false,
+     "content": "表 cninfo-000333-2025-annual#t0095｜2025 年度合并及公司利润表｜PDF 第 135 页｜单位：千元（来源：document）｜口径：合并｜报表：利润表\n行号 | 项目 | 附注 | 2025 年 | 2024 年 | 2025 年#1 | 2024 年#1\n1 | 其中：营业收入 | 十八(3) | 456,451,731 | 407,149,600 | 936,519 | 946,607\n0 | 一、营业总收入 |  | 458,502,407 | 409,084,266 | 936,519 | 946,607",
+     "table_id": "cninfo-000333-2025-annual#t0095",
+     "table_caption": "2025 年度合并及公司利润表",
+     "row_name": "其中：营业收入、一、营业总收入",
+     "row_indices": [
+      1,
+      0
+     ],
+     "column_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "unit": "千元",
+     "doc_id": "cninfo-000333-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2025-annual#t0104#rows#0#cols#0,1,2,3,4",
+     "title": "比亚迪2025年年度报告｜2、合并利润表",
+     "kind": "rows",
+     "page": 126,
+     "truncated": false,
+     "content": "表 cninfo-002594-2025-annual#t0104｜2、合并利润表｜PDF 第 126 页｜单位：元（来源：document）｜口径：合并｜报表：利润表\n行号 | 项目 | col2 | col3 | 2025 年 | 2024 年\n0 | 一、 | 营业收入 | 45 | 803,964,958 | 777,102,455\n未读取行：营业总收入（重复行: 营业总收入（已跳过，与前面的行名解析到同一行））",
+     "table_id": "cninfo-002594-2025-annual#t0104",
+     "table_caption": "2、合并利润表",
+     "row_name": "营业收入",
+     "row_indices": [
+      0
+     ],
+     "column_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "unit": "元",
+     "doc_id": "cninfo-002594-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-600519-2025-annual#t0013#rows#0#cols#0,1,2,3",
+     "title": "贵州茅台2025年年度报告｜1、利润表及现金流量表相关科目变动分析表",
+     "kind": "rows",
+     "page": 9,
+     "truncated": false,
+     "content": "表 cninfo-600519-2025-annual#t0013｜1、利润表及现金流量表相关科目变动分析表｜PDF 第 9 页｜单位：元（来源：document）｜口径：合并｜报表：利润表\n行号 | 科目 | 本期数 | 上年同期数 | 变动比例（%）\n0 | 营业收入 | 168,838,102,514.79 | 170,899,152,276.34 | -1.21\n未读取行：营业总收入（重复行: 营业总收入（已跳过，与前面的行名解析到同一行））",
+     "table_id": "cninfo-600519-2025-annual#t0013",
+     "table_caption": "1、利润表及现金流量表相关科目变动分析表",
+     "row_name": "营业收入",
+     "row_indices": [
+      0
+     ],
+     "column_indices": [
+      0,
+      1,
+      2,
+      3
+     ],
+     "unit": "元",
+     "doc_id": "cninfo-600519-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2025-annual#t0104",
+     "title": "比亚迪2025年年度报告｜表 cninfo-002594-2025-annual#t0104",
+     "kind": "table",
+     "page": 126,
+     "truncated": false,
+     "content": "表 cninfo-002594-2025-annual#t0104｜2、合并利润表｜PDF 第 126 页｜单位：元｜口径：合并｜报表：利润表\n项目 | col2 | col3 | 2025 年 | 2024 年\n一、 | 营业收入 | 45 | 803,964,958 | 777,102,455\n减：营业成本 |  | 45 | 661,305,161 | 626,046,616\n税金及附加 |  | 46 | 13,580,544 | 14,752,402\n销售费用 |  | 47 | 26,184,568 | 24,085,317\n管理费用 |  | 48 | 20,199,944 | 18,644,661\n研发费用 |  | 49 | 57,978,105 | 53,194,745\n财务费用 |  | 50 | (649,350) | 1,216,206\n其中：利息费用 |  | ",
+     "table_caption": "2、合并利润表",
+     "unit": "元",
+     "doc_id": "cninfo-002594-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2025-annual#t0007#rows#0#cols#0,1,2,3,4",
+     "title": "比亚迪2025年年度报告｜表格",
+     "kind": "rows",
+     "page": 11,
+     "truncated": false,
+     "content": "表 cninfo-002594-2025-annual#t0007｜无标题｜PDF 第 11 页｜单位：元（来源：table）｜口径：合并｜报表：主要会计数据\n行号 | 项目 | 2025 年 | 2024 年 | 本年比上年增减 | 2023 年\n0 | 营业收入（元） | 803,964,958,000.00 | 777,102,455,000.00 | 3.46% | 602,315,354,000.00\n未读取行：营业总收入（重复行: 营业总收入（已跳过，与前面的行名解析到同一行））\n脚注：注：于2025 年7 月，本公司派发股票股利2,431,252,684 股，资本公积转增股本3,646,879,026 股，派发后的发行在外普通股股数为\n9,117,197,565 股。因此，以调整后的股数为基础计算各列报期间的每股收益。\n公司最近三个会计年度扣除非经常性损益前后净利润孰低者均为",
+     "table_id": "cninfo-002594-2025-annual#t0007",
+     "table_caption": "",
+     "row_name": "营业收入（元）",
+     "row_indices": [
+      0
+     ],
+     "column_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "unit": "元",
+     "doc_id": "cninfo-002594-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-000333-2025-annual#t0095#1#2025 年",
+     "title": "美的集团2025年年度报告｜2025 年度合并及公司利润表",
+     "kind": "cell",
+     "page": 135,
+     "truncated": false,
+     "content": "2025 年度合并及公司利润表｜第 135 页｜其中：营业收入 的「2025 年」= 456,451,731（单位：千元，来源：document）",
+     "table_id": "cninfo-000333-2025-annual#t0095",
+     "row_name": "其中：营业收入",
+     "column": "2025 年",
+     "cell_text": "456,451,731",
+     "unit": "千元",
+     "doc_id": "cninfo-000333-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-000333-2025-annual#t0095#0#2025 年",
+     "title": "美的集团2025年年度报告｜2025 年度合并及公司利润表",
+     "kind": "cell",
+     "page": 135,
+     "truncated": false,
+     "content": "2025 年度合并及公司利润表｜第 135 页｜一、营业总收入 的「2025 年」= 458,502,407（单位：千元，来源：document）",
+     "table_id": "cninfo-000333-2025-annual#t0095",
+     "row_name": "一、营业总收入",
+     "column": "2025 年",
+     "cell_text": "458,502,407",
+     "unit": "千元",
+     "doc_id": "cninfo-000333-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2025-annual#t0104#0#2025 年",
+     "title": "比亚迪2025年年度报告｜2、合并利润表",
+     "kind": "cell",
+     "page": 126,
+     "truncated": false,
+     "content": "2、合并利润表｜第 126 页｜营业收入 的「2025 年」= 803,964,958（单位：元，来源：document）",
+     "table_id": "cninfo-002594-2025-annual#t0104",
+     "row_name": "营业收入",
+     "column": "2025 年",
+     "cell_text": "803,964,958",
+     "unit": "元",
+     "doc_id": "cninfo-002594-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-002594-2025-annual#t0007#0#2025 年",
+     "title": "比亚迪2025年年度报告｜表格",
+     "kind": "cell",
+     "page": 11,
+     "truncated": false,
+     "content": "表格｜第 11 页｜营业收入（元） 的「2025 年」= 803,964,958,000.00（单位：元，来源：table）",
+     "table_id": "cninfo-002594-2025-annual#t0007",
+     "row_name": "营业收入（元）",
+     "column": "2025 年",
+     "cell_text": "803,964,958,000.00",
+     "unit": "元",
+     "doc_id": "cninfo-002594-2025-annual"
+    },
+    {
+     "chunk_id": "cninfo-600519-2025-annual#t0013#0#本期数",
+     "title": "贵州茅台2025年年度报告｜1、利润表及现金流量表相关科目变动分析表",
+     "kind": "cell",
+     "page": 9,
+     "truncated": false,
+     "content": "1、利润表及现金流量表相关科目变动分析表｜第 9 页｜营业收入 的「本期数」= 168,838,102,514.79（单位：元，来源：document）",
+     "table_id": "cninfo-600519-2025-annual#t0013",
+     "row_name": "营业收入",
+     "column": "本期数",
+     "cell_text": "168,838,102,514.79",
+     "unit": "元",
+     "doc_id": "cninfo-600519-2025-annual"
+    }
+   ],
+   "calc": [
+    {
+     "formula": "midea_ky * 1000 / 1e8",
+     "inputs": {
+      "midea_ky": "456451731"
+     },
+     "result": "4564.51731",
+     "calculation_id": "calc-1"
+    },
+    {
+     "formula": "byd / 1e8",
+     "inputs": {
+      "byd": "803964958"
+     },
+     "result": "8.03964958",
+     "calculation_id": "calc-2"
+    },
+    {
+     "formula": "moutai / 1e8",
+     "inputs": {
+      "moutai": "168838102514.79"
+     },
+     "result": "1688.3810251479",
+     "calculation_id": "calc-3"
+    }
+   ]
+  }
+ ]
+}

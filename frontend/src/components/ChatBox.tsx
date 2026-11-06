@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { message, Spin, Typography } from 'antd'
+import { Checkbox, message, Spin, Tooltip, Typography } from 'antd'
 import {
   CalcRecord,
   EvidenceRef,
@@ -49,6 +49,8 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
   // 首帧就按断点决定，避免移动端先渲染 Drawer 再被 effect 关掉（会闪一下遮罩）。
   const [sidebarVisible, setSidebarVisible] = useState(() => !isMobile)
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
+  // 联网是兜底能力：默认关闭，只影响本地语料覆盖不到的问题。
+  const [allowWeb, setAllowWeb] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const currentTurnIndexRef = useRef(-1)
@@ -169,8 +171,8 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
   const handleSend = useCallback((text: string) => {
     // 新问题一定切到最新一轮，否则会停留在旧的查证记录上。
     setActiveTurnIndex(null)
-    sendMessage(text)
-  }, [sendMessage])
+    sendMessage(text, allowWeb)
+  }, [sendMessage, allowWeb])
 
   const handleReconnect = useCallback(async () => {
     setConnectionState('connecting')
@@ -262,13 +264,16 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
     if (!savedFingerprint || !currentFingerprint) return 'unknown' as const
     return savedFingerprint === currentFingerprint ? ('current' as const) : ('changed' as const)
   })()
-  // 证据检查器空着的原因要分清：没提问 / 旧会话没存证据 / 这一轮确实没引用。
-  const emptyReason: 'idle' | 'legacy' | 'no_citation' =
+  // 证据检查器空着的原因要分清：没提问 / 旧会话没存证据 / 这一轮确实没引用 /
+  // 概念问答本来就不引用。
+  const emptyReason: 'idle' | 'legacy' | 'no_citation' | 'concept' =
     currentStatus === 'legacy'
       ? 'legacy'
-      : currentStatus && currentCitations.length === 0
-        ? 'no_citation'
-        : 'idle'
+      : currentAnswer?.finance?.strategy === 'concept'
+        ? 'concept'
+        : currentStatus && currentCitations.length === 0
+          ? 'no_citation'
+          : 'idle'
 
   const handleVerificationIssue = useCallback((_evidenceId: string) => {
     // 回查 404：当前这一轮从“已回答”降级为“需人工复核”。
@@ -425,6 +430,17 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
             loading={loading}
             onSend={handleSend}
             onNewConversation={handleNewConversation}
+            toolbar={
+              <Tooltip title="本地语料未覆盖时，检索公开信息并标注来源（未核实，不构成投资建议）">
+                <Checkbox
+                  checked={allowWeb}
+                  onChange={(e) => setAllowWeb(e.target.checked)}
+                  style={{ marginRight: 8, fontSize: 12, whiteSpace: 'nowrap' }}
+                >
+                  联网
+                </Checkbox>
+              </Tooltip>
+            }
           />
         </div>
 

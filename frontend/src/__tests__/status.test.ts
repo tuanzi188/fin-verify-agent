@@ -32,6 +32,11 @@ describe('status vocabulary', () => {
     expect(deriveStatus('answered', { hasClaims: true, hasCitations: true })).toBe('answered')
   })
 
+  it('keeps concept answers answered when there are no claims or citations', () => {
+    // 概念问答本来就不带要点和引用，不能因此显示“需人工复核”。
+    expect(deriveStatus('answered', { hasClaims: false, hasCitations: false })).toBe('answered')
+  })
+
   it('keeps terminal states untouched', () => {
     expect(deriveStatus('abstained', { corpusChanged: true })).toBe('abstained')
     expect(deriveStatus('error', { hasClaims: true })).toBe('error')

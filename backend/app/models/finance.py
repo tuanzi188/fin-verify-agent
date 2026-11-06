@@ -147,6 +147,8 @@ class FinanceChatRequest(BaseModel):
     search_mode: str = Field(default="blocks", pattern="^(sections|blocks)$")
     # auto 由产品路由决定；agent / structured_rag 仅供实验与排障显式调用。
     strategy: str = Field(default="auto", pattern="^(auto|agent|structured_rag)$")
+    # 联网综述是兜底能力，默认关闭；只有本地语料未覆盖且用户显式允许时才走。
+    allow_web: bool = False
 
 
 class FinanceChatResponse(BaseModel):
@@ -168,6 +170,14 @@ class FinanceChatResponse(BaseModel):
     notes: List[str] = Field(default_factory=list)
     verification: Dict[str, Any] = Field(default_factory=dict)
     resolved_query: str = ""
+    # 联网综述（未核实）。有值时 answer 是综述摘要，citations 必为空。
+    market_brief: Optional[Dict[str, Any]] = None
+    # 拒答分级（六类之一）。仅 status 为 abstained / clarified 时有值。
+    refusal: Optional[Dict[str, Any]] = None
+    # 概念问答：从 answer 首段切出的定论，前端单独放大显示；answer 仍保留全文。
+    answer_lead: str = ""
+    # 概念问答实际检索到的公开信息。只做透明展示，不是 [n] 证据，也不能回查到单元格。
+    web_sources: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class FinanceDocumentInfo(BaseModel):

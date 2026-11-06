@@ -202,8 +202,9 @@ def test_search_tables_locator_marks_summary_table_as_recommended(store):
     }]
     items = toolset.to_evidence("search_tables", data)
     assert len(items) == 1
-    assert "【推荐】" in items[0]["content"]
-    assert "demo#t1" not in items[0]["content"].split("【推荐】")[-1]  # 不写死具体表号
+    # 标记走结构化字段，不拼进自由文本
+    assert items[0]["summary_table"] is True
+    assert "【推荐】" not in items[0]["content"]
 
 
 def test_search_tables_locator_does_not_mark_narrative_table(store):
@@ -213,7 +214,26 @@ def test_search_tables_locator_does_not_mark_narrative_table(store):
         "columns": ["项目", "2025 年"], "row_labels": ["营业收入合计"], "doc_id": "demo",
     }]
     items = toolset.to_evidence("search_tables", data)
+    assert items[0]["summary_table"] is False
     assert "【推荐】" not in items[0]["content"]
+
+
+def test_summary_table_flag_actually_reaches_the_model(store):
+    """定位项由 runner 渲染，只取 chunk_id/title/page。
+
+    旧版把「【推荐】」拼进 content，模型根本看不到——标记是死的。
+    字段加在 evidence 上还不够，渲染层必须把它写出来。
+    """
+    from app.agent.runner import _format_locators
+
+    toolset = FinanceToolset(store, search_mode="sections")
+    items = toolset.to_evidence("search_tables", [{
+        "table_id": "demo#t1", "caption": "主要会计数据和财务指标",
+        "page": 9, "columns": [], "row_labels": [], "doc_id": "demo",
+    }])
+    text = _format_locators(items)
+    assert "汇总表" in text
+    assert "demo#t1#table_locator" in text
 
 
 def test_finance_rules_guides_table_selection():

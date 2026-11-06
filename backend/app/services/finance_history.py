@@ -89,4 +89,11 @@ def build_history_payload(
         "notes": list(response.notes),
         "verification": response.verification,
         "resolved_query": response.resolved_query,
+        # 联网综述是独立的结构化块，重开会话必须原样带回，否则只剩一句摘要
+        "market_brief": response.market_brief,
+        # 拒答类别同样要带回：重开会话时状态条要显示同一级别的提示
+        "refusal": response.refusal,
+        # 概念问答的首段定论与联网来源：重开会话不能丢，否则定论和来源条会消失
+        "answer_lead": response.answer_lead,
+        "web_sources": list(response.web_sources),
     }

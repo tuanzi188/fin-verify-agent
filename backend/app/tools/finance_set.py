@@ -586,17 +586,18 @@ class FinanceToolset:
     def system_prompt(self, variant: str) -> str:
         prompt = FINANCE_IMPROVED_SYSTEM if variant == "improved" else FINANCE_BASELINE_SYSTEM
         prompt += (
-            "\n计算结果的结论必须同时引用原始证据 [n] 和对应计算 [计算1]、[计算2]。"
-            "计算编号按 calculate 成功调用顺序排列；每个计算输入必须先读取对应单元格。"
+            "\n每个计算的输入必须先读取对应单元格。"
             "百分数相减后用百分点表示时，原始小数差必须乘以 100，例如 30%-20%=10 个百分点。"
-            "同一指标同时出现在合并报表与母公司报表时，默认用合并口径；"
-            "用户明确问母公司时才用母公司，并在回答里写清口径。"
         )
         if self.search_mode == "blocks":
+            # 规则正文里提到了 search_sections；不删掉，模型会去调一个不存在的工具
+            # （2026-11-03 实测：blocks 模式下仍在条数预算内反复尝试）。
             prompt = prompt.replace(
-                "- search_sections(query, doc_id?, top_k?)：按关键词定位章节。"
-                "**它只负责定位，返回的是章节摘要，不是证据**\n",
-                "",
+                "search_sections / search_blocks / search_tables 只给章节/块/表 id 和摘要",
+                "search_blocks / search_tables 只给块/表 id 和摘要",
+            ).replace(
+                "；结构块检索不到再退回 search_sections（本模式提供时才用）；\n    仍然",
+                "；仍然",
             )
             prompt += (
                 "\n\n本模式只提供 search_blocks，不提供 search_sections；"
@@ -805,13 +806,15 @@ class FinanceToolset:
                     content += f"｜匹配行：{matched}"
                 content = content[:600]
                 caption = str(item.get("caption") or "")
-                # 选表引导（2026-11-04）：CX-08 实测模型放着金标「主要会计数据」
-                # 汇总表不读，转头读「营业收入构成」叙述表，导致 4 个要点只有 1 个
-                # 被引用。这里按 caption 特征标出标准读数出处，不写死任何表号/公司名，
-                # 只是把「哪张表更适合查数」显式交给模型判断。追加在截断之后，
-                # 避免被 content[:600] 切掉。
-                if "主要会计" in caption or "主要财务指标" in caption:
-                    content += "｜【推荐】主要会计数据/财务指标汇总表，查数优先读此表"
+                # 选表引导（2026-11-04，2026-11-06 改为结构化字段）：CX-08 实测模型
+                # 放着金标「主要会计数据」汇总表不读，转头读「营业收入构成」叙述表，
+                # 导致 4 个要点只有 1 个被引用。
+                #
+                # 原来把「｜【推荐】…」拼进 content，但定位项由 runner._format_locators
+                # 渲染，那里只取 chunk_id/title/page，content 到不了模型——标记是死的。
+                # 现在改成字段：标记由渲染层生成，提示词不再依赖工具的自由文本，
+                # caption 特征改了也不用同步改提示词。
+                summary_table = "主要会计" in caption or "主要财务指标" in caption
                 rows.append(
                     evidence_item(
                         chunk_id=f"{item.get('table_id')}#table_locator",
@@ -828,6 +831,7 @@ class FinanceToolset:
                         doc_id=item.get("doc_id"),
                         row_labels=item.get("row_labels"),
                         matched_rows=item.get("matched_rows"),
+                        summary_table=summary_table,
                     )
                 )
             return rows

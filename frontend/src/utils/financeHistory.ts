@@ -6,6 +6,9 @@ import type {
   EvidenceKind,
   EvidenceRef,
   FinanceCitation,
+  MarketBrief,
+  RefusalInfo,
+  WebSourceRef,
 } from '../api/client'
 
 /**
@@ -32,7 +35,7 @@ export interface FinanceVerification {
 
 export interface FinanceMessagePayload {
   status: AgentStatus
-  strategy: 'structured_rag' | 'agent' | string
+  strategy: 'structured_rag' | 'agent' | 'concept' | string
   route_reason: string
   claims: Claim[]
   citations: FinanceCitation[]
@@ -43,6 +46,14 @@ export interface FinanceMessagePayload {
   resolved_query?: string
   /** 落库时的块索引指纹；和 /finance/stats 对比可判断语料是否变化。 */
   corpus_fingerprint?: string
+  /** 联网综述（未核实）。与 citations 互斥，不进引用集合。 */
+  market_brief?: MarketBrief
+  /** 拒答分级（六类之一）：只有 abstained / clarified 轮次才有。 */
+  refusal?: RefusalInfo
+  /** 概念问答：首段定论（正文 answer 里仍保留全文）。 */
+  answer_lead?: string
+  /** 概念问答实际检索到的公开信息，只做透明展示。 */
+  web_sources?: WebSourceRef[]
 }
 
 const EVIDENCE_KINDS: EvidenceKind[] = ['paragraph', 'table_rows', 'table_cell', 'document']
@@ -88,6 +99,58 @@ function normalizeVerification(raw: unknown): FinanceVerification | undefined {
     checked_numbers: typeof data.checked_numbers === 'number' ? data.checked_numbers : undefined,
     issues,
     status: asString(data.status) || undefined,
+  }
+}
+
+function normalizeMarketBrief(raw: unknown): MarketBrief | undefined {
+  const data = asRecord(raw)
+  if (!data) return undefined
+  const sections = asRecord(data.sections) ?? {}
+  return {
+    ok: data.ok === true,
+    question: asString(data.question),
+    summary: asString(data.summary),
+    sections: Object.fromEntries(
+      Object.entries(sections).map(([key, value]) => [key, asArray<string>(value)]),
+    ),
+    misreadings: asArray<string>(data.misreadings),
+    divergences: asArray<string>(data.divergences),
+    gaps: asArray<string>(data.gaps),
+    sources: asArray<MarketBrief['sources'][number]>(data.sources),
+    skipped_sources: asArray<NonNullable<MarketBrief['skipped_sources']>[number]>(
+      data.skipped_sources,
+    ),
+    ingest_candidates: asArray<NonNullable<MarketBrief['ingest_candidates']>[number]>(
+      data.ingest_candidates,
+    ),
+    raw: asString(data.raw) || undefined,
+    as_of: asString(data.as_of),
+    disclaimer: asString(data.disclaimer),
+    warnings: asArray<string>(data.warnings),
+    queries: asArray<string>(data.queries),
+    skipped_reason: asString(data.skipped_reason) || null,
+    error: asString(data.error) || null,
+  }
+}
+
+/** 拒答类别缺字段时按缺失处理：宁可不显示标签，也不猜级别。 */
+function normalizeRefusal(raw: unknown): RefusalInfo | undefined {
+  const data = asRecord(raw)
+  if (!data) return undefined
+  const code = asString(data.code)
+  const label = asString(data.label)
+  const level = typeof data.level === 'number' ? data.level : Number(data.level)
+  if (!code || !label || !Number.isFinite(level)) return undefined
+  return {
+    code,
+    label,
+    level,
+    level_label: asString(data.level_label),
+    action: asString(data.action),
+    action_label: asString(data.action_label),
+    recover_by: asString(data.recover_by),
+    hint: asString(data.hint),
+    detail: asString(data.detail) || undefined,
   }
 }
 
@@ -166,5 +229,9 @@ export function parseFinancePayload(raw: unknown): FinanceMessagePayload | undef
     verification: normalizeVerification(data.verification),
     resolved_query: asString(data.resolved_query) || undefined,
     corpus_fingerprint: asString(data.corpus_fingerprint) || undefined,
+    market_brief: normalizeMarketBrief(data.market_brief),
+    refusal: normalizeRefusal(data.refusal),
+    answer_lead: asString(data.answer_lead) || undefined,
+    web_sources: asArray<WebSourceRef>(data.web_sources),
   }
 }

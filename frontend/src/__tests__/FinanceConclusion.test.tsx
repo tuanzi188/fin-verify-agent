@@ -84,6 +84,32 @@ describe('FinanceConclusion', () => {
     expect(screen.getByText('材料不足')).toBeTruthy()
   })
 
+  it('replaces the generic notice with the refusal class and next step', () => {
+    render(
+      <FinanceConclusion
+        finance={payload({
+          status: 'abstained',
+          claims: [],
+          refusal: {
+            code: 'source_conflict',
+            label: '候选冲突',
+            level: 3,
+            level_label: '证据缺口',
+            action: 'refuse',
+            action_label: '证据不够',
+            recover_by: 'manual',
+            hint: '同一指标出现不同候选值或单位，需人工核对表与口径后再引用。',
+          },
+        })}
+        onEvidenceClick={() => {}}
+      />,
+    )
+    // 冲突不能说成"材料不足"：标题和下一步都要换成具体类别
+    expect(screen.getByText('候选冲突 · 证据缺口')).toBeTruthy()
+    expect(screen.getByText(/需人工核对表与口径/)).toBeTruthy()
+    expect(screen.queryByText('材料不足')).toBeNull()
+  })
+
   it('marks uncertainty on the claim instead of a separate block', () => {
     render(
       <FinanceConclusion

@@ -75,7 +75,13 @@ describe('useChat finance mode', () => {
       await result.current.sendMessage('美的智能家居收入占比')
     })
 
-    expect(mocks.sendFinanceChat).toHaveBeenCalledWith('美的智能家居收入占比', undefined)
+    expect(mocks.sendFinanceChat).toHaveBeenCalledWith(
+      '美的智能家居收入占比',
+      undefined,
+      10,
+      'blocks',
+      false,
+    )
     expect(result.current.messages).toHaveLength(2)
     expect(result.current.messages[1].finance?.claims).toHaveLength(1)
     expect(result.current.messages[1].finance?.calc[0].result).toBe('65.7084')
@@ -97,6 +103,47 @@ describe('useChat finance mode', () => {
     expect(result.current.messages[1].status).toBe('error')
     expect(result.current.messages[1].content).toContain('boom')
     expect(result.current.loading).toBe(false)
+  })
+
+  it('passes allowWeb and keeps the market brief payload', async () => {
+    mocks.sendFinanceChat.mockResolvedValue({
+      status: 'answered',
+      answer: '多项因素叠加。',
+      claims: [],
+      citations: [],
+      calc: [],
+      trace: [],
+      conversation_id: 'conv-web',
+      model_used: 'flash',
+      variant: 'improved',
+      strategy: 'market_brief',
+      route_reason: '本地语料未覆盖',
+      search_mode: 'blocks',
+      duration_ms: 1,
+      notes: [],
+      market_brief: {
+        ok: true,
+        question: '为什么跌',
+        summary: '多项因素叠加。',
+        sections: {},
+        misreadings: [],
+        divergences: [],
+        gaps: [],
+        sources: [],
+        as_of: '2026-11-05T00:00:00+00:00',
+        disclaimer: '未核实，不构成投资建议',
+        warnings: [],
+      },
+    })
+
+    const { result } = renderHook(() => useChat())
+
+    await act(async () => {
+      await result.current.sendMessage('为什么跌', true)
+    })
+
+    expect(mocks.sendFinanceChat).toHaveBeenCalledWith('为什么跌', undefined, 10, 'blocks', true)
+    expect(result.current.messages[1].finance?.market_brief?.summary).toBe('多项因素叠加。')
   })
 
   it('restores structured finance turns from conversation history', () => {

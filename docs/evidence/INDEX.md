@@ -26,6 +26,14 @@ read_when: 引用任何 pass@1 / token / 命中率数字前
 > 这份报告仍是**修复前**的读数，不能当作修复效果。零模型重判确定性检查只确认了
 > FIN-11 / FIN-S06 的 `tool_call_count` 假失败可消除；pass@1 与 token 的实际变化
 > 必须等同一 11 题卡、同一 judge、仅 commit 不同的 A/B 复测落盘后登记到 §D。
+>
+> **补记（2026-11-06，judge 口径变更）**：`backend/evaluation/agent_judge.py` 的
+> `_JUDGE_TEMPLATE` 于本日改动——删除与 `CLARIFY_INSTRUCTIONS["none"]` 冲突的硬编码
+> 澄清口径，并由 `equivalence.rubric_text()` 注入 9 条 few-shot。**上表两份判分读数
+> （64.3% / 7/11）都由改动前的 judge 产出，与改动后的新判分不是同一口径，不可相减、
+> 不可写成「提升 X」**。按 `AGENTS.md §6`「三套判分口径」与 §9.6，本轮只写「已实现 /
+> 未复测」，未跑真实 judge，不登记任何新读数。`--reuse-judgments`
+> （`score_agent_runs.py` 按 task_id+run_index 对齐）复用的仍是旧口径 judgment。
 
 | 口径 | 产物 | 读数 | 绑定条件 |
 |---|---|---|---|
@@ -120,11 +128,27 @@ python -m evaluation.score_agent_runs \
 | `finance_ms11_20261104.tasks.jsonl` | tasks snapshot | 11-04 | current | 随 runs 自动落盘的实际任务集快照，`run_config.tasks_file` 指向它 |
 | `finance_ms11_report_20261104.json` | report | 11-04 | **current（11 题剖面）** | `pass@1=7/11`、真实 judge、硬红线全 0；**单次、不同条件，不与 64.3% 相减** |
 | `finance_ms11_badcases_20261104.jsonl` | badcase | 11-04 | current | 4 条 badcase，主因「参数错误 / 检索无命中」 |
+| `format_probe3_20261106.json` | runs（探针） | 11-06 | **historical（阴性结果）** | 提示词排版实验：`FIN-07 / FIN-09 / FIN-11` 三题、`blocks`、improved、`runs_per_task=1`、真实模型；合计 185,056 token（旧同三题 214,758）。**实验未采纳、提示词已回退**，读数只作「不要再这样改」的记录 |
+| `format_probe3_20261106.tasks.jsonl` | tasks snapshot | 11-06 | historical | 上述探针的实际任务集快照（3 题） |
+| `format_probe3b_20261106.json` | runs（探针） | 11-06 | **historical（部分采纳）** | 冲突清理后的同 3 题复测：内部表 id 6/7/0 → 0/0/0、FIN-11 自我否定消失；但公式仍进正文、FIN-09 单点查数由 294 字增至 793 字。合计 199,813 token（探针 A 185,056、旧 214,758）。`runs_per_task=1`，不外推 |
+| `format_probe3b_20261106.tasks.jsonl` | tasks snapshot | 11-06 | historical | 上述复测的实际任务集快照（3 题） |
+| `format_probe3c_20261106.json` | runs（探针） | 11-06 | **historical（瘦身后对照）** | 同 3 题、同任务卡，仅提示词不同（工具说明 641→129 字）：失败工具 1→0、步数 15.0→12.7、合计 130,882 token（探针 B 199,813）；金标覆盖 5/5、未溯源数值 15/90。`runs_per_task=1`、无 judge，不作收益结论 |
+| `format_probe3c_20261106.tasks.jsonl` | tasks snapshot | 11-06 | historical | 上述对照的实际任务集快照（3 题） |
+
+**补记（2026-11-06，提示词绑定字段）**：`run_finance_eval.py` 自本日起在
+`run_config` 写入 `prompt_sha256` / `prompt_variant` / `prompt_search_mode` / `prompt_chars`
+（取 `toolset.system_prompt(variant)` 拼接后的最终文本，含 blocks 模式的替换与后缀）。
+上面三份 `format_probe3*` 写于该字段引入之前，`run_config.git` 只有
+`commit=a041a65` + `dirty=true`，**无法区分跑了哪一版提示词**——三次实验的差别
+恰恰只有提示词。按 `AGENTS.md §9.2` 标 `binding: incomplete`：保留读数作
+「不要再这样改」的阴性/对照记录，**不得作为可复现基线引用**，也不回改历史产物
+（§9.5 归档只增不改）。今后任何以提示词为变量的 runs，绑定条件必须包含 `prompt_sha256`。
 
 ## E. 基线登记规则
 
 1. 每个基线绑定 `(corpus_hash, tasks_sha256, git_commit, judge_mode, scoring, cost_basis)`；
-   缺任一项标 `incomplete`。
+   缺任一项标 `incomplete`。**2026-11-06 补**：以提示词为变量的对照还须带
+   `prompt_sha256`（见 §D 补记），否则 `dirty=true` 的 commit 区分不出提示词版本。
 2. `status=current` 每种口径一条；旧条目标 `historical`/`superseded` 并写 `supersedes` 链。
    **没有绑定当前代码的产物时，不要硬标 `current`**：用 `unique（旧基线）` 并写明
    绑定的 commit。产物清单的 `run_config.git`（新产物自带）是判断依据；

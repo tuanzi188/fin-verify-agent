@@ -80,6 +80,8 @@ class FinanceQuestionScope:
     quarter: str = ""
     blocked_reason: str = ""
     clarify: bool = False
+    #: 拒答分级编码（见 app/finance/refusal.py）；空串表示本层放行。
+    blocked_code: str = ""
 
 
 def scope_years(question: str) -> set[str]:
@@ -240,6 +242,14 @@ def unknown_scope_company(question: str, documents: list[dict]) -> str:
                 "分红",
                 "派息",
                 "股息",
+                # 疑问词不是主体。「什么是毛利率」曾把「什么是」当成公司名，
+                # 直接拒答「本地语料未覆盖主体『什么是』」（2026-11-06 实测）。
+                "什么",
+                "啥",
+                "如何",
+                "怎么",
+                "为什么",
+                "为何",
             )
         ):
             return before_metric
@@ -264,6 +274,53 @@ def _relative_year(question: str, available_years: set[str]) -> str:
     if re.search(r"最新一期|最近一期|最新|最近", question) and available_years:
         return max(available_years)
     return ""
+
+
+# 「近三年」「最近五年」「过去两年」：按语料最新覆盖年份倒推，不按模型训练截止时间。
+# 倒推出的区间原样保留，不做裁剪——缺哪一年由证据层报缺口，比静默换成能查的年份诚实。
+_RECENT_YEARS = re.compile(r"(?:近|最近|过去)\s*([一二三四五六七八九十\d]{1,2})\s*个?年")
+
+
+def _small_int(token: str) -> int:
+    """把「三」「十二」「20」这类个位到两位的中文/阿拉伯数字转成整数。"""
+    token = (token or "").strip()
+    if token.isdigit():
+        return int(token)
+    digits = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if token == "十":
+        return 10
+    if "十" in token:
+        left, _, right = token.partition("十")
+        return digits.get(left, 1 if not left else 0) * 10 + digits.get(right, 0)
+    return digits.get(token, 0)
+
+
+def _recent_year_span(question: str, available_years: set[str]) -> list[str]:
+    """「近三年」→ ['2023', '2024', '2025']；超过十年不猜，交给上游澄清。"""
+    match = _RECENT_YEARS.search(question or "")
+    numeric_years = sorted(int(year) for year in available_years if year.isdigit())
+    if not match or not numeric_years:
+        return []
+    count = _small_int(match.group(1))
+    if not 1 <= count <= 10:
+        return []
+    end = numeric_years[-1]
+    return [str(year) for year in range(end - count + 1, end + 1)]
+
+
+# 相对季度：按当前日历解析，再交给覆盖检查决定能否回答。
+# 「上一季度」会先被 _SCOPE_QUARTER 误读成「一季」= Q1，所以必须在它之前替换掉。
+_RELATIVE_QUARTER = re.compile(r"上一?季度|上个季度|上季度|本季度|这个季度|当季")
+
+
+def _relative_quarter(phrase: str, now: datetime | None = None) -> tuple[str, str]:
+    moment = now or datetime.now()
+    current = (moment.month - 1) // 3 + 1
+    if phrase.startswith("本") or phrase in ("这个季度", "当季"):
+        return str(moment.year), f"Q{current}"
+    if current == 1:
+        return str(moment.year - 1), "Q4"
+    return str(moment.year), f"Q{current - 1}"
 
 
 def prepare_finance_scope(
@@ -296,6 +353,7 @@ def prepare_finance_scope(
                     query,
                     blocked_reason="请确认基于哪一个报告期查询上一年或下一年。",
                     clarify=True,
+                    blocked_code="ambiguous_scope",
                 )
             offset = 1 if relative.group() in ("下一年", "次年") else -1
             inherited_year = str(int(next(iter(previous_years))) + offset)
@@ -312,11 +370,18 @@ def prepare_finance_scope(
                     query,
                     blocked_reason="上一轮涉及多家公司，请确认本轮要查哪一家。",
                     clarify=True,
+                    blocked_code="ambiguous_scope",
                 )
             if previous_companies:
                 companies = previous_companies
                 resolved = companies[0] + " " + resolved
-        if not years and len(previous_years) == 1:
+        # 「那近三年呢」「那上一季度呢」自带期间语义，不能被上一轮年份顶掉
+        if (
+            not years
+            and len(previous_years) == 1
+            and not _RECENT_YEARS.search(resolved)
+            and not _RELATIVE_QUARTER.search(resolved)
+        ):
             years = previous_years
             resolved = next(iter(years)) + " 年 " + resolved
         if not _SCOPE_METRIC.search(query):
@@ -330,7 +395,26 @@ def prepare_finance_scope(
                     query,
                     blocked_reason="上一轮涉及多个指标，请确认本轮要继续查询哪一个。",
                     clarify=True,
+                    blocked_code="ambiguous_scope",
                 )
+    # 相对季度必须在 scope_quarter 之前替换：否则「上一季度」会被读成「一季」= Q1。
+    relative_quarter = _RELATIVE_QUARTER.search(resolved)
+    if relative_quarter:
+        # 「2025 年上一季度」本身矛盾（相对季度以今天为基准），不猜，先澄清。
+        if scope_years(query):
+            return FinanceQuestionScope(
+                query,
+                blocked_reason="「上一季度」这类相对季度不能与指定年份同时使用，请确认要查的季度。",
+                clarify=True,
+                blocked_code="ambiguous_scope",
+            )
+        quarter_year, quarter_label = _relative_quarter(relative_quarter.group(0))
+        resolved = (
+            resolved[: relative_quarter.start()]
+            + f"{quarter_year} 年 {quarter_label} "
+            + resolved[relative_quarter.end() :]
+        )
+        years = {quarter_year}
     quarter = scope_quarter(resolved)
     base = {
         "resolved_query": resolved,
@@ -342,6 +426,7 @@ def prepare_finance_scope(
         return FinanceQuestionScope(
             **base,
             blocked_reason=f"本地语料未覆盖主体「{current_unknown}」，请提供对应材料后再查证。",
+            blocked_code="out_of_scope",
         )
     covered = [
         document
@@ -350,7 +435,9 @@ def prepare_finance_scope(
     ]
     if companies and not covered:
         return FinanceQuestionScope(
-            **base, blocked_reason="本地语料未覆盖本轮指定的公司。"
+            **base,
+            blocked_reason="本地语料未覆盖本轮指定的公司。",
+            blocked_code="out_of_scope",
         )
     # 年报可包含上年对比值，不因缺上年独立文档就拒答；只拦截超出最新覆盖的未来期间。
     available_years = (
@@ -363,16 +450,25 @@ def prepare_finance_scope(
     # 相对期间确定性解析（零成本、可复现）：去年/前年按当前年份推算，
     # 「最新一期」映射到语料最新覆盖年份。真实用户高频省略年份，不能一律澄清。
     if not years:
-        relative_year = _relative_year(resolved, available_years)
-        if relative_year:
-            years = {relative_year}
-            resolved = f"{relative_year} 年 " + resolved
+        # 「近三年」先于「最近」：否则「最近」会把它解析成单一年份。
+        span = _recent_year_span(resolved, available_years)
+        if span:
+            years = set(span)
+            resolved = _RECENT_YEARS.sub("、".join(span) + " 年", resolved, count=1)
             base["resolved_query"] = resolved
             base["years"] = tuple(sorted(years))
+        else:
+            relative_year = _relative_year(resolved, available_years)
+            if relative_year:
+                years = {relative_year}
+                resolved = f"{relative_year} 年 " + resolved
+                base["resolved_query"] = resolved
+                base["years"] = tuple(sorted(years))
     if years and available_years and max(years) > max(available_years):
         return FinanceQuestionScope(
             **base,
             blocked_reason=f"本地最新覆盖 {max(available_years)} 年，无法查证指定期间。",
+            blocked_code="out_of_scope",
         )
     if quarter:
         quarter_documents = [
@@ -399,5 +495,6 @@ def prepare_finance_scope(
             return FinanceQuestionScope(
                 **base,
                 blocked_reason=f"本地没有与指定期间匹配的 {quarter} 季报；现有年报不能直接替代该季度披露。",
+                blocked_code="insufficient_evidence",
             )
     return FinanceQuestionScope(**base)

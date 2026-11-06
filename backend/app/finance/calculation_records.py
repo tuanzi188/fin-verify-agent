@@ -14,7 +14,9 @@ from app.models.finance import CalcRecord, FinanceCitation
 logger = logging.getLogger(__name__)
 
 _FINANCIAL_NUMBER = re.compile(
-    r"(?<![\d.])(?P<value>[-−]?\d[\d,，]*(?:\.\d+)?)\s*"
+    # 收尾括号要一起匹配：`(5,728,446) 千元` 的单位在括号外面，
+    # 不把括号吃掉，单位就丢了，校验会因为"结论有单位、单元格没单位"判不一致。
+    r"(?<![\d.])(?P<value>[-−]?\d[\d,，]*(?:\.\d+)?)\s*(?P<close>[)）])?\s*"
     r"(?P<unit>亿元|百万元|万元|千元|元|个百分点|pp|%|％|倍)?"
 )
 _DERIVATION_WORDS = (
@@ -36,16 +38,29 @@ _DERIVATION_WORDS = (
 
 
 def record_number_tokens(text: str) -> list[tuple[Decimal, str]]:
-    """按完整数字取值，避免把 112 匹配到结果 12。"""
+    """按完整数字取值，避免把 112 匹配到结果 12。
+
+    财报用括号表示负数（`(5,728,446)`、`（12,345.00）`），这是文档级
+    `negative_format=parentheses` 的口径；不翻符号会让「-5728446」与单元格
+    对不上，校验会误判 numeric_mismatch。
+
+    但括号也用来写序号：`（1）`、`（2）`。所以只有带千分位或小数点时才当负数，
+    纯整数括号保持原值——否则编号会被读成 -1。
+    """
+    text = str(text or "")
     values: list[tuple[Decimal, str]] = []
-    for match in _FINANCIAL_NUMBER.finditer(str(text or "")):
-        raw = match.group("value").replace(",", "").replace("，", "").replace("−", "-")
+    for match in _FINANCIAL_NUMBER.finditer(text):
+        token = match.group("value")
+        raw = token.replace(",", "").replace("，", "").replace("−", "-")
         try:
             value = Decimal(raw)
         except InvalidOperation:
             continue
-        start, end = match.span()
-        if start and text[start - 1] in "(（" and text[end : end + 1] in (")", "）"):
+        start = match.start()
+        # 括号和数字之间常带空格：`(1,474,894 )`、`（ 12,345 ）`
+        before = text[:start].rstrip()[-1:]
+        parenthesized = before in ("(", "（") and bool(match.group("close"))
+        if parenthesized and any(symbol in token for symbol in (",", "，", ".")):
             value = -abs(value)
         if value.is_finite():
             values.append((value, (match.group("unit") or "").replace("％", "%")))

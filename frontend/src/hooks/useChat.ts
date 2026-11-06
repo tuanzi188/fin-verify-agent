@@ -39,7 +39,7 @@ export interface UseChatReturn {
   conversationId: string | undefined
   setConversationId: (id: string | undefined) => void
   setMessages: (messages: Message[]) => void
-  sendMessage: (query: string) => Promise<void>
+  sendMessage: (query: string, allowWeb?: boolean) => Promise<void>
   loadHistoryMessages: (turns: HistoryTurn[]) => void
   startNew: () => void
 }
@@ -49,7 +49,7 @@ export function useChat(onConversationUpdate?: () => void): UseChatReturn {
   const [loading, setLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | undefined>()
 
-  const sendMessage = useCallback(async (query: string) => {
+  const sendMessage = useCallback(async (query: string, allowWeb = false) => {
     if (loading) return
 
     const userMsg: Message = {
@@ -61,7 +61,7 @@ export function useChat(onConversationUpdate?: () => void): UseChatReturn {
     setMessages((prev) => [...prev, userMsg])
     setLoading(true)
     try {
-      const result = await sendFinanceChat(query, conversationId)
+      const result = await sendFinanceChat(query, conversationId, 10, 'blocks', allowWeb)
       const assistantMsg: Message = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -82,6 +82,10 @@ export function useChat(onConversationUpdate?: () => void): UseChatReturn {
             ? (result.verification as FinanceMessagePayload['verification'])
             : undefined,
           resolved_query: result.resolved_query,
+          market_brief: result.market_brief || undefined,
+          refusal: result.refusal || undefined,
+          answer_lead: result.answer_lead || undefined,
+          web_sources: result.web_sources || undefined,
         },
         timestamp: Date.now(),
       }

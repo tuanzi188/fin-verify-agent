@@ -624,6 +624,35 @@ async def _post(api_app, body: dict) -> dict:
 
 
 @pytest.mark.asyncio
+async def test_concept_question_bypasses_scope_and_returns_concept(
+    api_app, demo_store, monkeypatch
+):
+    """「什么是毛利率」不是查证题：不能走 scope 拒答，也不能调用检索。"""
+    captured = {}
+
+    async def fake_concept(**kwargs):
+        captured.update(kwargs)
+        return FinanceChatResponse(
+            status="answered",
+            answer="毛利率 = 毛利 ÷ 营业收入，衡量收入扣除营业成本后剩余的比例。",
+            strategy="concept",
+            route_reason=kwargs["route_reason"],
+            conversation_id=kwargs["conversation_id"],
+        )
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-test")
+    monkeypatch.setattr(finance_api, "answer_concept", fake_concept)
+
+    body = await _post(api_app, {"query": "什么是毛利率", "strategy": "auto"})
+
+    assert body["strategy"] == "concept"
+    assert body["status"] == "answered"
+    assert body["citations"] == []
+    assert captured["query"] == "什么是毛利率"
+
+
+@pytest.mark.asyncio
 async def test_empty_structured_retrieval_escalates_to_agent(api_app, demo_store, monkeypatch):
     calls = {"agent": 0}
 
@@ -741,3 +770,236 @@ async def test_explicit_structured_strategy_never_escalates(api_app, demo_store,
 
     assert calls["agent"] == 0
     assert body["strategy"] == "structured_rag"
+
+
+@pytest.mark.asyncio
+async def test_allow_web_returns_market_brief_on_local_miss(api_app, demo_store, monkeypatch):
+    from app.services.market_brief import MarketBrief
+
+    captured = {}
+
+    async def fake_brief(question, **kwargs):
+        captured.update(kwargs)
+        return MarketBrief(
+            ok=True,
+            question=question,
+            summary="多项因素叠加，来源侧重点不同。",
+            as_of="2026-11-05T00:00:00+00:00",
+            warnings=["来源中没有这些数字: 999"],
+        )
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "build_market_brief", fake_brief)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-web")
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(
+        api_app,
+        {"query": "格力电器 2025 年营收下滑的原因是什么？", "allow_web": True},
+    )
+
+    assert body["status"] == "answered"
+    assert body["strategy"] == "market_brief"
+    assert body["citations"] == []
+    assert body["market_brief"]["summary"].startswith("多项因素")
+    assert body["notes"][0].startswith("已查来源：本地")
+    assert "来源中没有这些数字: 999" in body["notes"]
+    # 未覆盖的主体不在 scope.companies 里（它只装已知别名）；公司名仍在 query 中。
+    assert captured["company"] is None
+    assert captured["period"] == "2025"
+
+
+@pytest.mark.asyncio
+async def test_without_allow_web_local_miss_still_abstains(api_app, demo_store, monkeypatch):
+    called = []
+
+    async def fake_brief(*args, **kwargs):
+        called.append(True)
+        raise AssertionError("allow_web=False 时不得触发联网")
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "build_market_brief", fake_brief)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-web2")
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "格力电器 2025 年营业收入是多少？"})
+
+    assert body["status"] == "abstained"
+    assert body["market_brief"] is None
+    assert called == []
+
+
+@pytest.mark.asyncio
+async def test_lookup_with_allow_web_still_refuses_instead_of_using_media_numbers(
+    api_app, demo_store, monkeypatch
+):
+    """纯数值题本地没有时不能转综述：媒体数字没有坐标，不能当答案。"""
+
+    async def fake_brief(*args, **kwargs):
+        raise AssertionError("纯数值题不得触发联网综述")
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "build_market_brief", fake_brief)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-lookup")
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(
+        api_app, {"query": "格力电器 2025 年营业收入是多少？", "allow_web": True}
+    )
+
+    assert body["status"] == "abstained"
+    assert body["market_brief"] is None
+    assert any("联网综述只汇总市场说法" in note for note in body["notes"])
+
+
+@pytest.mark.asyncio
+async def test_local_evidence_wins_over_allow_web(api_app, demo_store, monkeypatch):
+    """自有语料覆盖时，即使开了联网也不得走综述。"""
+    calls = {"brief": 0, "structured": 0}
+
+    async def fake_brief(*args, **kwargs):
+        calls["brief"] += 1
+        raise AssertionError("本地覆盖时不得联网")
+
+    async def fake_structured(**kwargs):
+        calls["structured"] += 1
+        return FinanceChatResponse(
+            status="answered",
+            answer="12.34 千元",
+            conversation_id=kwargs["conversation_id"],
+        )
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "build_market_brief", fake_brief)
+    monkeypatch.setattr(finance_api, "run_structured_rag", fake_structured)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-priority")
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(
+        api_app, {"query": "XX股份 2025 年营业收入是多少？", "allow_web": True}
+    )
+
+    assert calls == {"brief": 0, "structured": 1}
+    assert body["market_brief"] is None
+
+
+@pytest.mark.asyncio
+async def test_out_of_domain_question_carries_refusal_class(api_app, demo_store, monkeypatch):
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "帮我写一首关于秋天的诗"})
+
+    assert body["status"] == "clarified"
+    assert body["refusal"]["code"] == "out_of_domain"
+    assert body["refusal"]["level"] == 2
+    assert body["refusal"]["recover_by"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_opinion_question_is_unsupported_intent(api_app, demo_store, monkeypatch):
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "XX股份 2025 年股价会涨吗"})
+
+    assert body["refusal"]["code"] == "unsupported_intent"
+    assert body["refusal"]["action"] == "refuse"
+
+
+@pytest.mark.asyncio
+async def test_uncovered_company_is_out_of_scope_refusal(api_app, demo_store, monkeypatch):
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "格力电器 2025 年营业收入是多少？"})
+
+    assert body["status"] == "abstained"
+    assert body["refusal"]["code"] == "out_of_scope"
+    assert body["refusal"]["level"] == 3
+    assert body["refusal"]["recover_by"] == "corpus"
+    assert "格力电器" in body["refusal"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_future_period_is_out_of_scope_not_ambiguous(api_app, demo_store, monkeypatch):
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "XX股份 2027 年营业收入是多少？"})
+
+    # 主体和指标都清楚，缺的是覆盖范围 → 不是让用户补条件
+    assert body["refusal"]["code"] == "out_of_scope"
+    assert body["refusal"]["action"] == "refuse"
+
+
+@pytest.mark.asyncio
+async def test_missing_scope_is_ambiguous_refusal(api_app, demo_store, monkeypatch):
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(api_app, {"query": "营业收入是多少？"})
+
+    assert body["status"] == "clarified"
+    assert body["refusal"]["code"] == "ambiguous_scope"
+    assert body["refusal"]["level"] == 1
+    assert body["refusal"]["action"] == "clarify"
+
+
+@pytest.mark.asyncio
+async def test_retrieval_conflict_is_classified_as_source_conflict(
+    api_app, demo_store, monkeypatch
+):
+    """有候选但对不上，不能说成「没查到」——两级文案与下一步完全不同。"""
+
+    async def fake_structured(**kwargs):
+        return FinanceChatResponse(
+            status="abstained",
+            answer="根据现有资料无法确定：候选值存在冲突。",
+            conversation_id=kwargs["conversation_id"],
+            verification={
+                "issues": [
+                    {
+                        "code": "candidate_conflict",
+                        "reason": "XX股份 2025 营业收入存在不同候选值。",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "run_structured_rag", fake_structured)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-conflict")
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(
+        api_app,
+        {"query": "XX股份 2025 年营业收入是多少？", "strategy": "structured_rag"},
+    )
+
+    assert body["status"] == "abstained"
+    assert body["refusal"]["code"] == "source_conflict"
+    assert body["refusal"]["recover_by"] == "manual"
+
+
+@pytest.mark.asyncio
+async def test_answered_response_has_no_refusal(api_app, demo_store, monkeypatch):
+    async def fake_structured(**kwargs):
+        return FinanceChatResponse(
+            status="answered",
+            answer="12.34 千元",
+            conversation_id=kwargs["conversation_id"],
+        )
+
+    monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
+    monkeypatch.setattr(finance_api, "run_structured_rag", fake_structured)
+    monkeypatch.setattr(finance_api, "index_fingerprint", lambda: "fp-ok")
+    monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
+
+    body = await _post(
+        api_app,
+        {"query": "XX股份 2025 年营业收入是多少？", "strategy": "structured_rag"},
+    )
+
+    assert body["status"] == "answered"
+    assert body["refusal"] is None

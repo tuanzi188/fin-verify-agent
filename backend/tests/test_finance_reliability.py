@@ -335,3 +335,17 @@ async def test_reliability_rag_numeric_error_is_persisted_for_review(
     )
     assert response.status == "needs_review"
     assert memory.add_turn.await_args.kwargs["payload"]["verification"]["issues"]
+
+
+def test_build_claims_drops_lead_in_lines_ending_with_colon():
+    """「交叉核对（来源另一张表「（1） 营业收入构成」）：」这类引导语不含结论。
+
+    它带序号（(1)）所以能通过"有数字"的宽松过滤，但作为要点只是空转的列表项。
+    """
+    claims = finance_entry.build_claims(
+        "交叉核对（来源另一张表「（1） 营业收入构成」）：\n营业收入 100 千元。",
+        [],
+        [],
+    )
+    assert [claim.text for claim in claims] == ["营业收入 100 千元。"]
+

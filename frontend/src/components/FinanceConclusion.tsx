@@ -204,7 +204,8 @@ const ReviewAlert: React.FC<{
   statusKey: TurnStatus
   verification?: FinanceMessagePayload['verification']
   claims?: FinanceMessagePayload['claims']
-}> = ({ statusKey, verification, claims }) => {
+  refusal?: FinanceMessagePayload['refusal']
+}> = ({ statusKey, verification, claims, refusal }) => {
   if (statusKey === 'answered') return null
   const copy = REVIEW_COPY[statusKey]
   if (!copy) return null
@@ -249,13 +250,14 @@ const ReviewAlert: React.FC<{
           <ExclamationCircleOutlined style={{ color: tone.color }} />
         )}
         <Text strong style={{ fontSize: 12, color: tone.color }}>
-          {copy.title}
+          {/* 有分级时用「类别 · 级别」代替泛化标题：材料不足和产品边界是两件事 */}
+          {refusal ? `${refusal.label} · ${refusal.level_label}` : copy.title}
         </Text>
       </div>
       {useScope ? (
         <div className="review-alert-scope">{scope}</div>
       ) : (
-        <div className="review-alert-body">{copy.body}</div>
+        <div className="review-alert-body">{refusal?.hint || copy.body}</div>
       )}
       {visible.length > 0 && (
         <ul className="review-alert-list">
@@ -309,7 +311,12 @@ const FinanceConclusion: React.FC<FinanceConclusionProps> = ({
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <ReviewAlert statusKey={statusKey} verification={finance.verification} claims={claims} />
+      <ReviewAlert
+        statusKey={statusKey}
+        verification={finance.verification}
+        claims={claims}
+        refusal={finance.refusal}
+      />
 
       {claims.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

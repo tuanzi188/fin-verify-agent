@@ -89,6 +89,37 @@ describe('parseFinancePayload', () => {
   it('falls back to error status when status is unknown', () => {
     expect(parseFinancePayload({ ...compactPayload, status: 'weird' })?.status).toBe('error')
   })
+
+  it('restores the refusal class for reopened conversations', () => {
+    const payload = parseFinancePayload({
+      ...compactPayload,
+      status: 'abstained',
+      claims: [],
+      citations: [],
+      refusal: {
+        code: 'out_of_scope',
+        label: '语料未覆盖',
+        level: 3,
+        level_label: '证据缺口',
+        action: 'refuse',
+        action_label: '证据不够',
+        recover_by: 'corpus',
+        hint: '本地没有这家公司的材料。',
+        detail: '本地语料未覆盖主体「格力电器」',
+      },
+    })
+    expect(payload?.refusal?.code).toBe('out_of_scope')
+    expect(payload?.refusal?.level_label).toBe('证据缺口')
+    expect(payload?.refusal?.detail).toContain('格力电器')
+  })
+
+  it('drops a refusal missing code or level instead of guessing', () => {
+    expect(parseFinancePayload({ ...compactPayload, refusal: { label: 'x' } })?.refusal)
+      .toBeUndefined()
+    expect(
+      parseFinancePayload({ ...compactPayload, refusal: { code: 'out_of_scope' } })?.refusal,
+    ).toBeUndefined()
+  })
 })
 
 describe('normalizeEvidence', () => {

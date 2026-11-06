@@ -47,9 +47,10 @@ interface EvidenceInspectorProps {
   corpusStatus?: CorpusStatus
   /**
    * 空态的原因，决定给用户看哪句解释：
-   * idle=还没提问；legacy=旧会话没保存证据；no_citation=这一轮确实没有可回查引用。
+   * idle=还没提问；legacy=旧会话没保存证据；no_citation=这一轮确实没有可回查引用；
+   * concept=概念问答，本来就不引用本地材料。
    */
-  emptyReason?: 'idle' | 'legacy' | 'no_citation'
+  emptyReason?: 'idle' | 'legacy' | 'no_citation' | 'concept'
   /** 历史证据回查 404：父组件据此把该轮标成“需人工复核”。 */
   onVerificationIssue?: (evidenceId: string) => void
   open: boolean
@@ -739,9 +740,11 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
               >
                 {emptyReason === 'legacy'
                   ? '这一轮没有保存证据'
-                  : emptyReason === 'no_citation'
-                    ? '这一轮没有可回查的引用'
-                    : '等待引用'}
+                  : emptyReason === 'concept'
+                    ? '概念问答不引用本地材料'
+                    : emptyReason === 'no_citation'
+                      ? '这一轮没有可回查的引用'
+                      : '等待引用'}
               </div>
               <div
                 style={{
@@ -753,9 +756,11 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
               >
                 {emptyReason === 'legacy'
                   ? '这条记录来自旧版本会话，只保存了答案文字，引用坐标和表格预览没有落库。重新提问一次就能看到完整证据。'
-                  : emptyReason === 'no_citation'
-                    ? '结论没有附带引用，可能是资料不足、问题需要澄清，或这一轮生成失败。'
-                    : '点开结论里的引用胶囊，这里会显示它确实指向哪一格。'}
+                  : emptyReason === 'concept'
+                    ? '这一轮是金融概念说明，属于通用知识，不引用本地财报材料，也没有可回查的单元格。'
+                    : emptyReason === 'no_citation'
+                      ? '结论没有附带引用，可能是资料不足、问题需要澄清，或这一轮生成失败。'
+                      : '点开结论里的引用胶囊，这里会显示它确实指向哪一格。'}
               </div>
               {[
                 ['原文', '章节路径、页码与上下文'],

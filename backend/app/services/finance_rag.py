@@ -16,6 +16,7 @@ import logging
 import re
 import time
 
+from app.agent.prompts import BASE_RULES, VERIFICATION_LAYOUT_RULES
 from app.config import MODEL_CONFIG
 from app.finance.references import reference_markers
 from app.finance.routing_policy import assess_evidence
@@ -36,16 +37,21 @@ MAX_EVIDENCE_CHARS = 1800
 MAX_ANSWER_TOKENS = 2048
 TEMPERATURE = 0.1
 
-STRUCTURED_RAG_SYSTEM = """你是金融文档查证助手。下面是一次结构检索返回的证据块，
+STRUCTURED_RAG_SYSTEM = BASE_RULES + """
+
+你是金融文档查证助手。下面是一次结构检索返回的证据块，
 你不能再检索、不能调用计算器，也没有别的工具。
 
 规则：
 1. 只依据证据回答；证据里没有的数字、单位、口径一律不要写。
-2. 每条结论后用 [n] 标注来源证据编号。
-3. 表格证据要写清表名/页码/单位，能定位到行列时写出列名或行名。
-4. 不要心算、换算或推导派生比率；需要计算时直接说明"需要多步查证"。
+2. 每条**事实**结论后用 [n] 标注来源证据编号；观点与推断不编号。
+3. 表格证据写清表名、页码与单位；行列坐标按下文「定位写法」处理。
+4. 证据里已经写出的比率、同比、占比可以直接引用并标注来源；需要自己换算、合计或推导的派生数值，
+   不要心算，直接说明"无法确定：需要多步查证"。
 5. 证据不足以回答时，直接说"根据现有资料无法确定"，不要猜测。
 6. 问题缺少关键条件时，先把要确认的点问出来。
+
+""" + VERIFICATION_LAYOUT_RULES + """
 
 证据：
 {evidence}

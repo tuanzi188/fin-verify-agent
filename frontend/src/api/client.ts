@@ -199,6 +199,68 @@ export interface Claim {
   uncertainty?: string | null
 }
 
+export interface MarketBriefSource {
+  label: string
+  domain: string
+  url: string
+  title: string
+  published_at: string | null
+  tier: number
+  /** 来源摘要原文：用来核对综述那句话是否真由这条来源支撑。 */
+  snippet?: string
+}
+
+/**
+ * 联网综述（未核实）。与查证回答严格分开：
+ * - summary/分项 是各方说法，不带 [n] 引用；
+ * - disclaimer 由服务端追加；
+ * - warnings 是数字溯源与来源名校验的结果。
+ */
+export interface MarketBrief {
+  ok: boolean
+  question: string
+  summary: string
+  sections: Record<string, string[]>
+  misreadings: string[]
+  divergences: string[]
+  gaps: string[]
+  sources: MarketBriefSource[]
+  /** 检索到但被白名单 / 黑名单 / 缺日期丢掉的来源，带原因。 */
+  skipped_sources?: Array<{ url: string; reason: string }>
+  ingest_candidates?: Array<{ url: string; domain: string; title: string; published_at: string | null }>
+  raw?: string
+  as_of: string
+  disclaimer: string
+  warnings: string[]
+  /** 实际发给检索服务的查询词，便于用户复核「到底搜了什么」。 */
+  queries?: string[]
+  skipped_reason?: string | null
+  error?: string | null
+  token_usage?: Record<string, number>
+}
+
+/** 概念问答实际检索到的公开信息。只做透明展示，不是可回查的证据。 */
+export interface WebSourceRef {
+  label: string
+  domain: string
+  title: string
+  url: string
+  published_at: string
+}
+
+/** 拒答分级（六类之一）。level 1 补条件可继续 / 2 产品边界 / 3 证据缺口。 */
+export interface RefusalInfo {
+  code: string
+  label: string
+  level: number
+  level_label: string
+  action: 'clarify' | 'refuse' | string
+  action_label: string
+  recover_by: 'user' | 'corpus' | 'manual' | 'none' | string
+  hint: string
+  detail?: string
+}
+
 export interface FinanceChatResponse {
   status: AgentStatus
   answer: string
@@ -209,7 +271,7 @@ export interface FinanceChatResponse {
   conversation_id: string
   model_used: string
   variant: string
-  strategy: 'structured_rag' | 'agent' | string
+  strategy: 'structured_rag' | 'agent' | 'market_brief' | 'concept' | string
   route_reason: string
   search_mode: string
   duration_ms: number
@@ -217,6 +279,12 @@ export interface FinanceChatResponse {
   notes: string[]
   verification?: Record<string, unknown>
   resolved_query?: string
+  market_brief?: MarketBrief | null
+  refusal?: RefusalInfo | null
+  /** 概念问答：首段定论（answer 里仍保留全文）。 */
+  answer_lead?: string
+  /** 概念问答实际检索到的公开信息。 */
+  web_sources?: WebSourceRef[]
 }
 
 export interface FinanceStats {
@@ -289,6 +357,7 @@ export async function sendFinanceChat(
   conversationId?: string,
   maxSteps = 10,
   searchMode: 'sections' | 'blocks' = 'blocks',
+  allowWeb = false,
 ): Promise<FinanceChatResponse> {
   const { data } = await api.post<FinanceChatResponse>('/finance/chat', {
     query,
@@ -297,6 +366,8 @@ export async function sendFinanceChat(
     search_mode: searchMode,
     // 产品默认自动选路；UI 不暴露固定窗 RAG 或 Agent/RAG 开关。
     strategy: 'auto',
+    // 联网是兜底：只有用户显式勾选、且本地语料未覆盖时才走综述。
+    allow_web: allowWeb,
   })
   return data
 }

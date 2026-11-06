@@ -40,8 +40,22 @@ def finance_values_match(left: tuple[Decimal, str], right: tuple[Decimal, str]) 
     ) * Decimal("0.0005")
 
 
+# 标识符不是数值。文档/表/节/块 id 和行列坐标里都含数字，剥离后不参与数值校验。
+# 2026-11-05 实测：答案按规则写「表 cninfo-000333-2025-annual#t0006，行0」时，
+# 校验器把 -333 / 2025 / 6 / 0 当成结论值，正常答案被误判 needs_review。
+_IDENTIFIER_RE = re.compile(
+    r"cninfo-[0-9a-z\-]+(?:#[a-z0-9#\-]+)*"  # 文档 id 及其 #t0006 / #rows#3-5 后缀
+    r"|#rows#[\d,\-]+"  # 裸块 id 的行组后缀
+    r"|#[a-z]{1,2}\d+(?:-\d+)?"  # 裸表 / 节 / 块后缀
+    r"|(?:行|列)\s*\d+(?:\s*[-–~]\s*\d+)?"  # 行0、列 1、行0-2
+    r"|(?<![A-Za-z])[pP]\.\s*\d+",  # p.9
+    re.IGNORECASE,
+)
+
+
 def finance_claim_values(text: str) -> list[tuple[Decimal, str]]:
     cleaned = strip_references(text)
+    cleaned = _IDENTIFIER_RE.sub("", cleaned)
     cleaned = re.sub(
         r"(?<!\d)(?:19|20)\d{2}\s*(?:年|Q[1-4])", "", cleaned, flags=re.IGNORECASE
     )

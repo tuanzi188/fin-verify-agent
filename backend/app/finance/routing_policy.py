@@ -12,6 +12,7 @@ from app.finance.query_scope import (
     scope_quarter,
     scope_years,
 )
+from app.finance.refusal import from_rule_id
 from app.models.finance import FinanceChatResponse, FinanceCitation
 
 POLICY_VERSION = "finance-routing-v2"
@@ -84,6 +85,96 @@ _UNAVAILABLE_INTENT = re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# 概念 / 知识类问题（不检索、不引用）
+# ---------------------------------------------------------------------------
+# 判定必须四条同时成立，缺一条就可能把查证题误判成概念题：
+# 1. 定义句式；2. 含金融术语；3. 不带公司/期间；4. 不索要具体数值。
+# 只有第 1 条不够——「美的 2025 年营业收入是什么」是查证题，不是概念题。
+_DEFINITION_PATTERN = re.compile(
+    r"什么是|是什么|啥是|是啥|什么意思|啥意思|的含义|的定义|"
+    r"怎么算|如何计算|怎么计算|如何算|"
+    r"的区别|的差异|有何不同|有什么区别|"
+    r"反映什么|说明什么|代表什么|指什么|包括哪些|包括什么"
+)
+
+# 概念题专用词表：补 FINANCE_DOMAIN_HINTS 没覆盖的估值与会计术语。
+# 只收能给出稳定定义、且不需要落到具体报表行的词。
+CONCEPT_TERMS = (
+    "毛利率", "净利率", "毛利润", "营业利润", "利润总额",
+    "市盈率", "市净率", "市销率", "股息率", "分红率", "派息率",
+    "ROE", "ROA", "ROIC", "EPS", "EBITDA", "EBIT", "PE", "PB",
+    "资产负债率", "流动比率", "速动比率", "存货周转率", "应收账款周转率",
+    "总资产周转率", "权益乘数", "杜邦分析", "经营杠杆", "财务杠杆",
+    "商誉", "无形资产", "递延所得税", "少数股东权益", "资本公积",
+    "未分配利润", "盈余公积", "坏账准备", "存货跌价准备", "资产减值",
+    "可转债", "转股价", "转股溢价率", "纯债价值", "回售", "赎回",
+    "除权", "除息", "摊薄", "权益法", "成本法", "合并报表", "母公司报表",
+    "经营活动现金流", "自由现金流", "净现比", "收现比",
+    "同比", "环比", "复合增长率", "CAGR",
+)
+
+# 索要具体数值的表达：概念题可以问「怎么算」，不能问「是多少」。
+_VALUE_ASK = re.compile(r"多少|几[个位年]|金额|数值|具体数字|数据是多少")
+
+# 费率 / 交易规则类词表。这类事实会随时间变化（印花税 2023 年就从 1‰ 减半到 0.5‰），
+# 只能联网核实，不能拿模型记忆作答。
+RULE_TERMS = (
+    "印花税", "过户费", "佣金", "手续费", "规费", "证管费", "经手费",
+    "涨跌停", "涨跌幅限制", "T+1", "T+0", "交易时间", "集合竞价",
+    "停牌", "复牌", "除权", "除息", "股权登记日", "分红派息",
+    "转股期", "强赎", "回售", "下修",
+    "科创板", "创业板", "北交所", "退市整理",
+)
+# 费率题的诉求形态：问数值、问怎么收、问现行规定。
+_RULE_ASK = re.compile(
+    r"多少|几[个位]|怎么收|怎么算|如何收|如何算|收费标准|费率|比例|"
+    r"最新|现在|目前|现行|规定|规则|要交|交多少|收多少"
+)
+
+
+def web_fact_intent(query: str, documents: list[dict]) -> bool:
+    """是否为「费率/规则现在是多少」这类公开事实题。
+
+    与概念题的区别：定义是稳定的，可以靠知识；费率、期限、规则会变，
+    只有检索到当下资料才算回答。带公司或报告期的问题仍走本地查证。
+    """
+    text = str(query or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    if not any(term.lower() in lowered for term in RULE_TERMS):
+        return False
+    if not _RULE_ASK.search(text):
+        return False
+    return not (
+        scope_companies(text, documents) or scope_years(text) or scope_quarter(text)
+    )
+
+
+def concept_intent(query: str, documents: list[dict]) -> bool:
+    """是否为金融概念/知识问题。
+
+    这类问题没有可检索的披露对象：进检索只会拿回一堆无关段落再拒答，
+    所以必须在范围检查之前单独分流。
+    """
+    text = str(query or "").strip()
+    if not text or not _DEFINITION_PATTERN.search(text):
+        return False
+    if _VALUE_ASK.search(text):
+        return False
+    if scope_companies(text, documents) or scope_years(text) or scope_quarter(text):
+        return False
+    lowered = text.lower()
+    if any(term.lower() in lowered for term in CONCEPT_TERMS):
+        return True
+    if any(term.lower() in lowered for term in RULE_TERMS):
+        return True
+    if requested_metrics(text):
+        return True
+    return any(word in text for word in FINANCE_DOMAIN_HINTS)
+
+
 def has_finance_anchor(query: str, documents: list[dict]) -> bool:
     """问题是否带任何财报查证要素。
 
@@ -125,6 +216,10 @@ class InitialDecision:
     reason: str
     rule_id: str
     resolved_query: str
+    #: 拒答分级编码；放行路径为空串（见 app/finance/refusal.py）
+    reason_code: str = ""
+    #: 费率/规则类事实题：会随时间变化，必须联网核实，不许凭记忆作答。
+    must_web: bool = False
 
 
 def requested_metrics(query: str) -> list[tuple[str, tuple[str, ...]]]:
@@ -143,6 +238,25 @@ def requested_metrics(query: str) -> list[tuple[str, tuple[str, ...]]]:
 def initial_decision(
     query: str, documents: list[dict], previous_query: str = ""
 ) -> InitialDecision:
+    # 概念题先于范围检查：prepare_finance_scope 会把「什么是」当成主体，
+    # 一旦先跑它，概念题永远到不了这里（2026-11-06 实测）。
+    # 费率/规则题优先：印花税「怎么算」既像定义又依赖现行费率，
+    # 必须以联网结果为准，不能走纯知识路径。
+    if web_fact_intent(query, documents):
+        return InitialDecision(
+            "concept",
+            "费率/规则类事实，需公开信息核实",
+            "web_fact_question",
+            str(query or "").strip(),
+            must_web=True,
+        )
+    if concept_intent(query, documents):
+        return InitialDecision(
+            "concept",
+            "金融概念/知识问题，不检索本地材料",
+            "concept_question",
+            str(query or "").strip(),
+        )
     scope = prepare_finance_scope(query, documents, previous_query)
     text = scope.resolved_query
     if scope.blocked_reason:
@@ -151,6 +265,7 @@ def initial_decision(
             scope.blocked_reason,
             "scope_boundary",
             text,
+            scope.blocked_code or "out_of_scope",
         )
     # 范围性拒答：问题没有公司、报告期、指标、操作或材料指代，说明不在本产品
     # 的目标域（闲聊/写作/通用问答），不进检索，直接引导到可查的句式。
@@ -161,11 +276,15 @@ def initial_decision(
             "例如「甲集团 2025 年营业收入」。",
             "out_of_scope",
             text,
+            from_rule_id("out_of_scope"),
         )
     metrics = requested_metrics(text)
     # 查某一数值时不能静默选择公司、期间或含混的利润/现金流口径。
     if metrics and (not scope_companies(text, documents) or not scope_years(text)):
-        return InitialDecision("clarify", "请明确公司及报告期。", "missing_scope", text)
+        return InitialDecision(
+            "clarify", "请明确公司及报告期。", "missing_scope", text,
+            from_rule_id("missing_scope"),
+        )
     if re.search(r"利润情况|现金流是多少|(?<!净)利润是多少", text) or (
         "净利润" in text
         and "归母" not in text
@@ -173,7 +292,8 @@ def initial_decision(
         and not any(word in text for word in ("合并", "母公司", "净利率"))
     ):
         return InitialDecision(
-            "clarify", "请明确利润或现金流的指标口径。", "ambiguous_metric", text
+            "clarify", "请明确利润或现金流的指标口径。", "ambiguous_metric", text,
+            from_rule_id("ambiguous_metric"),
         )
     # 观点/行情类问题哪怕带了公司名也没有证据可回查，先进边界说明而不是检索。
     # 「怎么样」单独出现时只在没有指标、没有期间时按观点处理——「营收怎么样」
@@ -188,12 +308,14 @@ def initial_decision(
             "请改问具体的披露项，例如「甲集团 2025 年营业收入」。",
             "out_of_scope_intent",
             text,
+            from_rule_id("out_of_scope_intent"),
         )
     # 追问前缀但没有主体和指标（"那 2024 年呢？"）——没东西可查，先问清楚。
     # 普通无主体查询（"2024 年情况怎么样"）维持既有策略放行，不在这里拦。
     if _FOLLOWUP_PREFIX.match(text) and not scope_companies(text, documents) and not metrics:
         return InitialDecision(
-            "clarify", "请说明要查哪家公司、哪个指标。", "missing_scope", text
+            "clarify", "请说明要查哪家公司、哪个指标。", "missing_scope", text,
+            from_rule_id("missing_scope"),
         )
     for rule_id, pattern in OPERATION_RULES:
         if re.search(pattern, text):

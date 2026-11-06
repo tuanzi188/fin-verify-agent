@@ -23,6 +23,8 @@ from starlette.concurrency import run_in_threadpool
 from app.core.conversation_scope import ConversationNamespace
 from app.core.user_context import extract_user_context
 from app.finance.query_scope import prepare_finance_scope
+from app.finance.refusal import from_verification
+from app.finance.refusal import payload as refusal_payload
 from app.finance.routing_policy import initial_decision, response_upgrade
 from app.models.finance import (
     FinanceChatRequest,
@@ -31,6 +33,7 @@ from app.models.finance import (
     FinanceEvidenceResponse,
 )
 from app.services.audit_logger import AuditAction, AuditEvent, AuditStatus, audit_logger
+from app.services.concept_qa import answer_concept
 from app.services.conversation_memory import conversation_memory
 from app.services.finance_corpus import (
     FinanceCorpusError,
@@ -46,6 +49,7 @@ from app.services.finance_entry import build_evidence, run_finance_query
 from app.services.finance_history import build_history_payload
 from app.services.finance_rag import run_structured_rag
 from app.services.finance_upload import UploadError, save_and_parse
+from app.services.market_brief import build_market_brief, should_brief_on_local_miss
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -99,7 +103,85 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
             from dataclasses import replace
 
             scope = replace(scope, blocked_reason=initial.reason, clarify=initial.initial_path == "clarify")
-        if scope.blocked_reason:
+        if body.strategy == "auto" and initial.initial_path == "concept":
+            # 概念题不检索、不引用。必须在 scope.blocked_reason 之前处理：
+            # prepare_finance_scope 会把「什么是」当成主体，先判范围就永远到不了这里。
+            response = await answer_concept(
+                query=body.query,
+                conversation_id=scoped_conversation_id,
+                route_reason=initial.reason,
+                allow_web=body.allow_web,
+                must_web=initial.must_web,
+            )
+            await conversation_memory.add_turn(
+                scoped_conversation_id,
+                body.query,
+                response.answer,
+                payload=build_history_payload(
+                    # 概念答案不依赖语料：不写指纹，语料变更时不会被升级成「需人工复核」。
+                    response,
+                    corpus_fingerprint="",
+                ),
+            )
+        elif (
+            scope.blocked_reason
+            and body.allow_web
+            and not scope.clarify
+            and should_brief_on_local_miss(body.query)
+        ):
+            # 本地语料覆盖不到、且用户显式允许联网：转公开信息综述。
+            # 综述永远不给 `[n]` 引用，也不冒充披露数据；免责由服务端追加。
+            brief = await build_market_brief(
+                body.query,
+                company=scope.companies[0] if scope.companies else None,
+                period=str(max(scope.years)) if scope.years else None,
+                allow_web=True,
+                local_citable_count=0,
+            )
+            notes = list(brief.warnings)
+            if brief.error:
+                notes.append(f"综述不可用：{brief.error}")
+            try:
+                local_docs = len(get_finance_store().list_documents())
+            except Exception:  # noqa: BLE001 - 回显覆盖面失败不能影响回答
+                local_docs = 0
+            notes.insert(
+                0,
+                f"已查来源：本地 {local_docs} 份文档；"
+                f"联网检索 {brief.queries_used} 次（{brief.provider or '未执行'}）",
+            )
+            response = FinanceChatResponse(
+                status="answered" if brief.ok else "abstained",
+                answer=brief.summary or scope.blocked_reason,
+                conversation_id=scoped_conversation_id,
+                strategy="market_brief",
+                route_reason="本地语料未覆盖，转入公开信息综述（未核实）",
+                resolved_query=scope.resolved_query,
+                market_brief=brief.to_dict(),
+                refusal=None
+                if brief.ok
+                else refusal_payload(
+                    "insufficient_evidence",
+                    detail=brief.skipped_reason or brief.error or "",
+                ),
+                notes=notes,
+            )
+            await conversation_memory.add_turn(
+                scoped_conversation_id,
+                body.query,
+                response.answer,
+                payload=build_history_payload(
+                    response, corpus_fingerprint=index_fingerprint()
+                ),
+            )
+        elif scope.blocked_reason:
+            notes = ["请核对本地语料覆盖范围及本轮查询条件。"]
+            if body.allow_web:
+                # 纯数值题即使开了联网也不转综述：媒体数字没有坐标，不能当答案。
+                notes.append(
+                    "联网综述只汇总市场说法，不提供可核对数值；"
+                    "如需实数，请先入库对应的原始报告。"
+                )
             response = FinanceChatResponse(
                 status="clarified" if scope.clarify else "abstained",
                 answer=scope.blocked_reason,
@@ -107,7 +189,11 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
                 strategy="structured_rag" if strategy == "auto" else strategy,
                 route_reason="检索前检查主体、期间与追问条件",
                 resolved_query=scope.resolved_query,
-                notes=["请核对本地语料覆盖范围及本轮查询条件。"],
+                refusal=refusal_payload(
+                    initial.reason_code or scope.blocked_code or "out_of_scope",
+                    detail=scope.blocked_reason,
+                ),
+                notes=notes,
             )
             await conversation_memory.add_turn(
                 scoped_conversation_id, body.query, response.answer,
@@ -228,6 +314,10 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
         )
 
     assert response is not None
+    # 检索/生成之后才失败的轮次在这里补类别：能拿到 issue 就按"冲突优先"判，
+    # 拿不到就留空，不硬造一个看起来像结论的标签。
+    if response.status == "abstained" and not response.refusal:
+        response.refusal = from_verification(response.verification)
     response.conversation_id = conversation_id
     return response
 

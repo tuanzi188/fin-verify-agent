@@ -13,12 +13,15 @@ interface ChatInputProps {
   onSend: (text: string) => void
   onClearContext?: () => void
   onNewConversation?: () => void
+  /** 输入框右侧的附加控件（如"联网"开关），由调用方决定内容。 */
+  toolbar?: React.ReactNode
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
   loading,
   onSend,
   onNewConversation,
+  toolbar,
 }) => {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
@@ -123,6 +126,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         />
 
         {/* 发送按钮 */}
+        {toolbar}
         <Tooltip title={isEmpty ? '请输入内容' : '发送 (Enter)'}>
           <Button
             type="primary"

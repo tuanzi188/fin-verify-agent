@@ -612,7 +612,11 @@ def _format_locators(locators: list[dict], limit: int = 12) -> str:
             title = str(item.get("title") or "")
             page = item.get("page")
             page_text = f"｜PDF 第 {page} 页" if page else ""
-            rows.append(f"- {item.get('chunk_id')}｜{title}{page_text}")
+            # 汇总表标记来自 toolset 的结构化字段。这里只渲染 chunk_id/title/page，
+            # 拼在 content 里的任何文字都到不了模型——旧版把「【推荐】」写进 content，
+            # 标记从未生效（2026-11-06 核对）。
+            summary = "｜汇总表" if item.get("summary_table") else ""
+            rows.append(f"- {item.get('chunk_id')}｜{title}{summary}{page_text}")
         blocks.append("\n".join(rows))
 
     return "\n\n".join(blocks)

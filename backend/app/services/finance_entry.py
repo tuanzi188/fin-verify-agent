@@ -594,6 +594,10 @@ def build_claims(answer: str, citations: list[FinanceCitation], calcs: list[Calc
             continue
         if re.fullmatch(r"[\s|:\-]+", text):
             continue
+        # 以冒号收尾的行是引导语（"交叉核对（来源另一张表「（1） 营业收入构成」）："），
+        # 它只交代下面要看什么，本身没有结论。放进要点会变成一条空转的列表项。
+        if text.endswith(("：", ":")):
+            continue
         found = reference_markers(text)
         found = [value for value in dict.fromkeys(found) if value in markers]
         # 没有引用也没有数字的行（标题、过渡句）不单独成为要点。

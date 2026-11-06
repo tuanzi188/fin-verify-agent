@@ -51,6 +51,89 @@ describe('MessageItem', () => {
     expect(screen.getByText('Bold')).toBeTruthy()
   })
 
+  it('marks concept answers as general knowledge without evidence chrome', () => {
+    const conceptPayload = {
+      ...financePayload,
+      strategy: 'concept' as const,
+      route_reason: '金融概念/知识问题，不检索本地材料',
+      claims: [],
+      citations: [],
+      calc: [],
+    }
+    render(<MessageItem plain content="毛利率 = 毛利 ÷ 营业收入。" finance={conceptPayload} />)
+    expect(screen.getByText('通用知识 · 未核实')).toBeTruthy()
+    // 概念答案没有引用，但不应被当成异常轮次
+    expect(screen.queryByText(/需人工复核/)).toBeNull()
+  })
+
+  it('labels concept answers that used web sources', () => {
+    const conceptPayload = {
+      ...financePayload,
+      strategy: 'concept' as const,
+      claims: [],
+      citations: [],
+      calc: [],
+      notes: ['concept:web', 'concept:web_used'],
+    }
+    render(<MessageItem plain content="可转债在转股期内可转为股票。" finance={conceptPayload} />)
+    expect(screen.getByText('通用知识 + 公开信息 · 未核实')).toBeTruthy()
+  })
+
+  it('labels rate/rule answers as public information, not general knowledge', () => {
+    const conceptPayload = {
+      ...financePayload,
+      strategy: 'concept' as const,
+      claims: [],
+      citations: [],
+      calc: [],
+      notes: ['concept:web_fact', 'concept:web_forced', 'concept:web_unused'],
+    }
+    render(
+      <MessageItem
+        plain
+        content="卖出印花税：成交金额的 0.05%，单边征收。"
+        finance={conceptPayload}
+      />,
+    )
+    expect(screen.getByText('公开信息 · 未核实')).toBeTruthy()
+  })
+
+  it('renders the lead once and lists retrieved web sources', () => {
+    const lead = '商誉是并购时多付的那部分溢价。'
+    const conceptPayload = {
+      ...financePayload,
+      strategy: 'concept' as const,
+      claims: [],
+      citations: [],
+      calc: [],
+      notes: ['concept:web', 'concept:web_used'],
+      answer_lead: lead,
+      web_sources: [
+        {
+          label: '中国证券报',
+          domain: 'cs.com.cn',
+          title: '商誉减值风险',
+          url: 'https://www.cs.com.cn/a',
+          published_at: '2025-11-01',
+        },
+      ],
+    }
+    render(
+      <MessageItem
+        plain
+        content={`# 商誉\n\n${lead}\n\n## 细节\n\n后续解释。`}
+        finance={conceptPayload}
+      />,
+    )
+    // 定论只出现一次：正文里要把它去掉
+    expect(screen.getAllByText(lead)).toHaveLength(1)
+    // 来源默认收起，摘要行给数量
+    const summary = screen.getByText(/引用来源/)
+    expect(summary.closest('details')?.open).toBe(false)
+    expect(screen.getByText(/1 篇/)).toBeTruthy()
+    expect(screen.getByText('商誉减值风险')).toBeTruthy()
+  })
+
   it('renders claims, citation descriptor and calc from the finance payload', () => {
     render(<MessageItem plain content="完整回答" finance={financePayload} />)
     // 结论要点里的数字被单独包裹（等宽强调），整行文本仍完整
@@ -135,5 +218,21 @@ describe('MessageItem', () => {
     expect(screen.getByText('毛利率 65.71%。')).toBeTruthy()
     expect(screen.queryByText('K')).toBeNull()
     expect(screen.queryByText('U')).toBeNull()
+  })
+
+  it('renders GFM tables instead of raw pipe text', () => {
+    // 财报答案常用定位表；表格是 GFM 扩展，缺 remark-gfm 时整块退化成竖线文本
+    render(
+      <MessageItem
+        plain
+        content={'| 项目 | 2025 |\n|---|---|\n| 营业收入 | 456,451,731 |'}
+      />,
+    )
+    const table = document.querySelector('table')
+    expect(table).toBeTruthy()
+    // 长表会撑破侧栏，表格外层必须是可横向滚动的容器
+    expect(table?.parentElement?.style.overflowX).toBe('auto')
+    expect(screen.getByText('营业收入')).toBeTruthy()
+    expect(screen.queryByText(/\|---\|/)).toBeNull()
   })
 })

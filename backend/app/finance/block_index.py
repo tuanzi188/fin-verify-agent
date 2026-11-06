@@ -314,6 +314,42 @@ def companies_for_question(question: str) -> list[str]:
     return companies
 
 
+def _document_period_years(blocks: list[dict]) -> set[str]:
+    """库里所有文档的报告期年份。用来判断问题年份是否有精确命中的文档。
+
+    从块上取而不是从 store 取：`_allowed_indices` 的单元测试会用 `__new__`
+    造一个只带 blocks 的索引，走 store 会依赖未初始化的属性。
+    """
+    years: set[str] = set()
+    for block in blocks:
+        years |= scope_years(str(block.get("period")))
+    return years
+
+
+def _period_covers(
+    block_period: str, requested: set[str], document_years: set[str]
+) -> bool:
+    """块的报告期是否覆盖问题里的年份。
+
+    精确命中的年份仍只按同名报告期过滤（问 2025 就只查 2025 年报）。
+    库里没有该年份的文档时，允许晚 1-2 年的年报：年报的「主要会计数据」
+    会列出上两个年度的比较期（2024 年报里有 2022 年列）。
+    2026 这类未来期间没有任何文档满足 `doc_year - requested ∈ [1, 2]`，
+    仍然返回空集，不会退化成“用相邻期间冒充答案”。
+    """
+    block_years = scope_years(block_period)
+    for year in requested:
+        if year in block_years:
+            return True
+        if year in document_years or not year.isdigit():
+            continue
+        want = int(year)
+        for got in block_years:
+            if got.isdigit() and 1 <= int(got) - want <= 2:
+                return True
+    return False
+
+
 def _query_tokens(tokens: set[str], postings: dict[str, list[int]], total: int) -> set[str]:
     if not tokens:
         return set()
@@ -387,11 +423,15 @@ class BlockIndex:
         has_filter = bool(companies or periods or doc_codes)
         if not has_filter:
             return None
+        document_years = _document_period_years(self.blocks)
         allowed = {
             index
             for index, block in enumerate(self.blocks)
             if (not companies or block.get("company") in companies)
-            and (not periods or bool(scope_years(str(block.get("period"))) & periods))
+            and (
+                not periods
+                or _period_covers(str(block.get("period")), periods, document_years)
+            )
             and (
                 not doc_codes
                 or any(
