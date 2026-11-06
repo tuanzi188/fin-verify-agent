@@ -236,7 +236,7 @@ def _render_rows(rows: dict) -> str:
 
 
 class FinanceToolset:
-    """金融文档工具集。接口与 `app.tools.mock.Toolbox` 一致。"""
+    """金融文档工具集。runner 只认 specs / call / to_evidence 三件接口。"""
 
     name = "finance"
     final_template = FINANCE_FINAL_TEMPLATE

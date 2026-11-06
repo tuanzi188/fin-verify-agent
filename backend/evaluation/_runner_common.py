@@ -1,8 +1,8 @@
-"""两个域（制度库 / 金融文档）的评测入口共用的那一段：读任务、跑批、汇总、打表。
+"""评测入口共用的那一段：读任务、跑批、汇总、打表。
 
-为什么单独抽出来：`run_agent_eval` 与 `run_finance_eval` 原本有 ~80% 是同一份代码
-（load_tasks / run_all / summarize / print_table），差别只有"调 runner 时传不传 toolset"。
-再来第三个域就是三份拷贝，改一处忘两处。
+为什么单独抽出来：`run_finance_eval` 与 `run_rag_eval` 的跑批骨架是同一份代码
+（load_tasks / run_all / summarize / print_table），差别只有"怎么跑一条"。
+再来一个入口就是再抄一份，改一处忘两处。
 
 **只抽不改**：这里的逻辑与原来逐行一致，包括打印文案与重试节奏。
 `run_batch` 通过 `call` 回调拿"怎么跑一条"，域差异留在各自入口里。

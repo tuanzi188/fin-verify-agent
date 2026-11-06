@@ -6,7 +6,7 @@
     python -m evaluation.run_finance_eval --variant improved --runs 3
     python -m evaluation.run_finance_eval --tasks evaluation/finance_tasks_stress.jsonl
 
-和 `run_agent_eval` 的差别只有一处：这里**自己构造 `FinanceToolset` 并复用同一个实例**。
+和通用评测入口的差别只有一处：这里**自己构造 `FinanceToolset` 并复用同一个实例**。
 `--search-mode blocks` 会把 Agent 的检索入口切到结构块索引；默认 `sections` 保持旧口径。
 复用是为了省掉每次重读 7 份 document.json（约 1–2 秒 × 90 次）；代价是 `calcs`
 与调用计数会跨任务累积，所以 runner 每条任务开跑前会调 `toolset.prepare()` 清一次

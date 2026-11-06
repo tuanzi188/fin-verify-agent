@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import datetime
 from typing import Optional, List, AsyncIterator
 
 from openai import AsyncOpenAI, APIStatusError, RateLimitError, APITimeoutError, APIConnectionError
@@ -458,28 +457,6 @@ class OpenAICompatibleClient:
             provider=self._provider_name,
         )
 
-    async def rag_query_stream(
-        self,
-        query: str,
-        context: str,
-        reasoning_mode: str = "pro",
-        result_holder: Optional[dict] = None,
-    ) -> AsyncIterator[str]:
-        from app.services.prompts import SYSTEM_PROMPT
-        system_prompt = SYSTEM_PROMPT.format(current_date=datetime.now().strftime("%Y-%m-%d"))
-        user_prompt = f"参考资料：\n{context}\n\n问题：{query}"
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-        async for token in self.chat_stream(
-            messages,
-            reasoning_mode=reasoning_mode,
-            max_tokens=4096,
-            result_holder=result_holder,
-        ):
-            yield token
-
     async def simple_query(
         self, query: str, system_prompt: Optional[str] = None, max_tokens: int = 2048
     ) -> tuple[str, Optional[str], dict]:
@@ -491,79 +468,3 @@ class OpenAICompatibleClient:
         # 实测 judge 偶尔把 2048 token 全花在生成前的推理上，content 回来是空串。
         return await self.chat(messages, reasoning_mode="flash", max_tokens=max_tokens)
 
-    async def fallback_query(
-        self, query: str, system_prompt: Optional[str] = None
-    ) -> tuple[str, Optional[str], dict]:
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": query})
-        return await self.chat(messages, reasoning_mode="flash", temperature=0.5, max_tokens=4096)
-
-    async def rag_query(
-        self, query: str, context: str, reasoning_mode: str = "pro"
-    ) -> tuple[str, Optional[str], dict]:
-        from app.services.prompts import SYSTEM_PROMPT
-        system_prompt = SYSTEM_PROMPT.format(current_date=datetime.now().strftime("%Y-%m-%d"))
-        user_prompt = f"参考资料：\n{context}\n\n问题：{query}"
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-        return await self.chat(messages, reasoning_mode=reasoning_mode, max_tokens=4096)
-
-    async def classify_intent(self, query: str) -> dict:
-        prompt = (
-            f"分析以下查询的意图，返回JSON格式：\n"
-            f"查询: {query}\n"
-            f"请分析：\n"
-            f"1. query_type: 枚举值 [simple_fact, complex_analysis, document_summary, relationship_query, comparison]\n"
-            f"2. reasoning_needed: 布尔值, 是否需要深度推理\n"
-            f"3. complexity: 1-5 的复杂度评分\n"
-            f"4. estimated_docs_needed: 预估需要的文档数量\n\n"
-            f"只返回JSON，不要其他内容。"
-        )
-        content, _, _ = await self.simple_query(prompt)
-        try:
-            import json
-            cleaned = content.strip().removeprefix("```json").removesuffix("```").strip()
-            return json.loads(cleaned)
-        except Exception as e:
-            logger.debug("Intent classification JSON parse failed: %s", e)
-            return {"query_type": "complex_analysis", "reasoning_needed": True, "complexity": 3, "estimated_docs_needed": 5}
-
-    async def rewrite_query(self, query: str) -> list[str]:
-        prompt = (
-            "请将用户问题改写为适合企业知识库检索的查询表达。\n"
-            "要求：\n"
-            "1. 保留原意，不要引入原问题没有的新事实\n"
-            "2. 输出 2 到 3 条更适合检索的短查询\n"
-            "3. 覆盖简称、正式名称、关键词表达\n"
-            "4. 只返回 JSON 数组，例如 [\"改写1\", \"改写2\"]\n\n"
-            f"用户问题：{query}"
-        )
-        content, _, _ = await self.simple_query(prompt)
-        try:
-            import json
-            cleaned = content.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            parsed_queries = json.loads(cleaned)
-            if isinstance(parsed_queries, list):
-                normalized_queries = []
-                for parsed_query in parsed_queries:
-                    if isinstance(parsed_query, str):
-                        cleaned_query = parsed_query.strip()
-                        if cleaned_query and cleaned_query not in normalized_queries:
-                            normalized_queries.append(cleaned_query)
-                return normalized_queries[:3]
-        except Exception as e:
-            logger.debug("Query rewrite JSON parse failed: %s", e)
-        return []
-
-    def select_reasoning_mode(self, intent: dict) -> str:
-        complexity = intent.get("complexity", 1)
-        reasoning_needed = intent.get("reasoning_needed", False)
-        query_type = intent.get("query_type", "simple_fact")
-
-        if query_type == "simple_fact" and complexity <= 2 and not reasoning_needed:
-            return "flash"
-        return "pro"

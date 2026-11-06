@@ -311,3 +311,43 @@ def test_cache_does_not_consume_budget_on_hit():
     assert provider.calls == 1
 
 
+def test_provider_with_stable_cache_tag_hits_cache_across_instances():
+    """真实 provider 每次新建实例：缓存身份必须由 cache_tag 决定，不能靠 id()。"""
+
+    class TaggedProvider:
+        name = "tagged"
+        cache_tag = "tagged-provider"
+
+        def __init__(self):
+            self.calls = 0
+
+        def search(self, *args, **kwargs):
+            self.calls += 1
+            return []
+
+    clear_web_cache()
+    first_provider = TaggedProvider()
+    second_provider = TaggedProvider()
+    search_web("跨实例缓存", question="跨实例缓存", budget=WebSearchBudget(), provider=first_provider)
+    search_web("跨实例缓存", question="跨实例缓存", budget=WebSearchBudget(), provider=second_provider)
+    assert first_provider.calls == 1
+    assert second_provider.calls == 0
+
+
+def test_fixture_providers_do_not_share_cache():
+    """不同 fixtures 用同一 query 不能互相命中，否则测试会拿到别人的结果。"""
+    first = FixtureProvider([
+        {
+            "title": "官方公告",
+            "url": "https://www.gov.cn/a",
+            "published_at": "2025-01-01",
+            "snippet": "卖出印花税 0.05%",
+        }
+    ])
+    second = FixtureProvider([])
+    clear_web_cache()
+    first_result = search_web("印花税", question="印花税", budget=WebSearchBudget(), provider=first)
+    second_result = search_web("印花税", question="印花税", budget=WebSearchBudget(), provider=second)
+    assert first_result.sources
+    assert not second_result.sources
+

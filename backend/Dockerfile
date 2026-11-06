@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.lock .
 RUN pip install --no-cache-dir -r requirements.lock
 
-# 可选依赖：如需 OCR、神经重排序或 Neo4j 图谱，取消下一行注释
+# 可选依赖：如需 OCR，取消下一行注释
 # COPY requirements-optional.txt .
 # RUN pip install --no-cache-dir -r requirements-optional.txt
 

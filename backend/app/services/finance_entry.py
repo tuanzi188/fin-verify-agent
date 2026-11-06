@@ -674,7 +674,6 @@ async def run_finance_query(
         task,
         variant=variant,
         user_context=user_context,
-        clear_cache=False,
         toolset=toolset,
     )
 

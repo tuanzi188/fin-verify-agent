@@ -136,8 +136,7 @@ TRACE_REQUIRED_FIELDS = (
 
 USAGE_REQUIRED_FIELDS = ("steps", "tokens_in", "tokens_out", "latency_ms")
 
-# 与 app.services.rag_engine._CANNOT_ANSWER_KEYWORDS 保持一致。
-# tests/test_agent_runner.py 有断言守着，防止两处漂移。
+# 拒答/边界用词。通用 RAG 下线后这里是唯一来源，改动只影响答案状态判定。
 ABSTAIN_KEYWORDS = (
     "无法确定",
     "无法回答",
@@ -151,7 +150,6 @@ ABSTAIN_KEYWORDS = (
     "不知道",
     "抱歉",
     # 金融文档里的"拒答"常写成"未披露 / 未提及"：这不是作答，是边界。
-    # 与 rag_engine._CANNOT_ANSWER_KEYWORDS 同源，两处必须一起改。
     "未披露",
     "未提及",
     "未列示",

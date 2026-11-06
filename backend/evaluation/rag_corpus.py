@@ -10,8 +10,9 @@
 每个 chunk 仍然记 `source_id`（它主要覆盖的章节或表格）。这个字段**只用于评测
 归因**（判断"检索有没有命中真值表"），不会出现在喂给模型的正文里，也不参与检索打分。
 
-切分参数与 `app.services.chunker.FixedChunker` 一致（512 / 0.2），保证"普通 RAG"
-这四个字不是随口说的：换参数要同步改这里并在报告里写明。
+切分参数固定为 512 字 / 20% 重叠，保证"普通 RAG"这四个字不是随口说的：
+换参数要在报告里写明，否则基线读数不可比。切窗逻辑在本文件内联实现，
+不依赖已下线的通用 RAG 分块器。
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ import json
 import math
 from functools import lru_cache
 
-from app.services.chunker import FixedChunker
 from evaluation.finance_corpus import DOCUMENT_DIR
 
 CHUNK_SIZE = 512
@@ -138,8 +138,7 @@ def _overlap(spans: list[tuple[int, int, str, str, int | None]], start: int, end
 @lru_cache(maxsize=1)
 def rag_chunks() -> list[dict]:
     """全部文档切成的固定窗 chunk 列表（按 doc_id、位置排序）。"""
-    chunker = FixedChunker(CHUNK_SIZE, CHUNK_OVERLAP)
-    step = max(chunker.chunk_size - chunker.overlap_size, 1)
+    step = max(CHUNK_SIZE - int(CHUNK_SIZE * CHUNK_OVERLAP), 1)
     chunks: list[dict] = []
     for path in sorted(DOCUMENT_DIR.glob("*/document.json")):
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -150,11 +149,11 @@ def rag_chunks() -> list[dict]:
         stream, spans = _document_stream(document)
         index = 0
         for start in range(0, len(stream), step):
-            text = stream[start:start + chunker.chunk_size].strip()
+            text = stream[start:start + CHUNK_SIZE].strip()
             if not text:
                 continue
-            kind, source_id, page = _overlap(spans, start, start + chunker.chunk_size)
-            source_spans = _source_spans(spans, start, start + chunker.chunk_size)
+            kind, source_id, page = _overlap(spans, start, start + CHUNK_SIZE)
+            source_spans = _source_spans(spans, start, start + CHUNK_SIZE)
             chunks.append(
                 {
                     "chunk_id": f"{source_id}#c{index:04d}",

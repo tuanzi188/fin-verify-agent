@@ -37,7 +37,8 @@ cd ../frontend && npm run typecheck && npm test -- --run
 python -m evaluation.lint_finance_tasks --check-refs --check-routing   # 在 backend 下
 ```
 
-CI 跑后端测试、前端测试与检索回归门禁。任务卡 lint 不在 CI：它依赖本地
+CI 跑后端测试（含结构检索回归 `tests/test_block_retrieval_regression.py`）、
+前端测试、OpenAPI 与生成类型漂移检查。任务卡 lint 不在 CI：它依赖本地
 `data/finance` 语料（语料不入库），改任务卡或路由后必须在本地跑。通过数会变，
 不要记在文档里。真实查证需要可用的模型 API。
 
@@ -119,7 +120,10 @@ CI 跑后端测试、前端测试与检索回归门禁。任务卡 lint 不在 C
 
 - 不要把 `docs/archive/` 里的历史读数写进摘要或对外表述。
 - 不要因为「让数字一致」去回改历史文档：它们绑定不同条件，靠索引表区分。
-- 不要删 `evaluation/legacy/` 与历史实验目录：它们是回归对照。
+- 通用 RAG（`vector_store` / `keyword_search` / `hybrid_search` / `graph_search` /
+  `reranker` / `rag_engine` / `chunker` / `tools.retrieval`）已于 2026-11-06 下线，
+  `evaluation/legacy` 随之清空。不要再从历史文档里把它们捡回来：产品只有
+  `/finance/*` 一条路径，证据单元是 `app/finance/block_index.py`。
 - 不要在未跑 `lint_finance_tasks` 前改任务卡的 `answer_points[].chunk_ids`。
 
 ## 9. 文档回填纪律（其他 agent 必读）

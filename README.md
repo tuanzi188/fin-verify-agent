@@ -87,15 +87,15 @@
 ```bash
 # 1) 跑原始结果（--skip-index 复用已有语料）
 cd backend
-python -m evaluation.run_agent_eval --variant improved --runs 3 --skip-index \
-  --out ../docs/evidence/agent_improved_runs3_20261027.json
+python -m evaluation.run_finance_eval --variant improved --runs 3 \
+  --out ../docs/evidence/finance_improved_runs3.json
 # 2) 判分（含 LLM judge）
-python -m evaluation.score_agent_runs --runs ../docs/evidence/agent_improved_runs3_20261027.json \
-  --out ../docs/evidence/agent_improved_report3_20261027.json --concurrency 3
+python -m evaluation.score_agent_runs --runs ../docs/evidence/finance_improved_runs3.json \
+  --out ../docs/evidence/finance_improved_report --concurrency 3
 # 3) 双变体对比
 python -m evaluation.compare_agent_reports \
-  --baseline ../docs/evidence/agent_baseline_report3_20261027.json \
-  --improved ../docs/evidence/agent_improved_report3_20261027.json
+  --baseline ../docs/evidence/finance_baseline_report.json \
+  --improved ../docs/evidence/finance_improved_report.json
 ```
 
 > 以下两张表均为**历史快照**，只作机制对照。当前有效读数与口径绑定条件见

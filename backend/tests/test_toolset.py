@@ -14,7 +14,6 @@ from app.finance.store import FinanceStore
 from app.tools.contract import validate_result
 from app.tools.finance import FINANCE_TOOL_SPECS
 from app.tools.finance_set import FinanceToolset
-from app.tools.mock import Toolbox
 
 DOC_ID = "demo-2025-annual"
 SECTION_ID = f"{DOC_ID}#s0001"
@@ -80,18 +79,6 @@ def _patch_llm(monkeypatch, *, rounds, final_answer=""):
     monkeypatch.setattr("app.services.model_provider.chat_with_tools", fake_chat_with_tools)
     monkeypatch.setattr("app.services.model_provider.chat", fake_chat)
     return captured
-
-
-def test_retrieval_toolbox_evidence_shape():
-    toolbox = Toolbox()
-    items = toolbox.to_evidence(
-        "search_kb",
-        [{"chunk_id": "d2_ch1", "title": "差旅制度", "content": "住宿五百元", "similarity": 0.81}],
-    )
-    assert items[0]["chunk_id"] == "d2_ch1"
-    assert items[0]["similarity"] == 0.81
-    assert items[0]["citable"] is True
-    assert toolbox.to_evidence("unknown_tool", {}) == []
 
 
 def test_finance_toolset_search_is_locator_only(tmp_path):

@@ -32,10 +32,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 BOOT_TIMEOUT_SECONDS = float(os.getenv("BOOT_SMOKE_TIMEOUT", "120"))
 POLL_INTERVAL_SECONDS = 0.5
 # 与 LLM API Key 无关、必须全部健康的核心子系统
+# 通用知识库 RAG 已下线：vector_store / bm25 / graph 不再初始化，也不再纳入深度检查
 REQUIRED_HEALTHY_CHECKS = (
-    "vector_store",
-    "bm25_index",
-    "graph_index",
     "conversation_memory",
 )
 

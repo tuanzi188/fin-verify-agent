@@ -5,12 +5,8 @@
 # OCR for images and scanned PDFs
 paddleocr>=2.8.0
 
-# Neural reranker (L2 strategy) for hybrid search
-transformers>=4.40.0
-torch>=2.2.0
-
-# Neo4j-backed knowledge graph (alternative to the default in-memory graph)
-neo4j>=5.20.0
+# 通用 RAG 的神经重排与图谱已下线（2026-11-06）：
+# transformers / torch / neo4j 不再需要，金融检索用 block_index 的本地混合检索。
 
 # Lightweight data analysis for analytics dashboards
 # Install only when analytics features are needed:

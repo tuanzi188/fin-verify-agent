@@ -44,7 +44,6 @@ from app.agent.runner_result import (
     _leading_sentence,
     _public_evidence,
     _strip_tool_markup,
-    _toolset_name,
     _usage_telemetry,
     build_final_step,
     build_result,
@@ -55,7 +54,6 @@ from app.agent.runner_result import (
 )
 from app.services import model_provider
 from app.tools.contract import ABSTAIN_KEYWORDS
-from app.tools.mock import Toolbox
 from app.tools.toolset import ToolOutcome
 from app.finance.references import reference_markers
 
@@ -73,7 +71,7 @@ MAX_STEPS_CEILING = 20
 # 吃掉，答案在中间硬断（表格题）。提到 4096——它只是上限，短答案的实耗不变。
 FINAL_MAX_TOKENS = 4096
 # 显式传温度，不靠客户端默认值：跑批结果必须能被别人按同一组参数复现。
-# `run_agent_eval` 会把这个值写进 runs 的 `run_config`，报告才能自证口径。
+# `run_finance_eval` 会把这个值写进 runs 的 `run_config`，报告才能自证口径。
 TOOL_TEMPERATURE = 0.1
 SUPPORTED_VARIANTS = ("baseline", "improved")
 
@@ -1312,16 +1310,14 @@ async def run(
     variant: str = "baseline",
     run_index: int = 1,
     user_context=None,
-    clear_cache: bool = True,
     toolset: Any = None,
 ) -> dict:
     """跑一条任务，返回可直接入库的 result。
 
-    `toolset` 为空时使用制度库工具集（`Toolbox`）；传 `FinanceToolset()`
-    就切到金融文档。runner 本身不认识任何具体工具名。
+    `toolset` 必填：runner 不认识任何具体工具名，域由工具集决定
+    （线上在 `finance_entry` 传 `FinanceToolset()`）。
     `user_context` 只影响工具层的 ACL：None = 评测/内部调用，不过滤；
     线上入口必须传，否则未授权文档会进入模型上下文。
-    `clear_cache` 默认 True 供评测使用（避免跨次运行命中缓存）；线上传 False。
     """
     if variant not in SUPPORTED_VARIANTS:
         raise ValueError(f"variant={variant!r} 不在支持范围（仅 {SUPPORTED_VARIANTS}）")
@@ -1336,14 +1332,13 @@ async def run(
     injections = task.get("inject") if task.get("mock") else None
 
     if toolset is None:
-        toolbox = Toolbox(injections, user_context=user_context)
-    else:
-        toolbox = toolset
-        # 复用同一个工具集实例连跑多条任务时，由 prepare 清掉上一条的
-        # calcs / 调用计数并换成本条的注入计划。没有这个方法（Toolbox）就跳过。
-        prepare = getattr(toolbox, "prepare", None)
-        if prepare is not None:
-            prepare(injections)
+        raise ValueError("必须显式传 toolset；通用制度库工具集已下线")
+    toolbox = toolset
+    # 复用同一个工具集实例连跑多条任务时，由 prepare 清掉上一条的
+    # calcs / 调用计数并换成本条的注入计划。
+    prepare = getattr(toolbox, "prepare", None)
+    if prepare is not None:
+        prepare(injections)
 
     if variant == "improved":
         return await _run_improved(
@@ -1355,14 +1350,6 @@ async def run(
             citation_required=bool(task.get("citation_required")),
             run_index=run_index,
         )
-
-    # 每次运行前清检索缓存：否则第 2/3 次运行会命中 300s TTL 的缓存，
-    # latency_ms 被系统性低估，"多调一次工具"和"缓存命中"就分不开了。
-    # 金融工具集不走向量检索，没有这条缓存。
-    if clear_cache and _toolset_name(toolbox) == "retrieval":
-        from app.services.hybrid_search import clear_retrieval_cache
-
-        clear_retrieval_cache()
 
     messages = [
         {"role": "system", "content": toolbox.system_prompt("baseline")},

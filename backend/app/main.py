@@ -22,13 +22,8 @@ from app.api.analytics import router as analytics_router
 from app.api.finance import router as finance_router
 from app.api.lab import router as lab_router
 from app.core.auth import verify_api_key, API_IDENTITIES
-from app.services.vector_store import vector_store
-from app.services.reranker import reranker
-from app.services.keyword_search import get_bm25_searcher
-from app.services.graph_search import graph_searcher
 from app.services.conversation_memory import conversation_memory
 from app.services.audit_logger import audit_logger
-from app.models.chat import DocumentChunk
 
 _LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | trace_id=%(trace_id)s | %(message)s"
 logging.basicConfig(
@@ -44,156 +39,6 @@ for _handler in _root_logger.handlers:
     _handler.setFormatter(TraceIdFormatter(_LOG_FORMAT))
     _handler.addFilter(_trace_filter)
 logger = logging.getLogger(__name__)
-
-
-async def _restore_vector_store_from_bm25_index(bm25_searcher_instance):
-    if await vector_store.count() > 0:
-        return
-
-    persisted_documents = list(getattr(bm25_searcher_instance, "_documents", []))
-    if not persisted_documents:
-        return
-
-    restored_chunks = []
-    for persisted_document in persisted_documents:
-        restored_chunk_id = str(persisted_document.get("chunk_id", "")).strip()
-        restored_content = str(persisted_document.get("content", "")).strip()
-        restored_metadata = persisted_document.get("metadata", {}) or {}
-        restored_doc_id = str(
-            persisted_document.get("doc_id")
-            or restored_metadata.get("document_id")
-            or "restored_document"
-        ).strip()
-
-        if not restored_chunk_id or not restored_content:
-            continue
-
-        restored_chunks.append(
-            DocumentChunk(
-                chunk_id=restored_chunk_id,
-                doc_id=restored_doc_id,
-                content=restored_content,
-                metadata=restored_metadata,
-            )
-        )
-
-    if not restored_chunks:
-        return
-
-    try:
-        await vector_store.add_chunks(restored_chunks)
-    except Exception as restore_error:
-        logger.error("Failed to restore vector store from BM25 documents: %s", restore_error)
-        return
-    logger.info(
-        "Vector store restored from BM25 persisted documents: chunks=%s",
-        len(restored_chunks),
-    )
-
-
-async def _rebuild_index_bm25(bm25_searcher_instance) -> bool:
-    """从向量库流式读取 chunks 并重建 BM25 索引。返回是否有数据。"""
-    bm25_docs: list[dict] = []
-    async for chunk in vector_store.list_chunks_stream():
-        bm25_docs.append({
-            "chunk_id": chunk.get("chunk_id", ""),
-            "content": chunk.get("content", ""),
-            "metadata": chunk.get("metadata", {}),
-        })
-
-    if not bm25_docs:
-        return False
-
-    bm25_searcher_instance.reset_index()
-    bm25_searcher_instance.build_index(bm25_docs)
-    bm25_searcher_instance.save_to_disk()
-    logger.info("BM25 index rebuilt from persisted chunks: %s documents", len(bm25_docs))
-    return True
-
-
-async def _rebuild_index_graph() -> bool:
-    """从向量库流式读取 chunks 并重建图谱索引。返回是否有数据。"""
-    has_data = False
-    graph_searcher.reset_memory_index()
-    async for chunk in vector_store.list_chunks_stream():
-        metadata = chunk.get("metadata", {})
-        doc_identifier = str(metadata.get("document_id", "")).strip()
-        chunk_identifier = chunk.get("chunk_id", "")
-        content_text = chunk.get("content", "")
-        if not doc_identifier or not chunk_identifier or not content_text:
-            continue
-        has_data = True
-        extracted_entities = graph_searcher.extract_entities_from_text(content_text)
-        for extracted_entity in extracted_entities:
-            entity_name = extracted_entity.get("name", "").strip()
-            if entity_name:
-                graph_searcher.add_entity(
-                    entity_name, [chunk_identifier], document_id=doc_identifier
-                )
-    if has_data:
-        graph_searcher.save_to_disk()
-        logger.info("Graph index rebuilt from persisted chunks")
-    return has_data
-
-
-async def _rebuild_retrieval_indexes():
-    bm25_searcher_instance = get_bm25_searcher()
-    bm25_loaded_from_disk = False
-    graph_loaded_from_disk = False
-
-    # ---- 各索引独立从磁盘加载 ----
-    try:
-        bm25_loaded_from_disk = bm25_searcher_instance.load_from_disk()
-        if bm25_loaded_from_disk:
-            logger.info("BM25 index loaded from disk")
-    except Exception as load_bm25_error:
-        logger.warning("Failed to load BM25 index from disk: %s", load_bm25_error)
-        bm25_searcher_instance.reset_index()
-
-    try:
-        graph_loaded_from_disk = graph_searcher.load_from_disk()
-        if graph_loaded_from_disk:
-            logger.info("Graph index loaded from disk")
-    except Exception as load_graph_error:
-        logger.warning("Failed to load graph index from disk: %s", load_graph_error)
-        graph_searcher.reset_memory_index()
-
-    # 从 BM25 恢复向量库（如向量库为空但 BM25 有数据）
-    if bm25_loaded_from_disk:
-        await _restore_vector_store_from_bm25_index(bm25_searcher_instance)
-
-    # 各索引独立判断是否需要重建
-    need_bm25_rebuild = not bm25_loaded_from_disk
-    need_graph_rebuild = not graph_loaded_from_disk
-
-    if not need_bm25_rebuild and not need_graph_rebuild:
-        logger.info("All retrieval indexes loaded from disk, no rebuild needed")
-        return
-
-    if not SERVER_CONFIG.get("bm25_rebuild_on_startup", True):
-        logger.info("Startup retrieval index rebuild disabled")
-        return
-
-    # ---- 按需重建，避免不必要的 list_chunks 调用 ----
-    if need_bm25_rebuild and need_graph_rebuild:
-        # 两者都需要重建：双 pass 流式读取，避免全量内存加载
-        has_bm25_data = await _rebuild_index_bm25(bm25_searcher_instance)
-        if has_bm25_data:
-            await _rebuild_index_graph()
-    elif need_bm25_rebuild:
-        has_data = await _rebuild_index_bm25(bm25_searcher_instance)
-        if not has_data:
-            logger.info("No persisted chunks found, skip BM25 rebuild")
-    elif need_graph_rebuild:
-        has_data = await _rebuild_index_graph()
-        if not has_data:
-            logger.info("No persisted chunks found, skip graph rebuild")
-
-    logger.info(
-        "Retrieval indexes rebuild complete: bm25=%s, graph=%s",
-        "loaded" if bm25_loaded_from_disk else "rebuilt",
-        "loaded" if graph_loaded_from_disk else "rebuilt",
-    )
 
 
 APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
@@ -213,20 +58,11 @@ def _assert_production_security() -> None:
 async def lifespan(app: FastAPI):
     _assert_production_security()
     logger.info("Starting 金融查证 Agent API... (env=%s)", APP_ENV)
-    await vector_store.initialize()
-    logger.info("Vector store initialized")
+    # 通用知识库 RAG 已下线，启动只初始化本产品实际依赖的存储。
     await conversation_memory._init_store()
     logger.info("Conversation memory initialized")
     await audit_logger.start()
     logger.info("Audit logger started")
-    await _rebuild_retrieval_indexes()
-    logger.info("Retrieval indexes initialized")
-
-    try:
-        await reranker.warmup()
-        logger.info("Reranker warmed up")
-    except Exception as e:
-        logger.warning("Reranker warmup skipped: %s", e)
 
     yield
     await conversation_memory.flush()
@@ -312,48 +148,14 @@ async def deep_health_check():
     checks = {}
     overall_healthy = True
 
-    # 1. 向量库状态
-    try:
-        chunk_count = await vector_store.count()
-        checks["vector_store"] = {
-            "status": "healthy",
-            "chunk_count": chunk_count,
-        }
-    except Exception as e:
-        checks["vector_store"] = {"status": "unhealthy", "error": str(e)[:200]}
-        overall_healthy = False
-
-    # 2. BM25 索引状态
-    try:
-        bm25 = get_bm25_searcher()
-        doc_count = len(getattr(bm25, "_documents", []))
-        checks["bm25_index"] = {
-            "status": "healthy",
-            "document_count": doc_count,
-        }
-    except Exception as e:
-        checks["bm25_index"] = {"status": "unhealthy", "error": str(e)[:200]}
-        overall_healthy = False
-
-    # 3. 图谱索引状态
-    try:
-        graph_entity_count = len(getattr(graph_searcher, "entity_to_chunks", {}))
-        checks["graph_index"] = {
-            "status": "healthy",
-            "entity_count": graph_entity_count,
-        }
-    except Exception as e:
-        checks["graph_index"] = {"status": "unhealthy", "error": str(e)[:200]}
-        overall_healthy = False
-
-    # 4. 熔断器状态
+    # 1. 熔断器状态
     from app.services.resilience import circuit_breaker_registry
     checks["circuit_breakers"] = circuit_breaker_registry.get_all_states()
     for name, state in checks["circuit_breakers"].items():
         if state.get("state") == "open":
             overall_healthy = False
 
-    # 5. 模型 API 配置检查（不调用 models.list，避免依赖远程接口）
+    # 2. 模型 API 配置检查（不调用 models.list，避免依赖远程接口）
     provider_label = "qwen" if MODEL_PROVIDER == "qwen" else "deepseek"
     try:
         if MODEL_PROVIDER == "qwen":
@@ -373,11 +175,7 @@ async def deep_health_check():
         checks[f"{provider_label}_api"] = {"status": "unhealthy", "error": str(e)[:200]}
         overall_healthy = False
 
-    # 6. 重排档位（托管 qwen3.7-text-rerank / 本地 Cross-Encoder）
-    from app.services import rerank_api
-    checks["rerank"] = rerank_api.describe()
-
-    # 7. 会话存储状态
+    # 3. 会话存储状态
     try:
         conversations = await conversation_memory.list_conversations()
         checks["conversation_memory"] = {

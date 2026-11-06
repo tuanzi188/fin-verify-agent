@@ -54,9 +54,13 @@ def _cache_key(
     undated_max_tier: int,
     allow_unknown: bool,
 ) -> tuple:
+    # 自定义 provider 没声明 cache_tag 时退化为按实例身份缓存，行为与旧版一致。
+    if provider is None:
+        tag = "default"
+    else:
+        tag = getattr(provider, "cache_tag", "") or f"{provider.name}:{id(provider)}"
     return (
-        provider.name if provider is not None else "default",
-        id(provider),
+        tag,
         query,
         int(num_results),
         bool(require_published_at),
@@ -178,6 +182,9 @@ class WebSearchResult:
 
 class WebSearchProvider(Protocol):
     name: str
+    #: 缓存身份。真实 provider 用类级常量，保证"同一个源"跨实例命中缓存；
+    #: 测试用的 fixture 每个实例一个独立值，避免不同 fixtures 互相污染。
+    cache_tag: str
 
     def search(
         self,
@@ -443,6 +450,7 @@ class ExaProvider:
     """Exa 检索适配器。key 从环境变量读，不落盘。"""
 
     name = "exa"
+    cache_tag = "exa"
 
     def __init__(
         self,
@@ -569,6 +577,7 @@ class McporterProvider:
     """
 
     name = "mcporter-exa"
+    cache_tag = "mcporter-exa"
 
     def __init__(self, executable: str | None = None) -> None:
         self.executable = executable or shutil.which("mcporter") or ""
@@ -641,9 +650,13 @@ class FixtureProvider:
     """离线测试与演示用：返回固定结果，不联网；按 query 命中关键字挑子集。"""
 
     name = "fixture"
+    _instance_counter = 0
 
     def __init__(self, items: Iterable[dict[str, Any]]) -> None:
         self.items = list(items)
+        # 每个实例一个独立缓存身份：不同 fixtures 用同一 query 时不能互相命中。
+        FixtureProvider._instance_counter += 1
+        self.cache_tag = f"fixture:{FixtureProvider._instance_counter}"
 
     def search(
         self,

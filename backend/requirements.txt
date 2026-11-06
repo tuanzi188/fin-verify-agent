@@ -1,14 +1,12 @@
 # 直接依赖（人工维护的输入文件）；锁文件由 uv 生成，不要手改。
-# 上限按已在本项目验证过的大版本设置：openai 3.x / chromadb 2.x /
+# 上限按已在本项目验证过的大版本设置：openai 3.x /
 # pymupdf 2.x / redis 8.x / sentence-transformers 6.x 均未验证。
 fastapi==0.115.0
 python-multipart>=0.0.9,<1.0
 uvicorn[standard]>=0.31.1,<1.0
 openai>=1.50.0,<3.0
-chromadb>=0.5.0,<2.0
 pymupdf>=1.24.0,<2.0
 numpy>=1.26.0,<3.0
-jieba>=0.42.1,<1.0
 pydantic>=2.5.0,<3.0
 pydantic-settings>=2.1.0,<3.0
 python-dotenv>=1.0.0,<2.0
@@ -18,5 +16,5 @@ sentence-transformers>=2.7.0,<6.0
 
 # Optional features (see requirements-optional.txt):
 # - OCR for images/scanned PDFs: paddleocr
-# - L2 neural reranking: transformers, torch
 # - Neo4j-backed knowledge graph: neo4j
+# 通用 RAG（向量库 / BM25 / 本地重排）已下线：chromadb、jieba、transformers/torch 不再需要

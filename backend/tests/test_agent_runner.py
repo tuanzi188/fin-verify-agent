@@ -3,14 +3,20 @@
 全部离线：LLM 与工具都用 monkeypatch 替身，不打网络。
 """
 
-import pytest
-
 from app.agent import runner
-from app.agent.runner import run
+from app.agent.runner import run as _run
 from app.services.openai_client import parse_tool_calls
 from app.tools.contract import validate_result
+from tests.support.injection_toolset import InjectionToolset
 
 _TASK = {"id": "T01", "question": "出差住宿标准每晚多少钱？", "max_steps": 3, "clarify_mode": "none"}
+
+
+async def run(task, **kwargs):
+    """跑 runner，默认塞入测试侧的制度库替身（真实工具集已随通用 RAG 下线）。"""
+    if kwargs.get("toolset") is None:
+        kwargs["toolset"] = InjectionToolset(task.get("inject") if task.get("mock") else None)
+    return await _run(task, **kwargs)
 
 
 def _usage(prompt_tokens: int = 100, completion_tokens: int = 20) -> dict:
@@ -61,7 +67,7 @@ def _patch_dispatch(monkeypatch, payload):
     async def fake_dispatch(name, arguments, user_context=None):
         return payload
 
-    monkeypatch.setattr("app.tools.mock.dispatch", fake_dispatch)
+    monkeypatch.setattr("tests.support.injection_toolset.dispatch", fake_dispatch)
 
 
 async def test_answered_with_citation_and_valid_trace(monkeypatch):
@@ -322,27 +328,12 @@ async def test_tool_parse_error_becomes_bad_args_step(monkeypatch):
     async def should_not_be_called(name, arguments):
         raise AssertionError("parse_error 时不应调用真实工具")
 
-    monkeypatch.setattr("app.tools.mock.dispatch", should_not_be_called)
+    monkeypatch.setattr("tests.support.injection_toolset.dispatch", should_not_be_called)
 
     result = await run(_TASK)
 
     assert result["trace"][0]["error_kind"] == "bad_args"
     assert result["status"] == "abstained"
-
-
-async def test_retrieval_cache_cleared_once_per_run(monkeypatch):
-    cleared: list[int] = []
-    monkeypatch.setattr(
-        "app.services.hybrid_search.clear_retrieval_cache",
-        lambda: cleared.append(1),
-    )
-    _patch_llm(monkeypatch, tool_calls=[_search_call()], text="", final_answer="无法确定。")
-    _patch_dispatch(monkeypatch, [_evidence_item()])
-
-    await run(_TASK)
-    await run(_TASK)
-
-    assert len(cleared) == 2
 
 
 def _patch_improved_llm(monkeypatch, rounds, coverage_reply, final_reply):
@@ -411,7 +402,7 @@ async def test_improved_auto_retries_after_empty_search(monkeypatch):
         calls["dispatch"] += 1
         return payloads[index]
 
-    monkeypatch.setattr("app.tools.mock.dispatch", fake_dispatch)
+    monkeypatch.setattr("tests.support.injection_toolset.dispatch", fake_dispatch)
     _patch_improved_llm(
         monkeypatch,
         rounds=[("", [_search_call(query="住宿标准")]), ("", [])],
@@ -454,7 +445,7 @@ async def test_improved_self_check_supplements_and_rewrites(monkeypatch):
         calls["dispatch"] += 1
         return payloads[index]
 
-    monkeypatch.setattr("app.tools.mock.dispatch", fake_dispatch)
+    monkeypatch.setattr("tests.support.injection_toolset.dispatch", fake_dispatch)
     _patch_improved_llm(
         monkeypatch,
         rounds=[("", [_search_call()]), ("初稿只答了一半 [1]。", [])],
