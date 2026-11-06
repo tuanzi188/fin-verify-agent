@@ -14,6 +14,10 @@ supersedes: 无（当前权威）
 > 代码实现：`backend/evaluation/equivalence.py`（确定性数值等价）+
 > `backend/evaluation/agent_judge.py`（rubric 进 judge prompt）+
 > `backend/evaluation/numeric_audit.py`（金标覆盖率 / 数值幻觉）。
+>
+> **few-shot 的单一维护点**：下表 9 条例子由 `equivalence.py` 的 `FEWSHOT_TEXT`
+> 提供，`rubric_text()` 把它拼进 judge prompt。本文档描述口径，改例子改代码；
+> 不要在两处各维护一份。容差仍只改 `DEFAULT_REL_TOLERANCE`。
 
 ## 四条原子判据（全有或全无）
 

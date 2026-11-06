@@ -28,6 +28,16 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_text(text: str) -> str:
+    """字符串内容指纹：用于把 runs 绑定到「实际发给模型的 system prompt」。
+
+    提示词是多次实验里唯一变化的量，但 `git.commit` 在脏工作区里区分不出
+    哪一版提示词跑的。取拼接后的最终文本（含 variant / search_mode 带来的
+    `.replace` 与后缀）做 hash，比取 prompts.py 里的常量更贴近运行时。
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def items_fingerprint(
     items: Iterable[dict],
     *,

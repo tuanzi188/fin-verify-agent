@@ -62,7 +62,7 @@ from evaluation._runner_common import (
     summarize,
 )
 from evaluation.finance_corpus import DOCUMENT_DIR, corpus_hash, doc_inventory
-from evaluation.provenance import build_run_manifest, git_provenance
+from evaluation.provenance import build_run_manifest, git_provenance, sha256_text
 
 DEFAULT_TASKS = "evaluation/finance_tasks.jsonl"
 
@@ -118,6 +118,9 @@ def main() -> int:
     toolset = FinanceToolset(store, search_mode=args.search_mode)
     inventory = doc_inventory()
     block_index_stats = toolset.toolbox.block_index.stats()
+    # 取拼接后的最终 system prompt 做绑定（含 variant 与 blocks 模式的 .replace / 后缀）。
+    # 只旁路记录，不改 runner 行为：runner 内部仍会自己调 toolset.system_prompt()。
+    system_prompt_text = toolset.system_prompt(args.variant)
 
     async def _call(task: dict, variant: str, run_index: int) -> dict:
         return await run_agent(task, variant=variant, run_index=run_index, toolset=toolset)
@@ -232,6 +235,13 @@ def main() -> int:
                 "corpus_hash": corpus_hash(),
                 "holdout": args.holdout,
                 "elapsed_seconds": round(elapsed, 1),
+                # 提示词绑定：三次格式探针的唯一变量就是 system prompt，
+                # 但 git commit 在脏工作区里区分不出跑了哪一版。缺这个字段时
+                # 按 AGENTS.md §9.2 标 binding: incomplete，不作可复现基线。
+                "prompt_sha256": sha256_text(system_prompt_text),
+                "prompt_variant": args.variant,
+                "prompt_search_mode": toolset.search_mode,
+                "prompt_chars": len(system_prompt_text),
                 # 产物自带代码版本：不打开 manifest 也能判断这份 runs 属于哪个
                 # commit、当时工作区是否 dirty。旧产物缺这个字段，只能靠文档转述，
                 # 容易把「唯一的 runs」误读成「当前有效读数」（2026-11-04 复盘）。

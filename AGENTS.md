@@ -87,6 +87,14 @@ CI 跑后端测试、前端测试与检索回归门禁。任务卡 lint 不在 C
   `corpus_hash` 一致但 search_mode / 任务卡 / judge / commit 全不同，
   **不能相减、不能写「提升 X 个百分点」、不能拿 11 题红线全绿宣称 42 题验收通过**。
   两份读数的绑定条件与登记见 `docs/evidence/INDEX.md` §A / §D。
+  **judge 口径（2026-11-06）**：`agent_judge._JUDGE_TEMPLATE` 本日改动（澄清判定
+  改为只认本题 `{clarify_instruction}`、rubric 注入 9 条 few-shot），上述 64.3% / 7/11
+  均为**改动前** judge 产出。改 judge prompt 不重跑就不产生新读数；新旧判分
+  **不同口径、不可相减**（§9.6 只写「已实现 / 未复测」）。登记见 `docs/evidence/INDEX.md` §A 补记。
+- **提示词实验必须带 `prompt_sha256`**：2026-11-06 起 `run_finance_eval` 把拼接后的
+  system prompt 哈希写进 `run_config`。之前的 `format_probe3{,_b,c}_20261106.json`
+  三次对照只有提示词不同，但 `run_config.git` 仅 `commit + dirty=true`，
+  按 §9.2 标 `binding: incomplete`，不得当可复现基线。详见 `docs/evidence/INDEX.md` §D 补记。
 - **合并任务卡**：新产物的 `run_config.tasks_file` 指向 `<out>.tasks.jsonl`
   （`run_finance_eval` 自动落盘的筛选后任务集），可复现；但**历史报告**的
   `tasks_file` 仍指向 `%TEMP%`，临时文件消失后不可复现。重建方式见

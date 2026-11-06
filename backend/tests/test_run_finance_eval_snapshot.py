@@ -43,6 +43,9 @@ def fake_env(tmp_path, monkeypatch):
         def __init__(self, store, search_mode="sections"):
             self.search_mode = search_mode
 
+        def system_prompt(self, variant):
+            return "prompt-v1"
+
     def fake_run_batch(tasks_arg, **kwargs):
         payload = ([{"task_id": t["id"], "status": "answered", "usage": {},
                      "trace": [], "answer": "", "citations": []} for t in tasks_arg], {})
@@ -103,6 +106,13 @@ def test_snapshot_matches_filtered_tasks_and_run_config_points_to_it(fake_env, m
     assert rc["tasks_selection"]["task_count"] == 2  # A + C，B 是 holdout
     # 产物自带代码版本，不需要打开 manifest 或查文档
     assert rc["git"] == {"commit": "abc123", "branch": "test", "dirty": False}
+    # 提示词绑定：三次格式探针的唯一变量就是 system prompt，缺此字段时
+    # dirty=true 的 commit 区分不出跑了哪一版（AGENTS.md §9.2）。
+    assert rc["prompt_sha256"] == rfe.sha256_text("prompt-v1")
+    assert rc["prompt_variant"] == "improved"
+    # 该用例未传 --search-mode，默认 sections；哈希取的就是这一模式拼接后的 prompt
+    assert rc["prompt_search_mode"] == "sections"
+    assert rc["prompt_chars"] == len("prompt-v1")
 
     snapshot_tasks = [json.loads(line)
                       for line in snapshot.read_text(encoding="utf-8").splitlines() if line.strip()]
