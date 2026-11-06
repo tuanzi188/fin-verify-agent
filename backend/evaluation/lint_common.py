@@ -1,30 +1,15 @@
-"""任务集可判性检查（文档 §9.4 的九项 + 结构校验）。
+"""任务集可判性检查的公共规则（结构校验 + 九项）。
 
-用法（在 backend 目录下）：
-
-    python -m evaluation.lint_agent_tasks
-    python -m evaluation.lint_agent_tasks --tasks evaluation/agent_tasks.jsonl
-
-退出码：0 = 无 error（warning 不影响退出码）；1 = 有 error。
+被 `lint_finance_tasks` 复用；制度库任务集下线后，这里只保留与具体语料无关的规则。
 
 为什么 lint 是验收项而不是可选项：任务卡写错不会有任何报错，只会让后面的分数
 静默算错——比如 chunk_id 打错一个字母，recall@k 诊断就永久偏低；负样本里留了
 支撑 chunk，"编造率"就永远测不出来。这类错误只能靠机器查。
 """
 
-import argparse
 import json
-import sys
 from collections import Counter
 from pathlib import Path
-
-_BACKEND_DIR = Path(__file__).resolve().parents[1]
-if str(_BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(_BACKEND_DIR))
-
-from evaluation.agent_corpus import AGENT_CORPUS, INJECTIONS, chunk_map
-
-DEFAULT_TASKS = "evaluation/agent_tasks.jsonl"
 
 DIMENSIONS = ("检索与引用", "多步拆解", "拒答与边界", "澄清与追问", "恢复与纠错")
 DIFFICULTIES = ("easy", "medium", "hard")
@@ -66,12 +51,14 @@ def lint(
     chunks: dict[str, dict],
     profile: bool = True,
     required_fields: tuple[str, ...] | None = None,
+    injected_doc_ids: set[str] | None = None,
 ) -> tuple[list[str], list[str]]:
     """`profile=False` 用于压力/回归子集：那里的条数、维度配比、澄清配比
     都是按另一套设计走的，拿主集的比例规则去卡只会报假错。
 
     `required_fields` 允许别的任务集换一份必填清单（金融集没有 `required_args`，
-    那是通用制度库的工具参数约束，金融工具层的参数由 `tool_constraints` 表达）。"""
+    金融工具层的参数由 `tool_constraints` 表达）。
+    `injected_doc_ids` 只在有故障注入计划的域传；不传就跳过注入清单与语料的对照。"""
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -222,12 +209,12 @@ def lint(
         if len(tasks) != 30:
             warnings.append(f"任务总数 {len(tasks)}，设计目标是 30")
 
-    # ---- 附加：注入清单与语料对得上 ----
-    injected_doc_ids = {item["doc_id"] for item in INJECTIONS}
-    corpus_doc_ids = {chunk["doc_id"] for chunk in AGENT_CORPUS}
-    missing_docs = injected_doc_ids - corpus_doc_ids
-    if missing_docs:
-        errors.append(f"注入清单里的文档不在语料中: {sorted(missing_docs)}")
+    # ---- 附加：注入清单与语料对得上（只在有注入计划的域检查）----
+    if injected_doc_ids is not None:
+        corpus_doc_ids = {str(chunk.get("doc_id")) for chunk in chunks.values()}
+        missing_docs = set(injected_doc_ids) - corpus_doc_ids
+        if missing_docs:
+            errors.append(f"注入清单里的文档不在语料中: {sorted(missing_docs)}")
 
     # ---- 10. 要点原子性（2026-10-27 加）----
     #
@@ -253,45 +240,3 @@ def lint(
                 )
 
     return errors, warnings
-
-
-def print_report(tasks: list[dict], errors: list[str], warnings: list[str]) -> None:
-    dimension_counter = Counter(task.get("dimension") for task in tasks)
-    print(f"任务数: {len(tasks)}    语料 chunk: {len(AGENT_CORPUS)}    注入文档: {len(INJECTIONS)}")
-    print()
-    print("维度分布：")
-    for dimension in DIMENSIONS:
-        print(f"  {dimension:<8} {dimension_counter.get(dimension, 0)}")
-    print()
-    if warnings:
-        print(f"警告 {len(warnings)} 条：")
-        for warning in warnings:
-            print(f"  ! {warning}")
-        print()
-    if errors:
-        print(f"错误 {len(errors)} 条：")
-        for error in errors:
-            print(f"  x {error}")
-        return
-    print("lint 通过：0 error")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Agent 任务集 lint")
-    parser.add_argument("--tasks", default=DEFAULT_TASKS)
-    args = parser.parse_args()
-
-    tasks_path = Path(args.tasks)
-    if not tasks_path.is_absolute():
-        tasks_path = _BACKEND_DIR / tasks_path
-    if not tasks_path.exists():
-        raise SystemExit(f"任务文件不存在: {tasks_path}")
-
-    tasks = load_tasks(tasks_path)
-    errors, warnings = lint(tasks, chunk_map())
-    print_report(tasks, errors, warnings)
-    return 1 if errors else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

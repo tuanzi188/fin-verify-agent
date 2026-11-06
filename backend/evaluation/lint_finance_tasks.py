@@ -39,8 +39,8 @@ from app.finance.calc import calculate
 from app.finance.store import FinanceStore
 from evaluation.calc_schema import calc_specs, has_calc_spec
 from evaluation.finance_corpus import DOCUMENT_DIR, chunk_map
-from evaluation.lint_agent_tasks import DIMENSIONS, REQUIRED_FIELDS, load_tasks
-from evaluation.lint_agent_tasks import lint as base_lint
+from evaluation.lint_common import DIMENSIONS, REQUIRED_FIELDS, load_tasks
+from evaluation.lint_common import lint as base_lint
 
 DEFAULT_PROFILE = "evaluation/finance_tasks.jsonl"
 DEFAULT_STRESS = "evaluation/finance_tasks_stress.jsonl"

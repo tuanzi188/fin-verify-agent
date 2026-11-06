@@ -323,8 +323,8 @@ def _minimal_task(**overrides):
 
 def test_finance_required_fields_drop_required_args():
     """`required_args` 是通用制度库的字段，金融集不再强制（2026-11-03 删除）。"""
-    from evaluation.lint_agent_tasks import REQUIRED_FIELDS
-    from evaluation.lint_agent_tasks import lint as base_lint
+    from evaluation.lint_common import REQUIRED_FIELDS
+    from evaluation.lint_common import lint as base_lint
     from evaluation.lint_finance_tasks import FINANCE_REQUIRED_FIELDS
 
     assert "required_args" in REQUIRED_FIELDS
@@ -343,7 +343,7 @@ def test_finance_required_fields_drop_required_args():
 
 def test_lint_anchor_sets_must_match_relevant_chunks():
     """`relevant_chunk_ids` 必须等于答案点锚点并集，含 evidence.table_id（2026-11-03）。"""
-    from evaluation.lint_agent_tasks import lint as base_lint
+    from evaluation.lint_common import lint as base_lint
 
     extra_id = f"{TABLE_ID}#b2"
     chunks = {TABLE_ID: {"chunk_id": TABLE_ID}, extra_id: {"chunk_id": extra_id}}
@@ -731,7 +731,7 @@ def test_lint_routing_flags_rule_drift():
 
 
 def test_lint_tier_freezes_profile_ratio():
-    from evaluation.lint_agent_tasks import DIMENSIONS
+    from evaluation.lint_common import DIMENSIONS
     from evaluation.lint_finance_tasks import PROFILE_TASK_COUNT, _lint_tier
 
     short = [

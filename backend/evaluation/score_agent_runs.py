@@ -1,9 +1,9 @@
-"""把 `run_agent_eval` 的原始运行记录判成分数、剖面与门禁。
+"""把 `run_finance_eval` 的原始运行记录判成分数、剖面与门禁。
 
 用法（在 backend 目录下）：
 
     # 先跑原始运行
-    python -m evaluation.run_agent_eval --out %TEMP%\\agent_runs.json
+    python -m evaluation.run_finance_eval --out %TEMP%\\finance_runs.json
     # 再判分（含 LLM judge）
     python -m evaluation.score_agent_runs --runs %TEMP%\\agent_runs.json --out %TEMP%\\agent_report.json
     # 只跑确定性检查（CI 第 1 层，零 LLM）
@@ -34,7 +34,6 @@ from evaluation import (
 )
 from evaluation._runner_common import load_tasks
 from evaluation.agent_checks import apply_equivalent_sources, collect_checks
-from evaluation.agent_corpus import AGENT_CORPUS_VERSION, chunk_map
 from evaluation.agent_judge import judge_task
 from evaluation.agent_report import (
     aggregate,
@@ -49,7 +48,7 @@ from evaluation.agent_report import (
 from evaluation.calc_schema import calc_specs
 from evaluation.provenance import git_provenance, sha256_file
 
-DEFAULT_TASKS = "evaluation/agent_tasks.jsonl"
+DEFAULT_TASKS = "evaluation/finance_tasks.jsonl"
 
 PASS_CRITERIA = {
     "unit": "task",
@@ -214,9 +213,9 @@ async def score_all(
     return await asyncio.gather(*(_score_one(result) for result in results))
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Agent 运行结果判分")
-    parser.add_argument("--runs", required=True, help="run_agent_eval 产出的 JSON")
+    parser.add_argument("--runs", required=True, help="run_finance_eval 产出的 JSON")
     parser.add_argument("--tasks", default=DEFAULT_TASKS, help="任务 JSONL")
     parser.add_argument("--out", default="", help="报告 JSON 输出路径；空 = 只打印")
     parser.add_argument("--badcases", default="", help="badcase JSONL 输出路径；空 = 不写")
@@ -226,9 +225,9 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0, help="只判前 N 条运行结果")
     parser.add_argument(
         "--corpus",
-        choices=("policy", "finance"),
-        default="policy",
-        help="judge 用哪套 chunk_id → 原文（金融这边现读 document.json）",
+        choices=("finance",),
+        default="finance",
+        help="判分只支持金融语料；保留参数是为了兼容历史复现命令",
     )
     parser.add_argument(
         "--holdout",
@@ -246,7 +245,11 @@ def main() -> int:
         action="store_true",
         help="不跑路由审计（省掉一次 FinanceStore 加载；默认金融语料会跑）",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     runs_path = Path(args.runs)
     if not runs_path.is_absolute():
@@ -275,20 +278,17 @@ def main() -> int:
         keep = args.holdout == "only"
         tasks = [task for task in tasks if bool(task.get("holdout")) is keep]
     tasks_by_id = {str(task.get("id")): task for task in tasks}
-    tables = None
-    if args.corpus == "finance":
-        from evaluation.finance_corpus import chunk_map as finance_chunk_map
-        from evaluation.finance_corpus import table_map as finance_table_map
+    # 判分只服务金融语料：chunk_id → 原文直接现读 document.json。
+    # 制度库分支（--corpus policy）随通用 RAG 下线移除，避免默认值再指错语料。
+    from evaluation.finance_corpus import chunk_map as finance_chunk_map
+    from evaluation.finance_corpus import table_map as finance_table_map
 
-        chunks = finance_chunk_map()
-        tables = finance_table_map()
-    else:
-        chunks = chunk_map()
+    chunks = finance_chunk_map()
+    tables = finance_table_map()
 
     routing_by_task = None
-    # 制度库没有「章节包含哪些表」的结构，传空表避免误读金融语料的 section 映射。
     section_map: dict[str, list[str]] = {}
-    if args.corpus == "finance" and not args.no_routing:
+    if not args.no_routing:
         from app.finance.store import FinanceStore
         from evaluation import routing_metrics
         from evaluation.finance_corpus import DOCUMENT_DIR
@@ -364,8 +364,7 @@ def main() -> int:
         "runs_per_task": payload.get("runs_per_task") or run_config.get("runs_per_task"),
         "tasks_file": str(tasks_path),
         "tasks_sha256": sha256_file(tasks_path)[:16],
-        "corpus_version": corpus_version
-        or ("finance" if args.corpus == "finance" else AGENT_CORPUS_VERSION),
+        "corpus_version": corpus_version or "finance",
         "corpus_hash": corpus_hash,
         "corpus_chunks": payload.get("corpus_chunks") or len(chunks),
         "corpus_docs": payload.get("corpus_docs") or len(payload.get("corpus") or []),

@@ -18,7 +18,7 @@
 
 用法：
 
-    python -m evaluation.compare_arms \
+    python -m evaluation.legacy.compare_arms \
         --agent-report %TEMP%\\agent_report.json --agent-runs %TEMP%\\agent_runs.json \
         --rag-report %TEMP%\\rag_report.json --rag-runs %TEMP%\\rag_runs.json \
         --tasks evaluation/finance_tasks_complex.jsonl

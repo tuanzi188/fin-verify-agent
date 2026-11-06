@@ -1,33 +1,26 @@
-# legacy：历史评测脚本（只读参考，不再维护）
+# legacy：历史脚本（不进 CI，不被主线 import）
 
-这里放的是**早期阶段跑出过数字、但已被主线替代**的脚本。归档而不删除的理由很简单：
-它们产出的结论还写在 `docs/archive/20261027_agent_eval_project_spec.md` 与 `experiments/RESULTS.md` 里，
-删掉脚本，那些数字就只剩一句"当时跑过"。
+## 已删除（2026-11-06）
 
-**规矩**：这个目录不进 CI、不被任何主线模块 import、不随新需求改动。
-要用里面的数，先确认它还跑得起来；改它之前先想清楚"是不是该在主线里重做"。
+通用知识库 RAG 下线时，依赖它的脚本一并移除：
+`run_abstention_eval.py`、`experiments/run_retrieval_matrix.py`、
+`run_rerank_matrix.py`、`run_coverage_check.py`、`run_failure_analysis.py`、
+`negative_samples.py`。
 
-## 清单
+删除理由不是"跑不通"，而是**底层模块已经不存在**：`vector_store` / `keyword_search` /
+`hybrid_search` / `graph_search` / `reranker` / `rag_engine` 全部移除，产品只剩
+`/finance/*` 一条路径，证据单元是 `app/finance/block_index.py`。
 
-| 文件 | 当初做什么 | 被什么替代 |
+## 仍可手工运行
+
+| 文件 | 用途 | 命令（在 backend 下） |
 |---|---|---|
-| `run_abstention_eval.py` | 制度库 20 负 + 20 正样本的拒答评测：干净拒答率 / 编造率 / 误拒率 | Agent 评测的「拒答与边界」维度（`agent_tasks.jsonl` + `score_agent_runs`），拒答变成带证据与状态的维度分，而不是独立脚本 |
-| `negative_samples.py` | 上面那套的负样本清单（20 条），配套 `NEGATIVE_QUERIES` | 同上；金融侧对应任务是 FIN-13/14/15/16 |
-| `experiments/run_retrieval_matrix.py` | 向量 / 关键词 / 混合三路 × top_k 的召回矩阵 | 检索回归夹具的固定基线 `baseline_retrieval.json`（由 `check_regression.py` 守） |
-| `experiments/run_rerank_matrix.py` | 加不加 L2 精排的对照矩阵 | 精排已在 `app/services/rerank.py` 定版 |
-| `experiments/run_coverage_check.py` | 语料对问题集的覆盖率体检 | 已被能力评测集取代 |
-| `experiments/run_failure_analysis.py` | 失败案例自动归类，产出 `FAILURE_CASES.md` | 根因分类搬进了 `evaluation/agent_report.classify_causes` |
+| `compare_arms.py` | Agent 与 RAG 两臂逐题配对，看多花的 token 买到多少质量 | `python -m evaluation.legacy.compare_arms ...` |
+| `check_block_retrieval.py` | Agent `search_blocks` 与结构 RAG `search` 是否同序同内容 | `python -m evaluation.legacy.check_block_retrieval --tasks ...` |
 
-`experiments/RESULTS.md` 与 `FAILURE_CASES.md` 是那批实验的结论存档，一并留在这里。
+两者都需要本地 `data/finance` 语料，不参与 CI。历史结论仍在
+`docs/archive/20261027_agent_eval_project_spec.md` 与 `docs/evidence/`，
+引用时按 `AGENTS.md` §6 的口径要求标明是历史读数、不可与当前代码相减。
 
-## 怎么跑（需要时）
-
-在 `backend/` 目录下：
-
-```bash
-python -m evaluation.legacy.run_abstention_eval --limit 5
-python -m evaluation.legacy.experiments.run_retrieval_matrix
-```
-
-这些脚本仍然会建 Chroma 索引、调模型，属于**联网 + 烧 token**的操作；
-日常回归不要跑它们。
+检索层现在的回归门禁是 `tests/test_block_retrieval_regression.py`
+（合成语料 + hash embedding，零模型、零下载、进 CI）。

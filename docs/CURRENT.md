@@ -25,6 +25,37 @@ read_when: 接手第一步
 
 ## 当前活跃工作
 
+### 通用 RAG 下线（2026-11-06 已完成）
+
+- 删除 `app/services/{rag_engine,chunker,graph_search,vector_store,keyword_search,hybrid_search,reranker,rerank_api,filter_utils}.py`
+  与 `app/tools/{mock,retrieval}.py`，共约 3,100 行；`main.py` 启动不再初始化
+  向量库 / BM25 / 图谱 / 重排，深度健康检查同步移除这四项。
+- `runner.run()` 的 `toolset` 改为必填：不再有隐式制度库默认值，域由调用方决定
+  （线上 `finance_entry` 传 `FinanceToolset`，测试传 `tests/support/injection_toolset.py`）。
+- 评测侧：`run_eval.py` / `check_regression.py` / `run_agent_eval.py` / `baseline_retrieval.json` /
+  `legacy/*` 一并删除；固定窗基线的分块逻辑内联进 `evaluation/rag_corpus.py`。
+- **CI 门禁换向**：旧门禁测的是通用 RAG 在 9 条样例上的召回，与产品无关。
+  新门禁 `tests/test_block_retrieval_regression.py` 用合成语料 + hash embedding
+  覆盖表格行组切分、核心表加权、公司/期间过滤与排序，进现有 pytest job，
+  不需要模型下载或本地语料。
+- 依赖同步：`chromadb`、`jieba` 从 `requirements.txt` 移除，锁文件重新生成
+  （只减不增，无版本漂移）；`app/config.py` 删除四个随之失效的配置块。
+- 测试：802 → 752（净减 50 条，均为被删模块自身的用例），全量耗时 26.5s → 约 12s。
+
+### 评测清理（2026-11-06 已完成）
+
+- **修掉默认口径漂移**：`score_agent_runs` 的 `--corpus` 曾默认 `policy`（制度库，
+  已删），`--tasks` 默认指向 `agent_tasks.jsonl`（已删）。照 README 命令跑会拿
+  制度库的 `chunk_map` 给金融题判分且不报错。现在两者都固定为金融域，
+  `policy` 分支删除；保留 `--corpus finance` 只为兼容历史复现命令。
+- 删除 `metrics.py`（唯一调用方已下线，只剩自测引用）与制度库语料链
+  （`agent_corpus` / `sample_data` / `lint_agent_tasks` / `agent_tasks*.jsonl`）。
+  公共 lint 规则抽到 `lint_common.py`，`lint_finance_tasks` 只依赖这一层。
+- `compare_arms` / `check_block_retrieval` 移入 `evaluation/legacy/`：
+  仍可手工运行，需要本地语料，不进 CI。
+- 新增 `tests/test_score_agent_runs_defaults.py` 锁默认任务集与语料，防止再漂。
+- 测试：752 → 738（删掉的是被清模块自身的用例 + 新增 2 条口径锁）。
+
 ### 联网综述（2026-11-05 已接线，未评测）
 
 - `app/services/web_search.py`：来源分级（官方 / 权威媒体 / 门户）、黑名单、

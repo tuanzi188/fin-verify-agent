@@ -294,7 +294,8 @@ def _summary_from_agent_compare(compare_path: Path, payload: dict, baseline_path
         compare_artifact=_relative(compare_path),
         message=(
             "Agent 双变体对照，不是产品主比较。"
-            "主比较（Agent vs 结构感知 RAG）请运行 structured RAG 报告与 compare_arms。"
+            "主比较（Agent vs 结构感知 RAG）请运行 structured RAG 报告与 "
+            "evaluation.legacy.compare_arms。"
         ),
     )
 
@@ -347,7 +348,8 @@ async def get_lab_runs(
             comparison_kind="agent_vs_fixed_rag" if fixed else "unavailable",
             message=(
                 "没有找到 Agent vs 结构感知 RAG 的 compare_arms。"
-                "先运行 run_rag_eval --retrieval-mode structured、score_agent_runs、compare_arms。"
+                "先运行 run_rag_eval --retrieval-mode structured、score_agent_runs、"
+                "python -m evaluation.legacy.compare_arms。"
                 + (" 检测到固定窗 RAG 对照，已放在可选辅助基线，不进入主比较。" if fixed else "")
             ),
         )

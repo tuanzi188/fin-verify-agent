@@ -12,7 +12,7 @@
 
 用法（在 backend 目录下）：
 
-    python -m evaluation.check_block_retrieval \
+    python -m evaluation.legacy.check_block_retrieval \
         --tasks evaluation/finance_tasks_complex.jsonl --top-k 5
 """
 

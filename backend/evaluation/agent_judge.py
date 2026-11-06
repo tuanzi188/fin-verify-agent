@@ -9,7 +9,7 @@
 4. 澄清行为对不对（该问的问了 / 不该问的没问 / 说明假设了没有）。
 
 **原文一律从语料回查**，不信 Agent 上下文里的内容，也不信答案里的转述：
-judge 拿到的 `chunk_id -> 原文` 直接来自 `evaluation.agent_corpus.chunk_map()`。
+judge 拿到的 `chunk_id -> 原文` 由调用方从 `evaluation.finance_corpus.chunk_map()` 传入。
 这样即使 Agent 篡改了引用文本，judge 也能发现。
 
 judge 不可用时（网络、额度、解析失败）返回 `ok=False`，调用方把这一维记成 NA，

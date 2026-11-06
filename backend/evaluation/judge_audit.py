@@ -37,7 +37,7 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from evaluation.lint_agent_tasks import load_tasks
+from evaluation.lint_common import load_tasks
 
 
 def _task_level_row(verdict: dict, judgment: dict, task: dict) -> dict | None:
