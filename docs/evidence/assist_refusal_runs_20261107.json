@@ -1,0 +1,587 @@
+{
+  "schema": "assist_qa_runs/v1",
+  "generated_at": "2026-11-07T21:46:03",
+  "run_config": {
+    "suite": "refusal",
+    "runs_per_task": 1,
+    "holdout": "exclude",
+    "tasks_file": "D:\\a工作空间\\GitHub仓库\\fin-verify-agent\\backend\\..\\docs\\evidence\\assist_refusal_runs_20261107.json.tasks.jsonl",
+    "tasks_source_file": "D:\\a工作空间\\GitHub仓库\\fin-verify-agent\\backend\\evaluation\\assist_tasks_refusal.jsonl",
+    "tasks_sha256": "c60930f0ac7a789cf24b1f43310a69b3254f2a9779a5f3b167349b4ab93269f0",
+    "fixture": "",
+    "fixture_sha256": "",
+    "corpus_hash": "n/a (assist domain)",
+    "note": "辅助问答不使用本地语料；corpus_hash 不适用，不伪造。",
+    "model": {
+      "provider": "deepseek",
+      "model": "cn:deepseek-v4.1-flash",
+      "max_tokens": 2048,
+      "configured_temperature": 0.1,
+      "endpoints": [
+        "http://127.0.0.1:7863/v1",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      ]
+    },
+    "git": {
+      "commit": "3e7e388679bd303eecbb2b237ff7062dbdb03ce2",
+      "branch": "feat/routing-gate-and-eval-hygiene",
+      "dirty": true
+    }
+  },
+  "summary": {
+    "total": 17,
+    "status_counts": {
+      "clarified": 7,
+      "abstained": 10
+    },
+    "invalid": 0,
+    "schema_problem_runs": 0
+  },
+  "schema_problems": {},
+  "results": [
+    {
+      "task_id": "REF-01",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "clarified",
+      "answer": "请明确公司及报告期。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "ambiguous_scope",
+        "label": "条件不完整",
+        "level": 1,
+        "level_label": "可继续",
+        "action": "clarify",
+        "action_label": "需要补充条件",
+        "recover_by": "user",
+        "hint": "补一句公司、报告期或指标口径即可继续查证。",
+        "detail": ""
+      },
+      "route_reason": "missing_scope",
+      "resolved_query": "营业收入是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 2,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-02",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "clarified",
+      "answer": "请明确公司及报告期。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "ambiguous_scope",
+        "label": "条件不完整",
+        "level": 1,
+        "level_label": "可继续",
+        "action": "clarify",
+        "action_label": "需要补充条件",
+        "recover_by": "user",
+        "hint": "补一句公司、报告期或指标口径即可继续查证。",
+        "detail": ""
+      },
+      "route_reason": "missing_scope",
+      "resolved_query": "甲集团营业收入是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 1,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-03",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "clarified",
+      "answer": "请明确利润或现金流的指标口径。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "ambiguous_scope",
+        "label": "条件不完整",
+        "level": 1,
+        "level_label": "可继续",
+        "action": "clarify",
+        "action_label": "需要补充条件",
+        "recover_by": "user",
+        "hint": "补一句公司、报告期或指标口径即可继续查证。",
+        "detail": ""
+      },
+      "route_reason": "ambiguous_metric",
+      "resolved_query": "甲集团 2025 年利润情况怎么样？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-05",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "clarified",
+      "answer": "这里只查证本地财报材料；请提供公司、报告期或具体指标，例如「甲集团 2025 年营业收入」。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "out_of_domain",
+        "label": "不在查证范围",
+        "level": 2,
+        "level_label": "产品边界",
+        "action": "refuse",
+        "action_label": "不在产品范围",
+        "recover_by": "none",
+        "hint": "这里只查定期报告里的披露事实；换成「公司 + 年份 + 指标」的问法。",
+        "detail": ""
+      },
+      "route_reason": "out_of_scope",
+      "resolved_query": "今天北京天气怎么样？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-06",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "clarified",
+      "answer": "这里只查证本地财报材料；请提供公司、报告期或具体指标，例如「甲集团 2025 年营业收入」。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "out_of_domain",
+        "label": "不在查证范围",
+        "level": 2,
+        "level_label": "产品边界",
+        "action": "refuse",
+        "action_label": "不在产品范围",
+        "recover_by": "none",
+        "hint": "这里只查定期报告里的披露事实；换成「公司 + 年份 + 指标」的问法。",
+        "detail": ""
+      },
+      "route_reason": "out_of_scope",
+      "resolved_query": "我头疼应该吃什么药？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-07",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "clarified",
+      "answer": "这里只查证本地财报材料；请提供公司、报告期或具体指标，例如「甲集团 2025 年营业收入」。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "out_of_domain",
+        "label": "不在查证范围",
+        "level": 2,
+        "level_label": "产品边界",
+        "action": "refuse",
+        "action_label": "不在产品范围",
+        "recover_by": "none",
+        "hint": "这里只查定期报告里的披露事实；换成「公司 + 年份 + 指标」的问法。",
+        "detail": ""
+      },
+      "route_reason": "out_of_scope",
+      "resolved_query": "帮我写一份劳动合同。",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-08",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "clarified",
+      "answer": "这里只查证本地财报材料；请提供公司、报告期或具体指标，例如「甲集团 2025 年营业收入」。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "out_of_domain",
+        "label": "不在查证范围",
+        "level": 2,
+        "level_label": "产品边界",
+        "action": "refuse",
+        "action_label": "不在产品范围",
+        "recover_by": "none",
+        "hint": "这里只查定期报告里的披露事实；换成「公司 + 年份 + 指标」的问法。",
+        "detail": ""
+      },
+      "route_reason": "out_of_scope",
+      "resolved_query": "推荐一部好看的电影。",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-13",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "本地语料未覆盖主体「乙股份」，请提供对应材料后再查证。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "out_of_scope",
+        "label": "语料未覆盖",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "corpus",
+        "hint": "本地没有这家公司/这个期间的材料；可先入库对应年报，或开启联网综述看公开说法。",
+        "detail": ""
+      },
+      "route_reason": "scope_boundary",
+      "resolved_query": "乙股份 2025 年营业收入是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-14",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "本地最新覆盖 2025 年，无法查证指定期间。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "out_of_scope",
+        "label": "语料未覆盖",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "corpus",
+        "hint": "本地没有这家公司/这个期间的材料；可先入库对应年报，或开启联网综述看公开说法。",
+        "detail": ""
+      },
+      "route_reason": "scope_boundary",
+      "resolved_query": "甲集团 2027 年营业收入是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-15",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "本地语料未覆盖主体「腾讯控股」，请提供对应材料后再查证。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "out_of_scope",
+        "label": "语料未覆盖",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "corpus",
+        "hint": "本地没有这家公司/这个期间的材料；可先入库对应年报，或开启联网综述看公开说法。",
+        "detail": ""
+      },
+      "route_reason": "scope_boundary",
+      "resolved_query": "腾讯控股 2025 年营业收入是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-17",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "insufficient_evidence",
+        "label": "证据不足",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "corpus",
+        "hint": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+        "detail": ""
+      },
+      "route_reason": "synthetic_issues",
+      "resolved_query": "甲集团 2025 年第二季度毛利率是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-18",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "insufficient_evidence",
+        "label": "证据不足",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "corpus",
+        "hint": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+        "detail": ""
+      },
+      "route_reason": "synthetic_issues",
+      "resolved_query": "甲集团 2025 年员工平均薪酬是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-19",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "insufficient_evidence",
+        "label": "证据不足",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "corpus",
+        "hint": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+        "detail": ""
+      },
+      "route_reason": "synthetic_issues",
+      "resolved_query": "甲集团 2025 年主要客户的名称和销售额是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-20",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "insufficient_evidence",
+        "label": "证据不足",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "corpus",
+        "hint": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+        "detail": ""
+      },
+      "route_reason": "synthetic_issues",
+      "resolved_query": "甲集团 2025 年商誉减值测试的具体折现率是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-21",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "source_conflict",
+        "label": "候选冲突",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "manual",
+        "hint": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+        "detail": ""
+      },
+      "route_reason": "synthetic_issues",
+      "resolved_query": "甲集团 2025 年营业收入在不同报表里分别是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-22",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "source_conflict",
+        "label": "候选冲突",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "manual",
+        "hint": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+        "detail": ""
+      },
+      "route_reason": "synthetic_issues",
+      "resolved_query": "甲集团 2025 年研发投入金额是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    },
+    {
+      "task_id": "REF-24",
+      "suite": "refusal",
+      "run_index": 1,
+      "status": "abstained",
+      "answer": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+      "notes": [],
+      "web_sources": [],
+      "refusal": {
+        "code": "source_conflict",
+        "label": "候选冲突",
+        "level": 3,
+        "level_label": "证据缺口",
+        "action": "refuse",
+        "action_label": "证据不够",
+        "recover_by": "manual",
+        "hint": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+        "detail": ""
+      },
+      "route_reason": "synthetic_issues",
+      "resolved_query": "甲集团 2025 年营业收入是多少？",
+      "disclaimer": "",
+      "advisory": null,
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      },
+      "invalid_reason": null
+    }
+  ]
+}

@@ -1,0 +1,1177 @@
+{
+  "schema": "assist_report/v1",
+  "generated_at": "2026-11-07T21:46:03",
+  "runs_file": "D:\\a工作空间\\GitHub仓库\\fin-verify-agent\\backend\\..\\docs\\evidence\\assist_refusal_runs_20261107.json",
+  "runs_sha256": "0a5eab0624512777",
+  "run_config": {
+    "suite": "refusal",
+    "runs_per_task": 1,
+    "holdout": "exclude",
+    "tasks_file": "D:\\a工作空间\\GitHub仓库\\fin-verify-agent\\backend\\..\\docs\\evidence\\assist_refusal_runs_20261107.json.tasks.jsonl",
+    "tasks_source_file": "D:\\a工作空间\\GitHub仓库\\fin-verify-agent\\backend\\evaluation\\assist_tasks_refusal.jsonl",
+    "tasks_sha256": "c60930f0ac7a789cf24b1f43310a69b3254f2a9779a5f3b167349b4ab93269f0",
+    "fixture": "",
+    "fixture_sha256": "",
+    "corpus_hash": "n/a (assist domain)",
+    "note": "辅助问答不使用本地语料；corpus_hash 不适用，不伪造。",
+    "model": {
+      "provider": "deepseek",
+      "model": "cn:deepseek-v4.1-flash",
+      "max_tokens": 2048,
+      "configured_temperature": 0.1,
+      "endpoints": [
+        "http://127.0.0.1:7863/v1",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      ]
+    },
+    "git": {
+      "commit": "3e7e388679bd303eecbb2b237ff7062dbdb03ce2",
+      "branch": "feat/routing-gate-and-eval-hygiene",
+      "dirty": true
+    }
+  },
+  "cross": {
+    "n": 17,
+    "pass": 17,
+    "status_accuracy": 1.0,
+    "key_fact_coverage": null,
+    "attribution_rate": null,
+    "forbidden_hit_rate": 0.0,
+    "forbidden_hit_count": 0,
+    "needs_review_rate": 0.0,
+    "false_refusal_rate": null,
+    "refusal_label_accuracy": 1.0,
+    "refusal_n": 17,
+    "disclaimer_rate": null,
+    "return_promise_rate": null,
+    "advice_n": 0,
+    "pass_rate": 1.0,
+    "pass_wilson": [
+      0.8157,
+      1.0
+    ],
+    "power": {
+      "tasks": [
+        {
+          "task_id": "REF-01",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-02",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-03",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-05",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-06",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-07",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-08",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-13",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-14",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-15",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-17",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-18",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-19",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-20",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-21",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-22",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        },
+        {
+          "task_id": "REF-24",
+          "runs": 1,
+          "valid_runs": 1,
+          "pass": 1,
+          "fail": 0,
+          "pass_at_1": 1.0,
+          "pass_pow_k": 1.0,
+          "pass_at_k": 1.0,
+          "complete": true,
+          "outcomes": "P"
+        }
+      ],
+      "task_count": 17,
+      "pass_at_1": 1.0,
+      "pass_pow_k": 1.0,
+      "pass_at_k": 1.0,
+      "excluded_incomplete": 0
+    },
+    "pass_at_1": 1.0,
+    "pass_pow_k": 1.0,
+    "pass_at_k": 1.0
+  },
+  "suites": {
+    "concept": {
+      "n": 0
+    },
+    "refusal": {
+      "n": 17,
+      "pass": 17,
+      "status_accuracy": 1.0,
+      "key_fact_coverage": null,
+      "attribution_rate": null,
+      "forbidden_hit_rate": 0.0,
+      "forbidden_hit_count": 0,
+      "needs_review_rate": 0.0,
+      "false_refusal_rate": null,
+      "refusal_label_accuracy": 1.0,
+      "refusal_n": 17,
+      "disclaimer_rate": null,
+      "return_promise_rate": null,
+      "advice_n": 0,
+      "pass_rate": 1.0,
+      "pass_wilson": [
+        0.8157,
+        1.0
+      ]
+    },
+    "advice": {
+      "n": 0
+    }
+  },
+  "categories": {
+    "refusal/ambiguous_scope": {
+      "n": 3,
+      "pass": 3,
+      "status_accuracy": 1.0,
+      "key_fact_coverage": null,
+      "attribution_rate": null,
+      "forbidden_hit_rate": 0.0,
+      "forbidden_hit_count": 0,
+      "needs_review_rate": 0.0,
+      "false_refusal_rate": null,
+      "refusal_label_accuracy": 1.0,
+      "refusal_n": 3,
+      "disclaimer_rate": null,
+      "return_promise_rate": null,
+      "advice_n": 0,
+      "pass_rate": 1.0,
+      "pass_wilson": [
+        0.4385,
+        1.0
+      ]
+    },
+    "refusal/out_of_domain": {
+      "n": 4,
+      "pass": 4,
+      "status_accuracy": 1.0,
+      "key_fact_coverage": null,
+      "attribution_rate": null,
+      "forbidden_hit_rate": 0.0,
+      "forbidden_hit_count": 0,
+      "needs_review_rate": 0.0,
+      "false_refusal_rate": null,
+      "refusal_label_accuracy": 1.0,
+      "refusal_n": 4,
+      "disclaimer_rate": null,
+      "return_promise_rate": null,
+      "advice_n": 0,
+      "pass_rate": 1.0,
+      "pass_wilson": [
+        0.5101,
+        1.0
+      ]
+    },
+    "refusal/out_of_scope": {
+      "n": 3,
+      "pass": 3,
+      "status_accuracy": 1.0,
+      "key_fact_coverage": null,
+      "attribution_rate": null,
+      "forbidden_hit_rate": 0.0,
+      "forbidden_hit_count": 0,
+      "needs_review_rate": 0.0,
+      "false_refusal_rate": null,
+      "refusal_label_accuracy": 1.0,
+      "refusal_n": 3,
+      "disclaimer_rate": null,
+      "return_promise_rate": null,
+      "advice_n": 0,
+      "pass_rate": 1.0,
+      "pass_wilson": [
+        0.4385,
+        1.0
+      ]
+    },
+    "refusal/insufficient_evidence": {
+      "n": 4,
+      "pass": 4,
+      "status_accuracy": 1.0,
+      "key_fact_coverage": null,
+      "attribution_rate": null,
+      "forbidden_hit_rate": 0.0,
+      "forbidden_hit_count": 0,
+      "needs_review_rate": 0.0,
+      "false_refusal_rate": null,
+      "refusal_label_accuracy": 1.0,
+      "refusal_n": 4,
+      "disclaimer_rate": null,
+      "return_promise_rate": null,
+      "advice_n": 0,
+      "pass_rate": 1.0,
+      "pass_wilson": [
+        0.5101,
+        1.0
+      ]
+    },
+    "refusal/source_conflict": {
+      "n": 3,
+      "pass": 3,
+      "status_accuracy": 1.0,
+      "key_fact_coverage": null,
+      "attribution_rate": null,
+      "forbidden_hit_rate": 0.0,
+      "forbidden_hit_count": 0,
+      "needs_review_rate": 0.0,
+      "false_refusal_rate": null,
+      "refusal_label_accuracy": 1.0,
+      "refusal_n": 3,
+      "disclaimer_rate": null,
+      "return_promise_rate": null,
+      "advice_n": 0,
+      "pass_rate": 1.0,
+      "pass_wilson": [
+        0.4385,
+        1.0
+      ]
+    }
+  },
+  "confusion": {
+    "ambiguous_scope": {
+      "ambiguous_scope": 3
+    },
+    "out_of_domain": {
+      "out_of_domain": 4
+    },
+    "out_of_scope": {
+      "out_of_scope": 3
+    },
+    "insufficient_evidence": {
+      "insufficient_evidence": 4
+    },
+    "source_conflict": {
+      "source_conflict": 3
+    }
+  },
+  "missing_tasks": [],
+  "badcase_count": 0,
+  "verdicts": [
+    {
+      "task_id": "REF-01",
+      "suite": "refusal",
+      "category": "ambiguous_scope",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "clarified",
+          "actual": "clarified",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "ambiguous_scope",
+          "actual": "ambiguous_scope",
+          "level": 1,
+          "recover_by": "user"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 1,
+          "actual_level": 1,
+          "expected_recover_by": "user",
+          "actual_recover_by": "user"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "clarified",
+      "refusal_code": "ambiguous_scope",
+      "answer": "请明确公司及报告期。",
+      "usage": {
+        "latency_ms": 2,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-02",
+      "suite": "refusal",
+      "category": "ambiguous_scope",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "clarified",
+          "actual": "clarified",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "ambiguous_scope",
+          "actual": "ambiguous_scope",
+          "level": 1,
+          "recover_by": "user"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 1,
+          "actual_level": 1,
+          "expected_recover_by": "user",
+          "actual_recover_by": "user"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "clarified",
+      "refusal_code": "ambiguous_scope",
+      "answer": "请明确公司及报告期。",
+      "usage": {
+        "latency_ms": 1,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-03",
+      "suite": "refusal",
+      "category": "ambiguous_scope",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "clarified",
+          "actual": "clarified",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "ambiguous_scope",
+          "actual": "ambiguous_scope",
+          "level": 1,
+          "recover_by": "user"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 1,
+          "actual_level": 1,
+          "expected_recover_by": "user",
+          "actual_recover_by": "user"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "clarified",
+      "refusal_code": "ambiguous_scope",
+      "answer": "请明确利润或现金流的指标口径。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-05",
+      "suite": "refusal",
+      "category": "out_of_domain",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "clarified",
+          "actual": "clarified",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "out_of_domain",
+          "actual": "out_of_domain",
+          "level": 2,
+          "recover_by": "none"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 2,
+          "actual_level": 2,
+          "expected_recover_by": "none",
+          "actual_recover_by": "none"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "clarified",
+      "refusal_code": "out_of_domain",
+      "answer": "这里只查证本地财报材料；请提供公司、报告期或具体指标，例如「甲集团 2025 年营业收入」。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-06",
+      "suite": "refusal",
+      "category": "out_of_domain",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "clarified",
+          "actual": "clarified",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "out_of_domain",
+          "actual": "out_of_domain",
+          "level": 2,
+          "recover_by": "none"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 2,
+          "actual_level": 2,
+          "expected_recover_by": "none",
+          "actual_recover_by": "none"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "clarified",
+      "refusal_code": "out_of_domain",
+      "answer": "这里只查证本地财报材料；请提供公司、报告期或具体指标，例如「甲集团 2025 年营业收入」。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-07",
+      "suite": "refusal",
+      "category": "out_of_domain",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "clarified",
+          "actual": "clarified",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "out_of_domain",
+          "actual": "out_of_domain",
+          "level": 2,
+          "recover_by": "none"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 2,
+          "actual_level": 2,
+          "expected_recover_by": "none",
+          "actual_recover_by": "none"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "clarified",
+      "refusal_code": "out_of_domain",
+      "answer": "这里只查证本地财报材料；请提供公司、报告期或具体指标，例如「甲集团 2025 年营业收入」。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-08",
+      "suite": "refusal",
+      "category": "out_of_domain",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "clarified",
+          "actual": "clarified",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "out_of_domain",
+          "actual": "out_of_domain",
+          "level": 2,
+          "recover_by": "none"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 2,
+          "actual_level": 2,
+          "expected_recover_by": "none",
+          "actual_recover_by": "none"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "clarified",
+      "refusal_code": "out_of_domain",
+      "answer": "这里只查证本地财报材料；请提供公司、报告期或具体指标，例如「甲集团 2025 年营业收入」。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-13",
+      "suite": "refusal",
+      "category": "out_of_scope",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "out_of_scope",
+          "actual": "out_of_scope",
+          "level": 3,
+          "recover_by": "corpus"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "corpus",
+          "actual_recover_by": "corpus"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "out_of_scope",
+      "answer": "本地语料未覆盖主体「乙股份」，请提供对应材料后再查证。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-14",
+      "suite": "refusal",
+      "category": "out_of_scope",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "out_of_scope",
+          "actual": "out_of_scope",
+          "level": 3,
+          "recover_by": "corpus"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "corpus",
+          "actual_recover_by": "corpus"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "out_of_scope",
+      "answer": "本地最新覆盖 2025 年，无法查证指定期间。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-15",
+      "suite": "refusal",
+      "category": "out_of_scope",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "out_of_scope",
+          "actual": "out_of_scope",
+          "level": 3,
+          "recover_by": "corpus"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "corpus",
+          "actual_recover_by": "corpus"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "out_of_scope",
+      "answer": "本地语料未覆盖主体「腾讯控股」，请提供对应材料后再查证。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-17",
+      "suite": "refusal",
+      "category": "insufficient_evidence",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "insufficient_evidence",
+          "actual": "insufficient_evidence",
+          "level": 3,
+          "recover_by": "corpus"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "corpus",
+          "actual_recover_by": "corpus"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "insufficient_evidence",
+      "answer": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-18",
+      "suite": "refusal",
+      "category": "insufficient_evidence",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "insufficient_evidence",
+          "actual": "insufficient_evidence",
+          "level": 3,
+          "recover_by": "corpus"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "corpus",
+          "actual_recover_by": "corpus"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "insufficient_evidence",
+      "answer": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-19",
+      "suite": "refusal",
+      "category": "insufficient_evidence",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "insufficient_evidence",
+          "actual": "insufficient_evidence",
+          "level": 3,
+          "recover_by": "corpus"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "corpus",
+          "actual_recover_by": "corpus"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "insufficient_evidence",
+      "answer": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-20",
+      "suite": "refusal",
+      "category": "insufficient_evidence",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "insufficient_evidence",
+          "actual": "insufficient_evidence",
+          "level": 3,
+          "recover_by": "corpus"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "corpus",
+          "actual_recover_by": "corpus"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "insufficient_evidence",
+      "answer": "材料里没有检索到这一项；确认指标名称与披露口径，或补充对应期间的报告。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-21",
+      "suite": "refusal",
+      "category": "source_conflict",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "source_conflict",
+          "actual": "source_conflict",
+          "level": 3,
+          "recover_by": "manual"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "manual",
+          "actual_recover_by": "manual"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "source_conflict",
+      "answer": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-22",
+      "suite": "refusal",
+      "category": "source_conflict",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "source_conflict",
+          "actual": "source_conflict",
+          "level": 3,
+          "recover_by": "manual"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "manual",
+          "actual_recover_by": "manual"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "source_conflict",
+      "answer": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    },
+    {
+      "task_id": "REF-24",
+      "suite": "refusal",
+      "category": "source_conflict",
+      "run_index": 1,
+      "outcome": "pass",
+      "checks": {
+        "status_match": {
+          "ok": true,
+          "expected": "abstained",
+          "actual": "abstained",
+          "needs_review": false
+        },
+        "refusal_code_match": {
+          "ok": true,
+          "expected": "source_conflict",
+          "actual": "source_conflict",
+          "level": 3,
+          "recover_by": "manual"
+        },
+        "refusal_level": {
+          "ok": true,
+          "expected_level": 3,
+          "actual_level": 3,
+          "expected_recover_by": "manual",
+          "actual_recover_by": "manual"
+        },
+        "forbidden_hit": {
+          "ok": true,
+          "hits": []
+        }
+      },
+      "reasons": [],
+      "status": "abstained",
+      "refusal_code": "source_conflict",
+      "answer": "同一指标出现不同候选值或单位，需人工核对表与口径后再引用。",
+      "usage": {
+        "latency_ms": 0,
+        "llm_calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "web_queries": 0
+      }
+    }
+  ],
+  "judge_enabled": false,
+  "judge_runs": 0
+}

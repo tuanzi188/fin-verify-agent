@@ -44,6 +44,7 @@ read_when: 引用任何 pass@1 / token / 命中率数字前
 | 网关缓存行为判定 | [gateway_cache_probe_20261104.json](gateway_cache_probe_20261104.json) | H1/H2 均不成立 | 8 次短请求；带 tools 请求 hit 立即可见 |
 | 检索层最新快照 | [eval_retrieval_20261103.md](eval_retrieval_20261103.md) | 主集 69.7% / 复杂 50.0% / 压力 33.3% | first_search@5，零模型；重解析后语料；掉点为稀释性挤出 |
 | 路由判据 | [ROUTING_POLICY.md](../ROUTING_POLICY.md) | v2 | 无真实问题金标，未报告新准确率 |
+| 辅助问答·拒答零模型基线 | [assist_refusal_report_20261107.json](assist_refusal_report_20261107.json) | **17/17 pass**，编码准确率 17/17 | 17 题 dev（3 条 holdout 未跑）；**零模型**（不调 LLM）；judge off；`tasks_sha256=c60930f0`；commit `3e7e388`（`dirty=true`）。**只代表路由与五类标签契约，不是模型答案质量**；观点类已改走 `opinion` 路径，不在本集 |
 
 **注意**：答案层与检索层命中率不是同一个口径——离线检索层用任务问题原文查询
 （`first_search`），答案层用 Agent 改写后的 query，两个数字不可混。
@@ -134,6 +135,10 @@ python -m evaluation.score_agent_runs \
 | `format_probe3b_20261106.tasks.jsonl` | tasks snapshot | 11-06 | historical | 上述复测的实际任务集快照（3 题） |
 | `format_probe3c_20261106.json` | runs（探针） | 11-06 | **historical（瘦身后对照）** | 同 3 题、同任务卡，仅提示词不同（工具说明 641→129 字）：失败工具 1→0、步数 15.0→12.7、合计 130,882 token（探针 B 199,813）；金标覆盖 5/5、未溯源数值 15/90。`runs_per_task=1`、无 judge，不作收益结论 |
 | `format_probe3c_20261106.tasks.jsonl` | tasks snapshot | 11-06 | historical | 上述对照的实际任务集快照（3 题） |
+| `assist_refusal_runs_20261107.json` | runs（零模型） | 11-07 | **current（拒答基线）** | 17 题 dev（3 条 holdout 未跑）；`run_config.git=3e7e388`（`dirty=true`）；`tasks_sha256=c60930f0`；无 `corpus_hash`（辅助问答不使用本地语料） |
+| `assist_refusal_runs_20261107.json.tasks.jsonl` | tasks snapshot | 11-07 | current | 上述 runs 的实际任务集快照（17 题） |
+| `assist_refusal_report_20261107.json` | report（零模型） | 11-07 | **current（拒答基线）** | 17/17 pass，编码准确率 17/17，judge off；**只代表路由与五类标签契约** |
+| `assist_refusal_badcases_20261107.jsonl` | badcase | 11-07 | current | 本轮 0 条；观点类已移出拒答集 |
 
 **补记（2026-11-06，提示词绑定字段）**：`run_finance_eval.py` 自本日起在
 `run_config` 写入 `prompt_sha256` / `prompt_variant` / `prompt_search_mode` / `prompt_chars`
