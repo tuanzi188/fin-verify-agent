@@ -212,11 +212,19 @@ async def test_model_failure_is_reported_as_error():
 
 def test_concept_prompt_keeps_the_hard_constraints():
     assert len(CONCEPT_SYSTEM) < 900
-    assert "没有资料依据的具体数值一律不写" in CONCEPT_SYSTEM
     assert "不写 [n]、页码、表名、表 id" in CONCEPT_SYSTEM
     assert "无法给出可靠解释" in CONCEPT_SYSTEM
     assert "不在金融概念范围内" in CONCEPT_SYSTEM
-    assert "不用标题、表格、代码块" in CONCEPT_SYSTEM
+    assert "尽量不用标题、表格和代码块" in CONCEPT_SYSTEM
+
+
+def test_concept_prompt_allows_soft_teaching_aids():
+    """示例与分类型是可选建议，不是硬规则：不能写成"必须"。"""
+    assert "通用示例" in CONCEPT_SYSTEM
+    assert "假设值" in CONCEPT_SYSTEM
+    assert "分类型怎么看" in CONCEPT_SYSTEM
+    assert "不必勉强" in CONCEPT_SYSTEM
+    assert "没有也不扣分" in CONCEPT_SYSTEM
 
 
 # ---------------------------------------------------------------------------
