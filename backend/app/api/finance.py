@@ -33,6 +33,7 @@ from app.models.finance import (
     FinanceEvidenceResponse,
 )
 from app.services.audit_logger import AuditAction, AuditEvent, AuditStatus, audit_logger
+from app.services.advice_qa import answer_advice
 from app.services.concept_qa import answer_concept
 from app.services.conversation_memory import conversation_memory
 from app.services.finance_corpus import (
@@ -119,6 +120,22 @@ async def finance_chat(request: Request, body: FinanceChatRequest):
                 response.answer,
                 payload=build_history_payload(
                     # 概念答案不依赖语料：不写指纹，语料变更时不会被升级成「需人工复核」。
+                    response,
+                    corpus_fingerprint="",
+                ),
+            )
+        elif body.strategy == "auto" and initial.initial_path == "opinion":
+            # 观点/建议类问题：可以答，但走独立路径，免责声明由服务端强制追加。
+            response = await answer_advice(
+                query=body.query,
+                conversation_id=scoped_conversation_id,
+                route_reason=initial.reason,
+            )
+            await conversation_memory.add_turn(
+                scoped_conversation_id,
+                body.query,
+                response.answer,
+                payload=build_history_payload(
                     response,
                     corpus_fingerprint="",
                 ),

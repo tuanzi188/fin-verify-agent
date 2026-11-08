@@ -96,4 +96,7 @@ def build_history_payload(
         # 概念问答的首段定论与联网来源：重开会话不能丢，否则定论和来源条会消失
         "answer_lead": response.answer_lead,
         "web_sources": list(response.web_sources),
+        # 观点类回答的免责声明与观点标记：重开会话不能丢，否则历史里看像正式结论
+        "disclaimer": response.disclaimer,
+        "advisory": response.advisory,
     }

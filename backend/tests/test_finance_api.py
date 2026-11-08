@@ -28,6 +28,8 @@ from app.models.finance import (
     FinanceCitation,
 )
 from app.services import finance_entry
+from app.services.advice_qa import DISCLAIMER_TEXT
+from app.services.finance_history import build_history_payload
 
 _ALICE = {"Authorization": "Bearer " + "a" * 32}
 
@@ -897,14 +899,45 @@ async def test_out_of_domain_question_carries_refusal_class(api_app, demo_store,
 
 
 @pytest.mark.asyncio
-async def test_opinion_question_is_unsupported_intent(api_app, demo_store, monkeypatch):
+async def test_opinion_question_gets_advice_path(api_app, demo_store, monkeypatch):
     monkeypatch.setattr(finance_api, "get_finance_store", lambda: demo_store)
     monkeypatch.setattr(finance_api.conversation_memory, "add_turn", AsyncMock())
 
+    async def fake_answer_advice(**kwargs):
+        return FinanceChatResponse(
+            status="answered",
+            answer="这是我的观点，主要风险是需求波动。\n\n" + DISCLAIMER_TEXT,
+            conversation_id=kwargs.get("conversation_id", ""),
+            strategy="advice",
+            variant="advice",
+            disclaimer=DISCLAIMER_TEXT,
+            advisory={"kind": "opinion", "requires_disclaimer": True},
+            token_usage={"llm_calls": 1},
+        )
+
+    monkeypatch.setattr(finance_api, "answer_advice", fake_answer_advice)
+
     body = await _post(api_app, {"query": "XX股份 2025 年股价会涨吗"})
 
-    assert body["refusal"]["code"] == "unsupported_intent"
-    assert body["refusal"]["action"] == "refuse"
+    assert body["status"] == "answered"
+    assert body["strategy"] == "advice"
+    assert body["disclaimer"] == DISCLAIMER_TEXT
+    assert DISCLAIMER_TEXT in body["answer"]
+    assert body["refusal"] is None
+
+
+def test_advice_history_payload_keeps_disclaimer():
+    response = FinanceChatResponse(
+        status="answered",
+        answer="观点\n\n" + DISCLAIMER_TEXT,
+        strategy="advice",
+        variant="advice",
+        disclaimer=DISCLAIMER_TEXT,
+        advisory={"kind": "opinion", "requires_disclaimer": True},
+    )
+    payload = build_history_payload(response, corpus_fingerprint="")
+    assert payload["disclaimer"] == DISCLAIMER_TEXT
+    assert payload["advisory"]["requires_disclaimer"] is True
 
 
 @pytest.mark.asyncio

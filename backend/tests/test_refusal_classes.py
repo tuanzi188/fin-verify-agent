@@ -118,10 +118,10 @@ def test_multiple_previous_periods_need_clarification():
 def test_initial_decision_carries_reason_codes():
     assert initial_decision("帮我写一首诗", _DOCUMENTS).reason_code == "out_of_domain"
     assert initial_decision("营业收入是多少", _DOCUMENTS).reason_code == "ambiguous_scope"
-    assert (
-        initial_decision("甲集团 2025 年股价会涨吗", _DOCUMENTS).reason_code
-        == "unsupported_intent"
-    )
+    # 观点/建议类自 2026-11-07 起走 opinion 路径，不再贴拒答标签。
+    opinion = initial_decision("甲集团 2025 年股价会涨吗", _DOCUMENTS)
+    assert opinion.initial_path == "opinion"
+    assert opinion.reason_code == ""
     # 正常查数不贴拒答标签
     assert initial_decision("甲集团 2025 年营业收入是多少", _DOCUMENTS).reason_code == ""
 

@@ -14,12 +14,20 @@ def decide(query: str, previous: str = ""):
 
 
 def test_opinion_requests_stop_before_retrieval():
-    for query in (
+    # 明确建议/预测走 opinion（可答 + 免责）；估值类词仍走澄清。
+    opinion_queries = (
         "茅台股票现在能买吗？",
-        "你觉得美的集团这家公司怎么样？",
         "比亚迪 2025 年股价走势如何？",
+    )
+    clarify_queries = (
+        "你觉得美的集团这家公司怎么样？",
         "美的集团 2025 年市值是多少？",
-    ):
+    )
+    for query in opinion_queries:
+        decision = decide(query)
+        assert decision.initial_path == "opinion", query
+        assert decision.rule_id == "opinion_intent", query
+    for query in clarify_queries:
         decision = decide(query)
         assert decision.initial_path == "clarify", query
         assert decision.rule_id == "out_of_scope_intent", query
@@ -53,16 +61,23 @@ def test_regular_lookup_unaffected():
 
 
 def test_retail_opinion_paraphrases_are_blocked():
-    for query in (
+    opinion_queries = (
         "比亚迪这波还能追吗",
         "美的值不值得长期持有",
         "茅台后市怎么走",
         "帮我看看茅台有没有投资价值",
         "茅台 2025 年能涨到多少",
-        "茅台股息率高吗",
         "现在抄底美的合适吗",
+    )
+    clarify_queries = (
+        "茅台股息率高吗",
         "美的和比亚迪哪个好",
-    ):
+    )
+    for query in opinion_queries:
+        decision = decide(query)
+        assert decision.initial_path == "opinion", query
+        assert decision.rule_id == "opinion_intent", query
+    for query in clarify_queries:
         decision = decide(query)
         assert decision.initial_path == "clarify", query
         assert decision.rule_id == "out_of_scope_intent", query

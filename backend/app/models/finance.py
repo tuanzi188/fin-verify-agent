@@ -176,6 +176,9 @@ class FinanceChatResponse(BaseModel):
     refusal: Optional[Dict[str, Any]] = None
     # 概念问答：从 answer 首段切出的定论，前端单独放大显示；answer 仍保留全文。
     answer_lead: str = ""
+    # 观点/建议类回答：服务端强制追加的免责声明与观点标记。查证链路为空。
+    disclaimer: str = ""
+    advisory: Optional[Dict[str, Any]] = None
     # 概念问答实际检索到的公开信息。只做透明展示，不是 [n] 证据，也不能回查到单元格。
     web_sources: List[Dict[str, Any]] = Field(default_factory=list)
 

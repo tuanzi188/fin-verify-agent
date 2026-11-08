@@ -665,6 +665,11 @@ export interface components {
              * @default auto
              */
             strategy: string;
+            /**
+             * Allow Web
+             * @default false
+             */
+            allow_web: boolean;
         };
         /** FinanceChatResponse */
         FinanceChatResponse: {
@@ -736,6 +741,32 @@ export interface components {
              * @default
              */
             resolved_query: string;
+            /** Market Brief */
+            market_brief?: {
+                [key: string]: unknown;
+            } | null;
+            /** Refusal */
+            refusal?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Answer Lead
+             * @default
+             */
+            answer_lead: string;
+            /**
+             * Disclaimer
+             * @default
+             */
+            disclaimer: string;
+            /** Advisory */
+            advisory?: {
+                [key: string]: unknown;
+            } | null;
+            /** Web Sources */
+            web_sources?: {
+                [key: string]: unknown;
+            }[];
         };
         /** FinanceCitation */
         FinanceCitation: {

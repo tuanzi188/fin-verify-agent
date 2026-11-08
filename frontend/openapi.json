@@ -1489,6 +1489,11 @@
             "pattern": "^(auto|agent|structured_rag)$",
             "title": "Strategy",
             "default": "auto"
+          },
+          "allow_web": {
+            "type": "boolean",
+            "title": "Allow Web",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -1601,6 +1606,60 @@
             "type": "string",
             "title": "Resolved Query",
             "default": ""
+          },
+          "market_brief": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Brief"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal"
+          },
+          "answer_lead": {
+            "type": "string",
+            "title": "Answer Lead",
+            "default": ""
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer",
+            "default": ""
+          },
+          "advisory": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisory"
+          },
+          "web_sources": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Web Sources"
           }
         },
         "type": "object",
