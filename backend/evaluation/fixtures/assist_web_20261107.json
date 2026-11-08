@@ -1,0 +1,85 @@
+{
+  "schema": "assist_web_replay/v1",
+  "note": "费率/规则题的离线回放快照。只用于评测，不代表实时行情；更新规则时整份替换并记录 sha256。",
+  "captured_at": "2026-11-07",
+  "entries": [
+    {
+      "match_any": ["印花税"],
+      "sources": [
+        {
+          "url": "https://www.chinatax.gov.cn/chinatax/n810341/n810755/c5210488/content.html",
+          "title": "关于减半征收证券交易印花税的公告",
+          "publishedDate": "2023-08-27",
+          "text": "自2023年8月28日起，证券交易印花税实施减半征收，税率为成交金额的0.05%，在卖出时单边征收。"
+        },
+        {
+          "url": "https://www.gov.cn/zhengce/zhengceku/202308/content_6900000.htm",
+          "title": "证券交易印花税减半征收政策说明",
+          "publishedDate": "2023-08-27",
+          "text": "证券交易印花税对卖出方单边征收，本次调整后税率为0.05%。"
+        }
+      ]
+    },
+    {
+      "match_any": ["过户费"],
+      "sources": [
+        {
+          "url": "https://www.sse.com.cn/lawandrules/sselawsrules/stock/trading/c/c_20220428_0000001.shtml",
+          "title": "中国结算关于降低股票交易过户费收费标准的通知",
+          "publishedDate": "2022-04-28",
+          "text": "自2022年4月29日起，沪深A股股票交易过户费按成交金额的0.001%双向收取。"
+        }
+      ]
+    },
+    {
+      "match_any": ["佣金"],
+      "sources": [
+        {
+          "url": "https://www.csrc.gov.cn/csrc/c101954/c1024921/content.shtml",
+          "title": "证券交易佣金收取标准",
+          "publishedDate": "2024-01-01",
+          "text": "证券公司收取的佣金不得超过成交金额的千分之三（0.3%），单笔佣金不足五元的按五元收取。"
+        }
+      ]
+    },
+    {
+      "match_any": ["涨跌停", "涨跌幅"],
+      "sources": [
+        {
+          "url": "https://www.sse.com.cn/lawandrules/sselawsrules/stock/trading/c/c_20230216_5716348.shtml",
+          "title": "上海证券交易所交易规则：涨跌幅限制",
+          "publishedDate": "2024-04-30",
+          "text": "主板股票涨跌幅限制为10%，科创板股票涨跌幅限制为20%，风险警示股票涨跌幅限制为5%。"
+        },
+        {
+          "url": "https://www.szse.cn/lawrules/rule/stock/trade/t20240430_000000.html",
+          "title": "深圳证券交易所交易规则：涨跌幅限制",
+          "publishedDate": "2024-04-30",
+          "text": "主板股票涨跌幅限制为10%，创业板股票涨跌幅限制为20%，风险警示股票涨跌幅限制为5%。"
+        }
+      ]
+    },
+    {
+      "match_any": ["可转债"],
+      "sources": [
+        {
+          "url": "https://www.sse.com.cn/lawandrules/sselawsrules/bond/trading/c/c_20240701_0000001.shtml",
+          "title": "上海证券交易所可转换公司债券交易实施细则",
+          "publishedDate": "2024-07-01",
+          "text": "可转换公司债券实行T+0交易，投资者当日买入的可转债当日可以卖出。"
+        }
+      ]
+    },
+    {
+      "match_any": ["集合竞价"],
+      "sources": [
+        {
+          "url": "https://www.sse.com.cn/lawandrules/sselawsrules/stock/trading/c/c_20230216_5716348.shtml",
+          "title": "上海证券交易所交易规则：集合竞价",
+          "publishedDate": "2024-04-30",
+          "text": "开盘集合竞价时间为9:15至9:25，收盘集合竞价时间为14:57至15:00。"
+        }
+      ]
+    }
+  ]
+}
