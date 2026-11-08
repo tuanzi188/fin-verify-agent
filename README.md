@@ -151,6 +151,25 @@ python -m evaluation.eval_report --retrieval %TEMP%\retrieval.json \
 - 闸门：金融两条红线——数值幻觉率 = 0、误拒率 ≤ 阈值；缺数据记 `insufficient_data`，不算通过。
 - 实施记录与首轮读数：`docs/archive/20261101_eval_upgrade_implementation.md`；等价规则：`docs/ANSWER_EQUIVALENCE_RUBRIC.md`。
 
+### 辅助问答评测（概念 / 六类拒答）
+
+与金融 5 维分开的独立域，任务卡与判分口径见 [docs/ASSIST_EVAL.md](docs/ASSIST_EVAL.md)。
+
+```bash
+# 任务卡 lint（零模型）
+python -m evaluation.lint_assist_tasks
+# 六类拒答：完整零模型
+python -m evaluation.run_assist_eval --suite refusal --out %TEMP%\assist_refusal.json
+python -m evaluation.score_assist_runs --runs %TEMP%\assist_refusal.json --out %TEMP%\assist_refusal_report.json
+# 概念题：必须带检索快照；--judge 可选
+python -m evaluation.run_assist_eval --suite concept \
+  --replay evaluation/fixtures/assist_web_20261107.json --out %TEMP%\assist_concept.json
+python -m evaluation.score_assist_runs --runs %TEMP%\assist_concept.json --out %TEMP%\assist_concept_report.json
+# 观点/建议：真实模型 + 服务端免责声明
+python -m evaluation.run_assist_eval --suite advice --out %TEMP%\assist_advice.json
+python -m evaluation.score_assist_runs --runs %TEMP%\assist_advice.json --out %TEMP%\assist_advice_report.json
+```
+
 ### 任务集维护（防漂移）
 
 ```bash

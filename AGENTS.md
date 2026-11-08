@@ -35,6 +35,7 @@ git config core.hooksPath scripts/hooks     # 启用文档一致性 pre-commit �
 cd backend && python -m pytest -q
 cd ../frontend && npm run typecheck && npm test -- --run
 python -m evaluation.lint_finance_tasks --check-refs --check-routing   # 在 backend 下
+python -m evaluation.lint_assist_tasks                                 # 零模型，辅助问答任务卡
 ```
 
 CI 跑后端测试（含结构检索回归 `tests/test_block_retrieval_regression.py`）、
@@ -56,6 +57,8 @@ CI 跑后端测试（含结构检索回归 `tests/test_block_retrieval_regressio
 | 模型客户端 / 缓存记账 | `backend/app/services/openai_client.py`、`evaluation/agent_metrics.py`、`evaluation/audit_run_cost.py` |
 | 任务集 / 判分 / 闸门 | `backend/evaluation/finance_tasks*.jsonl`、`score_agent_runs.py`、`release_gate.py`、`lint_finance_tasks.py` |
 | 三层评测 / 报告 | `backend/evaluation/retrieval_metrics.py`、`routing_metrics.py`、`eval_report.py`、`agent_report.py` |
+| 辅助问答（概念 / 拒答）评测 | `backend/evaluation/assist_tasks_*.jsonl`、`run_assist_eval.py`、`score_assist_runs.py`、`assist_schema.py`；口径见 `docs/ASSIST_EVAL.md` |
+| 观点/建议类问答 | `backend/app/services/advice_qa.py`（服务端免责声明）、`app/finance/routing_policy.py` 的 `_ADVICE_INTENT`、`tests/test_advice_routing.py` |
 | 工作台 / 证据检查器 | `frontend/src/components/EvidenceInspector.tsx`、`WorkbenchTurns.tsx`、`FinanceConclusion.tsx` |
 | 语料入库 / 解析 | `backend/scripts/ingest_finance_corpus.py`、`app/finance/ingest.py` |
 | 依赖 / 锁文件 | `backend/requirements.txt`（人工输入）、`requirements.lock`（uv 生成，勿手改） |
