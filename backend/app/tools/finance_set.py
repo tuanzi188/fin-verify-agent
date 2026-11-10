@@ -26,6 +26,7 @@ from app.agent.prompts import (
 from app.finance.block_index import BlockIndex
 from app.finance.query_scope import scope_metrics
 from app.finance.store import FinanceStore, _normalize_label
+from app.finance.task_plan import FinanceTaskPlan
 from app.tools.finance import FINANCE_TOOL_SPECS, FinanceToolbox
 from app.tools.toolset import Injector, ToolOutcome, evidence_item
 
@@ -269,6 +270,7 @@ class FinanceToolset:
         self._budget_grants = 0
         #: 本次任务已定位到的 chunk（检索结果），预算耗尽时回显给模型
         self._located_ids: list[str] = []
+        self.task_plan: FinanceTaskPlan | None = None
 
     # ------------------------------------------------------------------
     # 注入与复用
@@ -287,6 +289,25 @@ class FinanceToolset:
         self._search_budget = MAX_SEARCH_CALLS
         self._budget_grants = 0
         self._located_ids = []
+        self.task_plan = None
+
+    def start_task_plan(self, question: str) -> None:
+        """为当前运行创建独立清单，不共享上一题的完成状态。"""
+        self.task_plan = FinanceTaskPlan(question, self.toolbox.store.list_documents())
+
+    def update_task_plan(self, evidence: list[dict], record: dict | None = None) -> dict:
+        if self.task_plan is None:
+            return {}
+        self.task_plan.refresh(evidence, self.calcs, self.toolbox.store)
+        if record is not None:
+            self.task_plan.observe_progress(record, self.calcs)
+        return self.task_plan.snapshot()
+
+    def task_plan_hint(self) -> str:
+        return self.task_plan.guidance() if self.task_plan else ""
+
+    def task_plan_stopped(self) -> bool:
+        return bool(self.task_plan and self.task_plan.stop_reason)
 
     @property
     def planned_injections(self) -> int:
@@ -321,6 +342,12 @@ class FinanceToolset:
         单公司单年度的题不要求跨文档：否则“2025 年营收同比”会被误判成
         “必须再读 2024 年报”，而同比数据本来就在 2025 年报的上期列里。
         """
+        if self.task_plan is not None and self.task_plan.items:
+            self.task_plan.refresh(evidence, self.calcs, self.toolbox.store)
+            return [
+                f"{item.company} {item.period}{item.quarter} {item.metric}：{item.reason}"
+                for item in self.task_plan.items if item.status != "evidence_found"
+            ]
         docs = self.toolbox.store.list_documents()
         text = str(question or "")
         if not text or not docs:

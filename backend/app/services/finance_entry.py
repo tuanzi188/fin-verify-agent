@@ -666,7 +666,8 @@ async def run_finance_query(
     task = {
         "id": f"web-finance-{uuid.uuid4()}",
         "question": query,
-        "clarify_mode": "ask",
+        # 前置范围检查已处理真实歧义；允许澄清不代表整道题都是澄清任务。
+        "clarify_mode": "none",
         "citation_required": True,
         "max_steps": max_steps,
     }
@@ -744,6 +745,17 @@ async def run_finance_query(
     from app.services.finance_validation import validate_finance_response
 
     validate_finance_response(response)
+    plan_state = result.get("task_plan") or {}
+    if plan_state:
+        response.verification["task_plan"] = plan_state
+        if plan_state.get("status") == "incomplete" and response.status in ("answered", "needs_review"):
+            response.status = "needs_review"
+            response.verification["status"] = "needs_review"
+            response.verification.setdefault("issues", []).append({
+                "code": "task_plan_incomplete",
+                "reason": "任务清单仍有缺失或冲突的证据，不能作为完整查证结果交付。",
+            })
+            response.notes.append("任务清单尚未完成，请核对缺失项目与冲突证据。")
     if persist and status != "error" and answer:
         await conversation_memory.add_turn(
             conversation_id,

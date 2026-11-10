@@ -364,6 +364,8 @@ def _answer_gate(
     期间不支持排最前：负样本（2026 Q1）如果先走补单元格，模型会被逼着
     去取 2025 年的季度数字，最后写出一份"拒答但夹带数字"的答案。
     """
+    if getattr(toolbox, "task_plan_stopped", lambda: False)():
+        return "", ""
     if clarify_mode != "ask" and not fired.get("unsupported"):
         periods = _unsupported_periods(toolbox, question)
         if periods and not (
@@ -563,6 +565,17 @@ async def _execute_tool_call(
         record["error_detail"] = outcome.error_detail[:300]
     if policy:
         record["policy"] = policy
+    update_plan = getattr(toolbox, "update_task_plan", None)
+    if update_plan is not None:
+        plan_state = update_plan(evidence, record)
+        if plan_state:
+            record["task_progress"] = {
+                "status": plan_state["status"],
+                "pending_ids": [item["id"] for item in plan_state["items"]
+                                if item["status"] != "evidence_found"],
+                "stop_reason": plan_state["stop_reason"],
+            }
+            record["task_plan_hint"] = toolbox.task_plan_hint()
     return record
 
 
@@ -676,6 +689,8 @@ def _round_message(
     locator_text = _format_locators(locators)
     if locator_text:
         evidence_text = f"{evidence_text}\n\n{locator_text}"
+    if round_steps and round_steps[-1].get("task_plan_hint"):
+        evidence_text += "\n\n" + round_steps[-1]["task_plan_hint"]
     # 只有定位、没有原文时必须给一句明确的下一步，否则模型会继续换关键词搜
     # （实测连搜 6 次不读，最后拒答）。
     if not evidence and locators:
@@ -764,6 +779,9 @@ async def _run_improved(
         {"role": "system", "content": toolbox.system_prompt("improved")},
         {"role": "user", "content": question},
     ]
+    initial_plan_hint = getattr(toolbox, "task_plan_hint", lambda: "")()
+    if initial_plan_hint:
+        messages[1]["content"] += "\n\n" + initial_plan_hint
     trace: list[dict] = []
     evidence: list[dict] = []
     locators: list[dict] = []
@@ -818,6 +836,9 @@ async def _run_improved(
 
     try:
         while rounds < max_rounds:
+            if getattr(toolbox, "task_plan_stopped", lambda: False)():
+                notes.append("task_plan:no_progress")
+                break
             # 预算用完就收口，不再发起一轮"注定要被拒"的工具调用：
             # 收口本身不是失败，只记 `budget_truncated` 这个信号
             # （2026-10-28 起 step_budget 只在 steps > max_steps 时判失败）。
@@ -1135,7 +1156,8 @@ async def _run_improved(
 
         # 覆盖自检：只在"有证据、有草稿、还有步数预算"时做一次。
         # 澄清任务（clarify_mode=ask）直接跳过——该问的时候不该被自检逼成硬答。
-        if answer and evidence and clarify_mode != "ask":
+        if (answer and evidence and clarify_mode != "ask"
+                and not getattr(toolbox, "task_plan_stopped", lambda: False)()):
             if executed < max_steps and self_checks < IMPROVED_SELF_CHECK_LIMIT:
                 self_checks += 1
                 try:
@@ -1339,6 +1361,9 @@ async def run(
     prepare = getattr(toolbox, "prepare", None)
     if prepare is not None:
         prepare(injections)
+    start_plan = getattr(toolbox, "start_task_plan", None)
+    if variant == "improved" and task.get("task_plan_enabled", True) and start_plan is not None:
+        start_plan(question)
 
     if variant == "improved":
         return await _run_improved(

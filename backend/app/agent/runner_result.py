@@ -277,6 +277,7 @@ def _public_evidence(evidence: list[dict], limit: int = 400) -> list[dict]:
             "kind": item.get("kind", "chunk"),
             "page": item.get("page"),
             "truncated": bool(item.get("truncated")),
+            "snapshot_truncated": len(str(item.get("content") or "")) > limit,
             "content": str(item.get("content") or "")[:limit],
         }
         if isinstance(item.get("similarity"), (int, float)):
@@ -467,4 +468,8 @@ def build_result(
         "toolset": _toolset_name(toolbox),
         "evidence": _public_evidence(evidence),
         "calc": list(getattr(toolbox, "calcs", []) or []),
+        "task_plan": (
+            toolbox.update_task_plan(evidence)
+            if hasattr(toolbox, "update_task_plan") else {}
+        ),
     }

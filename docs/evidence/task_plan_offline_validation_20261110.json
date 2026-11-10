@@ -1,0 +1,58 @@
+{
+  "kind": "implementation_offline_validation",
+  "status": "offline_validation",
+  "validated_on": "2026-11-10",
+  "timezone": "Asia/Shanghai",
+  "git_base_commit": "06a29b8ee5fa94dcf741f3cf358b1e43f047b41c",
+  "dirty_worktree": true,
+  "source_sha256": {
+    "backend/app/agent/runner.py": "63fb404d2e7c83c1d7ba29f51ca969fde3b074709ec2196d50b3e210e1dad270",
+    "backend/app/agent/runner_result.py": "00d6324ffbec11351acdee678358e836c1e93f20e2d24449587bdb623c135c6d",
+    "backend/app/finance/task_plan.py": "e668cdcfb8c0edcf0807ab4fb766b50d4f9bbb8d9d7638ef92e86c2dafa49294",
+    "backend/app/services/finance_entry.py": "c4159a09c79ee10846e7089626d2e1e02638f4e711c9c1eed9ba93b5d4509604",
+    "backend/app/tools/finance_set.py": "ee273b272b9c8a042db604497f5dd11897887dd076f68ac3b95455451fa487cf",
+    "backend/evaluation/agent_checks.py": "9ba25620680f5be414cc9bf0f12aab10fdafb8b4f108269ab35c49c02a055d04",
+    "backend/evaluation/agent_judge.py": "60cf9a1ace87922b9505d43c2071cde3b5c3e16273d323d612878b04fa83a077",
+    "backend/evaluation/agent_report.py": "4491f7867bf1f2f398f2fc0807077d4ea43e7fd50a16c94a997cd308bff6a7fe",
+    "backend/evaluation/equivalence.py": "e1e2c1c7dffa109484b9f7749ed950fa0d1877b52e97cfe3e6f1cbce3ff79b50",
+    "backend/evaluation/eval_report.py": "773bb12b00b2f8f31dd3103f583564055cb0dde3be3c8b73cc7facc5a6b2ea54",
+    "backend/evaluation/finance_corpus.py": "54828d0182c5b660776a2cf76b67b86fe24a4ab1e32488d67a495b4dfd0d9731",
+    "backend/evaluation/judge_context.py": "e233584537801eb9a71bfa8a9e90535132b1b8d622891f7c7a59b944f44b8c2f",
+    "backend/evaluation/numeric_audit.py": "86506f4b7d9ecb972f4c59ac8d60cf0e8700b13750c59a4e81192f0dc285dcbc",
+    "backend/evaluation/numeric_support.py": "3f75c89e6bc10c55e5a03c29f8edc0892cccba18d4df836210d1930db4586b15",
+    "backend/evaluation/release_gate.py": "e41a03eab03ccc51f24362fe938cdb93feab7788af6ab98295ca80a5babf90f6",
+    "backend/evaluation/run_finance_eval.py": "176fe2522786175cbcd7a0fa7a55b519d7446725e4c7afe92dd3ea1623fab956",
+    "backend/evaluation/score_agent_runs.py": "5c56532cce61b89c04a2f0b3498b693a306628cf68020c8fc4cfe535ac6994d3",
+    "backend/tests/test_eval_evidence_integrity.py": "ed2b3fa320a2beb591f800604ef637fa614a379db490160a4151cca1557cd4d9",
+    "backend/tests/test_release_gate.py": "76667092af8b477491dc0f4e0f805983797135e2f0d495dac06fd40dc2fbe559",
+    "backend/tests/test_run_finance_eval_snapshot.py": "a903a34df0fd6e252e8f72ee84d350af5d4410ac88a0dbf4c1a6c0720673f45d",
+    "backend/tests/test_task_plan_runtime.py": "cd692c1bf70887bb535b089aa34195874e27c059aa0928ca83856da2cda981a6"
+  },
+  "versions": {
+    "task_plan": "finance-task-plan-v1",
+    "judge_context": "coordinate-full-v1",
+    "numeric_support": "numeric-support-v1"
+  },
+  "backend_pytest": {
+    "tests": 861,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 861,
+    "command": "python -m pytest -q -o addopts='' --disable-warnings"
+  },
+  "frontend": {
+    "typecheck": "passed",
+    "tests_passed": 68,
+    "test_files_passed": 14,
+    "existing_test_environment_warnings": true
+  },
+  "new_python_modules_lint": "passed",
+  "finance_task_reference_and_routing_lint": {
+    "errors": 0,
+    "tier": "profile"
+  },
+  "real_model_calls": 0,
+  "holdout_model_runs": 0,
+  "note": "仅证明实现与离线回归，不是模型答案正确率、成本或稳定性收益。原有未提交改动包含在工作区测试中。"
+}
