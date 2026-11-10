@@ -36,7 +36,7 @@ JUDGE_SECTION_CHARS = 1500
 JUDGE_TABLE_CHARS = 2500
 
 
-def _render_table(table: dict) -> str:
+def _render_table(table: dict, *, max_chars: int | None = JUDGE_TABLE_CHARS) -> str:
     head = (
         f"表 {table.get('table_id')}｜{table.get('caption') or '无标题'}"
         f"｜PDF 第 {table.get('page')} 页｜单位：{table.get('unit') or '未标注'}"
@@ -44,7 +44,7 @@ def _render_table(table: dict) -> str:
     lines = [head, " | ".join(str(name) for name in table.get("columns") or [])]
     for row in table.get("rows") or []:
         lines.append(" | ".join(str(cell) for cell in row))
-        if sum(len(line) for line in lines) > JUDGE_TABLE_CHARS:
+        if max_chars is not None and sum(len(line) for line in lines) > max_chars:
             lines.append("…[表格过长已截断，完整内容见 PDF]")
             break
     return "\n".join(lines)
@@ -86,6 +86,7 @@ def chunk_map() -> dict[str, dict]:
                 "doc_id": doc_id,
                 "title": f"{company} {period} {doc_type}｜{path_text}".strip(),
                 "content": f"{path_text}\n{body}".strip(),
+                "full_content": f"{path_text}\n{section.get('text') or ''}".strip(),
                 "kind": "section",
                 "page": section.get("page_start"),
             }
@@ -98,6 +99,7 @@ def chunk_map() -> dict[str, dict]:
                 "doc_id": doc_id,
                 "title": f"{company} {period} {doc_type}｜{table.get('caption') or '无标题表格'}",
                 "content": _render_table(table),
+                "table": {**table, "unit": table.get("unit") or document.get("unit") or ""},
                 "kind": "table",
                 "page": table.get("page"),
             }

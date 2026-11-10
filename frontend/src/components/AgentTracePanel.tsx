@@ -51,12 +51,12 @@ const AgentTracePanel: React.FC<AgentTracePanelProps> = ({ trace }) => {
       >
         <Space size={6}>
           <ApartmentOutlined style={{ color: 'var(--color-primary)' }} />
-          <Text strong style={{ fontSize: 12 }}>查证过程</Text>
-          <Text type="secondary" style={{ fontSize: 11 }}>{steps.length} 步</Text>
+          <Text strong style={{ fontSize: 13 }}>查证过程</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{steps.length} 步</Text>
         </Space>
         {expanded
-          ? <UpOutlined style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }} />
-          : <DownOutlined style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }} />}
+          ? <UpOutlined style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }} />
+          : <DownOutlined style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }} />}
       </div>
 
       {expanded && (
@@ -64,17 +64,17 @@ const AgentTracePanel: React.FC<AgentTracePanelProps> = ({ trace }) => {
           {steps.map((step) => (
             <div
               key={`${step.step}-${step.tool}`}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, flexWrap: 'wrap' }}
             >
-              <Text type="secondary" style={{ width: 16, fontSize: 11 }}>{step.step}</Text>
+              <Text type="secondary" style={{ width: 16, fontSize: 12 }}>{step.step}</Text>
               {step.ok
                 ? <CheckCircleOutlined style={{ color: 'var(--color-success)' }} />
                 : <CloseCircleOutlined style={{ color: 'var(--color-error)' }} />}
-              <Text style={{ fontSize: 12 }}>{traceToolLabel(step.tool)}</Text>
+              <Text style={{ fontSize: 13 }}>{traceToolLabel(step.tool)}</Text>
               {traceStepTarget(step) && (
-                <Text type="secondary" style={{ fontSize: 11 }}>{traceStepTarget(step)}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{traceStepTarget(step)}</Text>
               )}
-              <Text type="secondary" style={{ fontSize: 11 }}>{traceStepResult(step)}</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>{traceStepResult(step)}</Text>
             </div>
           ))}
         </div>

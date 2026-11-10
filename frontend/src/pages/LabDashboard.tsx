@@ -59,12 +59,12 @@ const HardGateTags: React.FC<{ arm: LabArmSummary }> = ({ arm }) => {
       && !Array.isArray(value),
   )
   if (gates.length === 0 && typeof hardFailTasks !== 'number') {
-    return <Text type="secondary" style={{ fontSize: 11 }}>报告里没有硬门禁字段</Text>
+    return <Text type="secondary" style={{ fontSize: 12 }}>报告里没有硬门禁字段</Text>
   }
   return (
     <Space wrap size={[4, 4]}>
       {typeof hardFailTasks === 'number' && (
-        <Tag color={hardFailTasks === 0 ? 'green' : 'red'} style={{ margin: 0, fontSize: 10 }}>
+        <Tag color={hardFailTasks === 0 ? 'green' : 'red'} style={{ margin: 0, fontSize: 11 }}>
           硬门禁失败 {hardFailTasks} 题
         </Tag>
       )}
@@ -76,7 +76,7 @@ const HardGateTags: React.FC<{ arm: LabArmSummary }> = ({ arm }) => {
           <Tag
             key={key}
             color={passed === true ? 'green' : passed === false ? (blocking ? 'red' : 'orange') : 'default'}
-            style={{ margin: 0, fontSize: 10 }}
+            style={{ margin: 0, fontSize: 11 }}
           >
             {key}: {String(item.value ?? '—')} / {String(item.limit ?? '—')}
             {!blocking ? ' (advisory)' : ''}
@@ -136,14 +136,14 @@ const ArmCard: React.FC<{ arm: LabArmSummary }> = ({ arm }) => (
                 ? 'Agent'
                 : '—'),
           )}
-          valueStyle={{ fontSize: 12 }}
+          valueStyle={{ fontSize: 13 }}
         />
       </Col>
     </Row>
     <div style={{ marginTop: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-        <SafetyCertificateOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
-        <Text strong style={{ fontSize: 11 }}>硬门禁</Text>
+        <SafetyCertificateOutlined style={{ color: 'var(--color-primary)', fontSize: 13 }} />
+        <Text strong style={{ fontSize: 12 }}>硬门禁</Text>
       </div>
       <HardGateTags arm={arm} />
     </div>
@@ -192,7 +192,7 @@ const LabDashboard: React.FC = () => {
                 {value > 0 ? '+' : ''}{(value * 100).toFixed(1)}pp
               </Tag>
               {row.delta_exceeds_ci_width && (
-                <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>超过 CI 宽度</Tag>
+                <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>超过 CI 宽度</Tag>
               )}
             </Space>
           )
@@ -241,7 +241,7 @@ const LabDashboard: React.FC = () => {
               border: '1px solid var(--color-border)',
               borderRadius: 8,
               padding: 12,
-              fontSize: 12,
+              fontSize: 13,
               fontFamily: 'Consolas, Monaco, monospace',
               lineHeight: 1.9,
               color: 'var(--color-text-secondary)',
@@ -293,7 +293,7 @@ const LabDashboard: React.FC = () => {
                 ? '实验台：Agent 双变体对照'
                 : '实验台：RAG 对照'}
           </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: 13 }}>
             {data.generated_at || '—'} · {data.tasks_compared} 题 · 指标 {data.metric || '—'}
           </Text>
           {data.comparison_kind !== 'agent_vs_structured_rag' && (
@@ -301,7 +301,7 @@ const LabDashboard: React.FC = () => {
               <Tag color="orange" style={{ margin: 0 }}>
                 主比较未运行
               </Tag>
-              <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
+              <Text type="secondary" style={{ fontSize: 12, marginLeft: 6 }}>
                 当前展示的是 {data.left_label} vs {data.right_label}；固定窗 RAG 不进入产品主路径。
               </Text>
             </div>
@@ -411,13 +411,13 @@ const LabDashboard: React.FC = () => {
           <Card size="small" title="运行清单">
             <Descriptions size="small" column={1}>
               <Descriptions.Item label="compare 产物">
-                <Text code style={{ fontSize: 11 }}>{data.compare_artifact || '—'}</Text>
+                <Text code style={{ fontSize: 12 }}>{data.compare_artifact || '—'}</Text>
               </Descriptions.Item>
               {data.arms.map((arm) => {
                 const manifest = arm.manifest || {}
                 return (
                   <Descriptions.Item key={arm.name} label={`${armLabel(arm)} manifest`}>
-                    <div style={{ fontSize: 11, lineHeight: 1.7 }}>
+                    <div style={{ fontSize: 12, lineHeight: 1.7 }}>
                       {manifest.tasks_file ? (
                         <>
                           <div>tasks: {String(manifest.tasks_file)}</div>
@@ -457,7 +457,7 @@ const LabDashboard: React.FC = () => {
           style={{ marginTop: 16 }}
           message="固定窗 RAG 未纳入主比较"
           description={
-            <div style={{ fontSize: 12, lineHeight: 1.9 }}>
+            <div style={{ fontSize: 13, lineHeight: 1.9 }}>
               产品主路径是“简单查数走结构检索、复杂查证走 Agent”。固定窗 RAG 只保留为离线可选基线；
               如确需辅助对照，单独运行后在 Lab 的“可选辅助基线”区域展示，不改变主比较：
               <div style={{ fontFamily: 'Consolas, Monaco, monospace', marginTop: 6 }}>
@@ -474,7 +474,7 @@ const LabDashboard: React.FC = () => {
           style={{ marginTop: 16 }}
           message="主比较（Agent vs 结构感知 RAG）尚未运行"
           description={
-            <div style={{ fontSize: 12, lineHeight: 1.9 }}>
+            <div style={{ fontSize: 13, lineHeight: 1.9 }}>
               当前页展示的是 Agent 内部或旧 RAG 对照，不是产品主比较。运行结构感知 RAG 与 compare_arms 后，
               本页会自动切到主比较：
               <div style={{ fontFamily: 'Consolas, Monaco, monospace', marginTop: 6 }}>

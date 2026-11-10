@@ -227,6 +227,23 @@ def point_equivalence(
         result = value_in_text(expected_text, answer, rel_tolerance=rel_tolerance)
         numeric = bool(result["match"])
         numeric_detail = result
+        # 金标用带符号的数（-18.97），正文用方向词（下降 18.97%）：
+        # 符号由方向判据承担，这里允许绝对值匹配，否则金标答案永远判不过。
+        if not numeric:
+            wants = numbers_in(expected_text)
+            if (
+                wants
+                and wants[0]["value"] < 0
+                and direction_of(str(point.get("text") or "")) is not None
+            ):
+                positive = f"{abs(wants[0]['value'])}{wants[0]['unit']}"
+                fallback = value_in_text(positive, answer, rel_tolerance=rel_tolerance)
+                if fallback["match"]:
+                    numeric = True
+                    numeric_detail = {
+                        **fallback,
+                        "reason": "负值与方向词等价（符号由方向判据承担）",
+                    }
 
     direction = direction_consistent(str(point.get("text") or ""), answer)
 

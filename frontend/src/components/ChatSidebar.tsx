@@ -68,7 +68,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
             金融查证
           </div>
-          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 1 }}>
+          <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 1 }}>
             选材料 · 提问 · 核对证据
           </div>
         </div>
@@ -109,13 +109,13 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600 }}>
             <DatabaseOutlined style={{ color: 'var(--color-text-tertiary)' }} />
             语料覆盖
           </div>
           <Link
             to="/documents"
-            style={{ fontSize: 11, color: 'var(--color-primary)' }}
+            style={{ fontSize: 12, color: 'var(--color-primary)' }}
             onClick={() => {
               if (compactHeader) onClose?.()
             }}
@@ -130,12 +130,12 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
               {coverage.company_names.slice(0, 4).map((company) => (
-                <Tag key={company} style={{ margin: 0, fontSize: 10 }}>
+                <Tag key={company} style={{ margin: 0, fontSize: 11 }}>
                   {company}
                 </Tag>
               ))}
               {coverage.periods.slice(0, 2).map((period) => (
-                <Tag key={period} color="blue" style={{ margin: 0, fontSize: 10 }}>
+                <Tag key={period} color="blue" style={{ margin: 0, fontSize: 11 }}>
                   {period}
                 </Tag>
               ))}
@@ -154,7 +154,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
           flexShrink: 0,
         }}
       >
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
           当前材料
         </div>
         {materialsLoading ? (
@@ -168,7 +168,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
             <div key={doc.doc_id} title={doc.doc_id} style={{ padding: '3px 0' }}>
               <div
                 style={{
-                  fontSize: 12,
+                  fontSize: 13,
                   color: 'var(--color-text)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -192,7 +192,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>最近查证</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>最近查证</span>
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: '0 10px 12px' }}>
@@ -212,7 +212,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
             <MessageOutlined style={{ fontSize: 24, marginBottom: 8, display: 'block' }} />
             暂无查证记录
             <br />
-            <span style={{ fontSize: 11 }}>从一个具体问题开始</span>
+            <span style={{ fontSize: 12 }}>从一个具体问题开始</span>
           </div>
         ) : (
           <List
@@ -271,7 +271,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
                   >
                     {conv.preview || '新查证'}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                     {formatDate(conv.last_updated)} · {conv.turn_count} 轮
                   </div>
                 </div>
@@ -289,7 +289,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
                     type="text"
                     size="small"
                     className="session-delete"
-                    icon={<DeleteOutlined style={{ fontSize: 12 }} />}
+                    icon={<DeleteOutlined style={{ fontSize: 13 }} />}
                     aria-label="删除会话"
                     style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }}
                     onClick={(e) => e.stopPropagation()}

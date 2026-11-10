@@ -110,8 +110,10 @@ def test_snapshot_matches_filtered_tasks_and_run_config_points_to_it(fake_env, m
     # dirty=true 的 commit 区分不出跑了哪一版（AGENTS.md §9.2）。
     assert rc["prompt_sha256"] == rfe.sha256_text("prompt-v1")
     assert rc["prompt_variant"] == "improved"
-    # 该用例未传 --search-mode，默认 sections；哈希取的就是这一模式拼接后的 prompt
-    assert rc["prompt_search_mode"] == "sections"
+    # 默认与线上一致的结构块检索，同时绑定任务清单开关。
+    assert rc["prompt_search_mode"] == "blocks"
+    assert rc["task_plan_enabled"] is True
+    assert rc["task_plan_version"] == "finance-task-plan-v1"
     assert rc["prompt_chars"] == len("prompt-v1")
 
     snapshot_tasks = [json.loads(line)
@@ -136,6 +138,16 @@ def test_no_task_snapshot_keeps_source_path(fake_env, monkeypatch):
     assert rc["task_snapshot"] is False
     assert rc["tasks_file"] == str(tasks_file)
     assert not (tmp_path / "runs2.tasks.jsonl").exists()
+
+
+def test_task_plan_ablation_is_recorded(fake_env, monkeypatch):
+    directory, tasks_file = fake_env
+    output = directory / "without-plan.json"
+    assert _run(monkeypatch, "--tasks", str(tasks_file), "--out", str(output),
+                "--disable-task-plan", "--search-mode", "sections") == 0
+    configuration = json.loads(output.read_text(encoding="utf-8"))["run_config"]
+    assert configuration["task_plan_enabled"] is False
+    assert configuration["search_mode"] == "sections"
 
 
 def test_ids_selection_is_recorded(fake_env, monkeypatch):

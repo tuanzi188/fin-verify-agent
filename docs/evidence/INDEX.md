@@ -165,3 +165,19 @@ python -m evaluation.score_agent_runs \
 4. 全价 token（预注册 ≤20k 红线口径）与有效输入估算分两列报，不混写「降了 X%」。
 5. 32 题 blocks 基线 runs 尚未落盘，`docs/COST_OPTIMIZATION_PLAN_20261104.md` §1
    的对照表暂不可复现；落盘后登记到本表。
+
+## F. 2026-11-10 口径变更登记（无新模型读数）
+
+任务清单 `finance-task-plan-v1`、裁判上下文 `coordinate-full-v1` 与数值来源检查
+`numeric-support-v1` 已接入。新运行须绑定清单开关与版本；新裁判保留完整回答和目标证据。
+旧 `hallucination_rate` 只表示裁判数值冲突，不能代替新门禁的数值证据缺口率。
+必需指标缺失时不能通过发布门禁。
+
+**状态：已实现、未做真实模型复测。** 本节没有登记新的通过率、成本或稳定性基线。
+已有历史产物不改写，旧判分复用不冒充新裁判口径，新旧指标不得直接相减。
+具体规范见 [任务清单](../AGENT_TASK_PLAN.md) 和 [评测加固](../EVAL_HARDENING.md)。
+
+离线实现验证产物：[task_plan_offline_validation_20261110.json](task_plan_offline_validation_20261110.json)。
+状态 `offline_validation`；绑定当前工作区源文件哈希、基础提交、清单及裁判版本，
+包含后端、前端、静态检查与任务卡 lint 结果。真实模型调用和留出模型运行均为零，
+不能作为模型能力、成本或稳定性基线。

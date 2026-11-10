@@ -41,7 +41,7 @@ const PlainTag: React.FC<{ children: React.ReactNode; tone?: 'muted' | 'ok' | 'w
         borderRadius: 'var(--radius-sm)',
         border: '1px solid var(--color-border)',
         color,
-        fontSize: 11,
+        fontSize: 12,
         lineHeight: 1.7,
         whiteSpace: 'nowrap',
       }}
@@ -112,7 +112,7 @@ const FinanceDocuments: React.FC = () => {
       render: (value: string, row: FinanceDocumentInfo) => (
         <div>
           <div style={{ fontWeight: 600, fontSize: 13 }}>{value || '—'}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{row.code || ''}</div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{row.code || ''}</div>
         </div>
       ),
     },
@@ -208,7 +208,7 @@ const FinanceDocuments: React.FC = () => {
               上传 PDF
             </Button>
           </Upload>
-          <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+          <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
             仅支持文字版 PDF；扫描件暂不支持
           </span>
         </Space>
@@ -244,7 +244,7 @@ const FinanceDocuments: React.FC = () => {
               scroll={{ x: 900 }}
               expandable={{
                 expandedRowRender: (row) => (
-                  <div style={{ fontSize: 12, lineHeight: 1.9, color: 'var(--color-text-secondary)' }}>
+                  <div style={{ fontSize: 13, lineHeight: 1.9, color: 'var(--color-text-secondary)' }}>
                     <div>
                       文档 ID：<span style={{ fontFamily: 'var(--font-numeric)' }}>{row.doc_id}</span>
                     </div>

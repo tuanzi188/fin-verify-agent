@@ -137,7 +137,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                         item.tone === 'primary'
                           ? 'var(--color-primary)'
                           : 'var(--color-text-secondary)',
-                      fontSize: 11,
+                      fontSize: 12,
                       letterSpacing: 0.2,
                     }}
                   >
@@ -145,7 +145,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                   </span>
                 ))}
               </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1.7 }}>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-tertiary)', lineHeight: 1.7 }}>
                 系统会自动选择路径：单点读数一次结构检索；跨表计算、跨文档核对和拒答边界交给多步查证。
               </div>
             </div>
@@ -154,7 +154,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div style={{ marginBottom: 26 }}>
             <div
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: 'var(--color-text-tertiary)',
                 letterSpacing: 1,
                 marginBottom: 8,
@@ -164,13 +164,13 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             </div>
             {/* 只报“范围”：文档/公司/期间决定能不能查。
                 章节数、表格数属实现指标，压成一行脚注；结构块数是索引内部细节，不展示。 */}
-            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>
+            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>
               {stats
                 ? `${stats.tables.toLocaleString()} 张表 · ${stats.sections.toLocaleString()} 个章节，每个数字都能回查页码与行列`
                 : '语料待加载'}
             </div>
             {stats?.index_version && (
-              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
                 结构索引 {stats.index_version}
                 {stats.index_fingerprint ? ` · ${stats.index_fingerprint.slice(0, 10)}` : ''}
               </div>
@@ -180,7 +180,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div style={{ marginBottom: 8 }}>
             <div
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: 'var(--color-text-tertiary)',
                 letterSpacing: 1,
                 marginBottom: 10,
@@ -223,14 +223,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 >
                   <span style={{ color: 'var(--color-primary)', fontSize: 15 }}>{item.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 2 }}>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 2 }}>
                       {item.category}
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--color-text)', lineHeight: 1.5 }}>
                       {item.question}
                     </div>
                   </div>
-                  <ArrowRightOutlined style={{ color: 'var(--color-text-tertiary)', fontSize: 11 }} />
+                  <ArrowRightOutlined style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }} />
                 </div>
               ))}
             </div>
@@ -281,7 +281,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             borderRadius: 'var(--radius-md)',
             background: 'var(--color-bg-white)',
             border: '1px solid var(--color-border)',
-            fontSize: 12,
+            fontSize: 13,
             fontFamily: 'Consolas, Monaco, monospace',
             color: 'var(--color-text-secondary)',
           }}

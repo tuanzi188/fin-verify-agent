@@ -416,7 +416,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
                     </Text>
                   </div>
                 ) : (
-                  <Text style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                  <Text style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
                     这一轮没有回答记录。
                   </Text>
                 )}
@@ -435,7 +435,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ isDark, onToggleTheme }) => {
                 <Checkbox
                   checked={allowWeb}
                   onChange={(e) => setAllowWeb(e.target.checked)}
-                  style={{ marginRight: 8, fontSize: 12, whiteSpace: 'nowrap' }}
+                  style={{ marginRight: 8, fontSize: 13, whiteSpace: 'nowrap' }}
                 >
                   联网
                 </Checkbox>

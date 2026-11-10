@@ -46,6 +46,9 @@
 3. **多步 Agent**：只读工具循环
    `search_blocks` / `search_tables` / `search_sections`（sections 模式）/ `read_block` / `read_section` / `get_rows` / `get_table` / `get_cell` / `calculate` / `list_documents`；
    空结果与失败会改写重试一次；覆盖检查按「公司 × 期间 × 指标」槽位补读，终轮做覆盖自检。
+   多步模式维护结构化任务清单，记录目标行列、缺口与冲突；连续无新增信息时停止重复调用。
+   已知待查项未覆盖的答案进入人工复核，清单随 `verification.task_plan` 保存至历史；
+   清单覆盖只说明已取得目标证据，不认证答案语义。规则见 [任务清单](docs/AGENT_TASK_PLAN.md)。
 4. **结构化输出**：`answer`、`claims`（要点 / 引用编号 / 计算下标 / 不确定性）、
    `citations`（坐标）、`calc`（公式 / 输入 / 结果 / 单位 / 口径）、`trace`、`status`、`route_reason`、`notes`。
 5. **状态口径**：已回答 / 资料不足 / 需澄清 / 需人工复核 / 执行失败。

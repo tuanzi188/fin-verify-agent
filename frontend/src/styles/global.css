@@ -330,7 +330,7 @@ body {
 .turn-strip-label {
   flex-shrink: 0;
   align-self: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-tertiary);
 }
 
@@ -344,7 +344,7 @@ body {
   border: var(--border-width) solid var(--color-border);
   background: transparent;
   color: var(--color-text);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -361,7 +361,7 @@ body {
   border-radius: 4px;
   background: var(--color-bg);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: 11px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -409,7 +409,7 @@ body {
 }
 
 .question-meta-text {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-tertiary);
 }
 
@@ -430,7 +430,7 @@ body {
 }
 
 .meta-text {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
 }
 
@@ -456,7 +456,7 @@ body {
 /* ===== 查证结论：默认态只留结论、引用与复核提示 ===== */
 .scope-line {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
 }
 
@@ -470,7 +470,7 @@ body {
 
 .review-alert-body {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
   color: var(--color-text-secondary);
 }
@@ -478,7 +478,7 @@ body {
 /* 先写“已核验什么”，再列未通过项 */
 .review-alert-scope {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
   color: var(--color-text-secondary);
 }
@@ -486,7 +486,7 @@ body {
 .review-alert-list {
   margin: 6px 0 0;
   padding-left: 18px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
   color: var(--color-text-secondary);
 }
@@ -502,7 +502,7 @@ body {
   border: 1px solid var(--color-warning-border);
   background: var(--color-warning-soft);
   color: var(--color-warning-text);
-  font-size: 10px;
+  font-size: 11px;
   cursor: help;
   user-select: none;
   vertical-align: text-top;
@@ -515,7 +515,7 @@ body {
 
 .claim-calc > summary {
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-secondary);
   user-select: none;
 }
@@ -529,7 +529,7 @@ body {
 
 .tech-details > summary {
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-tertiary);
   user-select: none;
 }
@@ -539,7 +539,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   color: var(--color-text-tertiary);
 }

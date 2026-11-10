@@ -467,6 +467,14 @@ def collect_checks(
     checks.update(check_citations(task, result, tables=tables))
     checks.update(check_status(task, result))
     checks.update(check_injection(task, result))
+    plan_state = result.get("task_plan") or {}
+    if plan_state and result.get("status") == "answered":
+        checks["task_plan_complete"] = _check(
+            False if plan_state.get("status") == "incomplete" else (
+                True if plan_state.get("status") == "covered" else None
+            ),
+            "结构化任务清单的已知证据项必须覆盖；不据此认证答案语义。",
+        )
     return checks
 
 

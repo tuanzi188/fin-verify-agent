@@ -87,7 +87,7 @@ const CodeBlock: React.FC<{
           padding: '4px 12px',
           background: 'var(--color-bg)',
           borderBottom: '1px solid var(--color-border)',
-          fontSize: 12,
+          fontSize: 13,
           color: 'var(--color-text-secondary)',
           fontFamily: 'Consolas, Monaco, monospace',
         }}
@@ -98,7 +98,7 @@ const CodeBlock: React.FC<{
           size="small"
           icon={<CopyOutlined />}
           onClick={handleCopyCode}
-          style={{ fontSize: 12, height: 24, padding: '0 6px' }}
+          style={{ fontSize: 13, height: 24, padding: '0 6px' }}
         >
           {copied ? '已复制' : '复制'}
         </Button>
@@ -237,7 +237,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
               background: 'var(--color-bg)',
               border: '1px solid var(--color-border)',
               color: 'var(--color-text-secondary)',
-              fontSize: 12,
+              fontSize: 13,
               lineHeight: 1.6,
             }}
           >
@@ -263,7 +263,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
             <summary
               style={{
                 cursor: 'pointer',
-                fontSize: 12,
+                fontSize: 13,
                 color: 'var(--color-text-secondary)',
                 userSelect: 'none',
               }}
@@ -324,7 +324,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
             <summary
               style={{
                 cursor: 'pointer',
-                fontSize: 12,
+                fontSize: 13,
                 color: 'var(--color-text-secondary)',
                 userSelect: 'none',
               }}
@@ -332,7 +332,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
               {conceptUsedWeb ? '引用来源' : '参考资料'} · {webSources.length} 篇
               {conceptUsedWeb ? '' : '（未逐条引用）'}
             </summary>
-            <ol style={{ margin: '6px 0 0', paddingLeft: 20, fontSize: 12, lineHeight: 1.8 }}>
+            <ol style={{ margin: '6px 0 0', paddingLeft: 20, fontSize: 13, lineHeight: 1.8 }}>
               {webSources.map((source) => (
                 <li key={source.url || source.title}>
                   <a

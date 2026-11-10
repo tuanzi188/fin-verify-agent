@@ -1086,9 +1086,10 @@ def render_console(report: dict) -> str:
         lines.append(
             f"  金标覆盖率 {_format_rate(numeric.get('gold_coverage'))} "
             f"({numeric.get('gold_points_covered')}/{numeric.get('gold_points_checked')})    "
-            f"数值幻觉率 {_format_rate(numeric.get('hallucination_rate'))} "
+            f"裁判数值冲突率 {_format_rate(numeric.get('judge_numeric_conflict_rate', numeric.get('hallucination_rate')))} "
             f"({numeric.get('hallucination_events')}/{numeric.get('judge_passed_points')})    "
-            f"未溯源数值率 {_format_rate(numeric.get('unsourced_rate'))}"
+            f"数值证据缺口率 {_format_rate(numeric.get('unsupported_number_rate'))} "
+            f"（审计完整：{numeric.get('support_audit_complete') is True}）"
         )
         lines.append("")
 

@@ -1,19 +1,8 @@
-"""数值审计：把"数值幻觉"从 judge 的感觉变成可复算的确定性读数。
+"""数值审计：分开报告裁判冲突、实际证据缺口与金标覆盖。
 
-金融场景的硬红线是「数值幻觉率 = 0」。但"幻觉"必须先定义清楚，否则会变成
-一句口号。这里拆成两个口径：
-
-1. **数值幻觉（硬红线）**：judge 判定某个要点"已覆盖"，但答案里找不到与金标
-   一致的数值（含单位换算与合理舍入）。这表示模型给出了一个**与金标冲突**的数，
-   而不是"没答到"——没答到是覆盖问题，答错数是幻觉问题，两者不能混。
-2. **未溯源数值（提示项）**：答案里的数值既不在证据原文、也不在问题/金标/计算
-   结果里。它可能是模型自己推的中间值（runner 的补算闸门要求比率走 calculate），
-   也可能是编的；单列出来供人工复核，不直接当硬红线——否则派生值会造成假阳性。
-
-另外报 **金标数值覆盖率**：答案里出现了多少金标数值。它和 judge 的要点通过率
-互相校验：judge 说 pass 但金标数值不在答案里，就是 §1 的幻觉事件。
-
-全部零模型调用：只读 task / result / 语料原文。
+旧 hallucination_* 字段仅作兼容别名，不再声称它衡量整份回答的幻觉。
+新的数值来源检查只使用实际读取的原文和输入有来源的计算，不使用金标补证据。
+数字可溯源不等于指标归属或财务口径正确；全部检查均为零模型调用。
 """
 
 from __future__ import annotations
@@ -34,6 +23,7 @@ from evaluation._runner_common import load_tasks
 from evaluation.agent_checks import base_chunk_id, evidence_chunk_ids
 from evaluation.agent_metrics import ratio
 from evaluation.calc_schema import calc_specs
+from evaluation.numeric_support import NUMERIC_SUPPORT_VERSION, evaluate_numeric_support
 from evaluation.equivalence import (
     DEFAULT_REL_TOLERANCE,
     MONEY_ABS_TOLERANCE,
@@ -288,6 +278,7 @@ def audit_result(
     judge_passed_points = sum(1 for row in point_rows if row["judge_pass"] is True)
     return {
         "task_id": str(task.get("id")),
+        **evaluate_numeric_support(result, chunks),
         "run_index": int(result.get("run_index") or 1),
         "answer_numbers": len(answer_numbers),
         "unsourced_numbers": unsourced,
@@ -298,6 +289,9 @@ def audit_result(
         "judge_passed_points": judge_passed_points,
         "hallucination_events": hallucination_events,
         "hallucination_rate": ratio(len(hallucination_events), judge_passed_points),
+        "judge_numeric_conflict_events": hallucination_events,
+        "judge_numeric_conflict_rate": ratio(len(hallucination_events), judge_passed_points),
+        "legacy_hallucination_metric": True,
         "pii_hits": pii_hits(answer),
         "points": point_rows,
     }
@@ -311,7 +305,15 @@ def aggregate(rows: list[dict]) -> dict:
     judged = sum(row.get("judge_passed_points") or 0 for row in rows)
     events = sum(len(row.get("hallucination_events") or []) for row in rows)
     pii = sum(len(row.get("pii_hits") or []) for row in rows)
+    support_total = sum(row.get("audited_number_count") or 0 for row in rows)
+    support_missing = sum(row.get("unsupported_number_count") or 0 for row in rows)
     return {
+        "numeric_audit_version": NUMERIC_SUPPORT_VERSION,
+        "support_audit_complete": bool(rows) and all(row.get("support_audit_complete") is True for row in rows),
+        "audited_number_count": support_total,
+        "unsupported_number_count": support_missing,
+        "unsupported_number_rate": ratio(support_missing, support_total),
+        "evidence_numeric_support_rate": ratio(support_total - support_missing, support_total),
         "tasks": len(rows),
         "answer_numbers": answer_numbers,
         "unsourced_numbers": unsourced,
@@ -322,10 +324,15 @@ def aggregate(rows: list[dict]) -> dict:
         "judge_passed_points": judged,
         "hallucination_events": events,
         "hallucination_rate": ratio(events, judged),
+        "judge_numeric_conflict_events": events,
+        "judge_numeric_conflict_rate": ratio(events, judged),
+        "legacy_hallucination_metric": True,
         "pii_hits": pii,
         "tasks_with_pii": [row["task_id"] for row in rows if row.get("pii_hits")],
         "definition": {
-            "hallucination": "judge 判 pass 的要点里，答案找不到与金标等价的数值 ⇒ 与金标冲突",
+            "hallucination": "兼容旧字段，仅表示裁判与数值检查冲突，不能解释成整份回答的幻觉率",
+            "judge_numeric_conflict": "裁判判通过的要点中，答案未出现等价金标数值的比例",
+            "numeric_support": "全部回答数字对实际读取原文及有输入来源计算的数值单位检查，不以金标补证据，不认证语义归属",
             "unsourced": "答案数值不在证据/问题/金标/calc 中；派生值可能合法，只作提示项",
             "gold_coverage": "有金标数值的要点中，答案出现等价数值的比例",
             "pii": "邮箱直接认；证件/电话/卡号必须有上下文词，避免把财务金额误判成 PII",
@@ -369,8 +376,8 @@ def _print_summary(summary: dict) -> None:
     )
     rate = summary.get("hallucination_rate")
     print(
-        f"  数值幻觉 {summary['hallucination_events']}/{summary['judge_passed_points']} "
-        f"({(rate or 0):.1%})" if rate is not None else "  数值幻觉：无 judge 数据"
+        f"  裁判数值冲突 {summary['hallucination_events']}/{summary['judge_passed_points']} "
+        f"({rate:.1%})" if rate is not None else "  裁判数值冲突：无 judge 数据"
     )
     print(
         f"  未溯源数值 {summary['unsourced_numbers']}/{summary['answer_numbers']} "
@@ -379,7 +386,7 @@ def _print_summary(summary: dict) -> None:
     if summary.get("pii_hits"):
         print(f"  PII 命中 {summary['pii_hits']} 处：{summary.get('tasks_with_pii')}")
     if summary.get("tasks_with_events"):
-        print(f"  有幻觉事件的题：{', '.join(summary['tasks_with_events'])}")
+        print(f"  有裁判数值冲突的题：{', '.join(summary['tasks_with_events'])}")
 
 
 def main() -> int:

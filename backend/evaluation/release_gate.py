@@ -5,12 +5,12 @@
 1. **阈值必须预注册**：写死在 `GATE_CONFIG` 里，不许跑完再挑一个好看的数；
 2. **没校准的阈值不拦人**：`calibrated=False` 的项只做提示，不进 `overall_pass`——
    一个没校准的阈值长期变红，大家就会开始忽略它；
-3. **金融两条硬红线**：数值幻觉率 = 0、误拒率 ≤ 阈值。前者零容忍、直接拦；
+3. **金融两条硬红线**：数值证据缺口率 = 0、误拒率 ≤ 阈值。前者未复核前拦截；
    后者阈值待 Phase 0 数据校准，默认提示，`--strict` 时拦截；
 4. **没有数据 ≠ 通过**：缺层的指标记 `value=None / pass=None`，不许拿 0 顶替。
 
-输入都是离线 JSON（answer report / retrieval / routing / numeric / trajectory /
-faithfulness），不调模型。缺哪层就少判哪层，报告里写清 `no_data`。
+输入都是离线 JSON，不调模型。缺少必需拦截项时整体记为数据不足，不能发布。
+旧裁判数值冲突率不再冒充整份回答的数值幻觉率，也不能代替新数值审计。
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ GATE_CONFIG = {
     "safety": {
         "label": "安全/合规",
         "metrics": {
-            "numeric_hallucination_rate": {
+            "numeric_support_gap_rate": {
                 "op": "<=",
                 "threshold": 0.0,
                 "calibrated": True,
@@ -194,7 +194,12 @@ def metrics_from_numeric(numeric: Optional[dict]) -> dict:
     if not numeric:
         return {}
     return {
-        "numeric_hallucination_rate": numeric.get("hallucination_rate"),
+        "numeric_support_gap_rate": (
+            numeric.get("unsupported_number_rate")
+            if numeric.get("numeric_audit_version") == "numeric-support-v1"
+            and numeric.get("support_audit_complete") is True else None
+        ),
+        "judge_numeric_conflict_rate": numeric.get("judge_numeric_conflict_rate", numeric.get("hallucination_rate")),
         "gold_coverage": numeric.get("gold_coverage"),
         "unsourced_rate": numeric.get("unsourced_rate"),
         "numeric_hallucination_events": numeric.get("hallucination_events"),
@@ -265,6 +270,10 @@ def evaluate(
             name for name, entry in entries.items()
             if not entry.get("blocking") and entry.get("pass") is False
         ]
+        missing_required = [
+            name for name, entry in entries.items()
+            if entry.get("blocking") and entry.get("pass") is None
+        ]
         results[gate_name] = {
             "label": gate["label"],
             "metrics": entries,
@@ -272,10 +281,17 @@ def evaluate(
             "total": len(entries),
             "blocking_failures": blocking_failures,
             "advisory_failures": advisory_failures,
-            "pass": (not blocking_failures) if measured else None,
+            "missing_required": missing_required,
+            "pass": False if blocking_failures else (
+                None if missing_required or not measured else True
+            ),
             "status": (
                 "no_data" if not measured
-                else ("fail" if blocking_failures else ("pass" if not advisory_failures else "pass_with_advisory"))
+                else ("fail" if blocking_failures else (
+                    "insufficient_data" if missing_required else (
+                        "pass" if not advisory_failures else "pass_with_advisory"
+                    )
+                ))
             ),
         }
 
@@ -284,7 +300,16 @@ def evaluate(
         for gate in results.values()
         for entry in gate["metrics"].values()
     )
-    if not blocking_measured:
+    missing_required_metrics = [
+        f"{gate_name}.{metric_name}"
+        for gate_name, gate_result in results.items()
+        for metric_name in gate_result["missing_required"]
+    ]
+    has_blocking_failure = any(gate["blocking_failures"] for gate in results.values())
+    if has_blocking_failure:
+        overall = False
+        status = "fail"
+    elif missing_required_metrics or not blocking_measured:
         overall: Optional[bool] = None
         status = "insufficient_data"
     else:
@@ -300,6 +325,7 @@ def evaluate(
         "strict": strict,
         "overall_pass": overall,
         "status": status,
+        "missing_required": missing_required_metrics,
         "gates": results,
         "blocking_failures": [
             f"{gate}.{metric}"
@@ -318,8 +344,8 @@ def evaluate(
             if record.get("red_line")
         ],
         "note": (
-            "overall_pass 只看已校准的拦截项；未校准阈值与缺数据项不参与。"
-            "金融硬红线：数值幻觉率=0、误拒率≤阈值。"
+            "全部必需拦截项有数据且通过时才允许发布；缺数据记 insufficient_data。"
+            "数值证据缺口必须清零或复核；旧裁判冲突率不能替代完整数值审计。"
         ),
     }
 
@@ -342,7 +368,7 @@ def _print_summary(result: dict) -> None:
                 f"[{blocking}{red}]"
             )
     overall_text = (
-        "未评估（缺可拦截项）"
+        "未通过验收（必需指标数据不足）"
         if result.get("overall_pass") is None
         else ("通过" if result["overall_pass"] else "不通过")
     )

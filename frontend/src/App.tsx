@@ -37,6 +37,9 @@ const App: React.FC = () => {
             colorPrimary: isDark ? '#8fa8c8' : '#1f3a5f',
             colorInfo: isDark ? '#8fa8c8' : '#1f3a5f',
             borderRadius: 6,
+            // 基准字号 14 → 15：查证台以阅读为主，比默认后台略大一号；
+            // fontSizeSM/LG 等派生字号由 AntD 自动按基准计算。
+            fontSize: 15,
             fontFamily:
               "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
           },

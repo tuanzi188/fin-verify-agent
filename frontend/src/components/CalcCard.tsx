@@ -67,14 +67,14 @@ const CalcCard: React.FC<CalcCardProps> = ({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <CalculatorOutlined style={{ color: 'var(--color-success)' }} />
-        <Text strong style={{ fontSize: 12 }}>计算 {index + 1}</Text>
+        <Text strong style={{ fontSize: 13 }}>计算 {index + 1}</Text>
         {calc.unit && (
           <Tag color="green" style={{ margin: 0, fontSize: compact ? 10 : undefined }}>
             {calc.unit}
           </Tag>
         )}
         {hint && (
-          <Text type="secondary" style={{ fontSize: 10 }}>
+          <Text type="secondary" style={{ fontSize: 11 }}>
             {hint}
           </Text>
         )}
@@ -83,7 +83,7 @@ const CalcCard: React.FC<CalcCardProps> = ({
       <div
         style={{
           fontFamily: 'Consolas, Monaco, monospace',
-          fontSize: 12,
+          fontSize: 13,
           lineHeight: 1.7,
           wordBreak: 'break-all',
           color: 'var(--color-text)',
@@ -94,14 +94,14 @@ const CalcCard: React.FC<CalcCardProps> = ({
 
       {compact ? (
         inputs.length > 0 && (
-          <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {inputs.map(([key, value]) => `${key}=${String(value)}`).join(' · ')}
           </div>
         )
       ) : (
         <div style={{ marginTop: 6 }}>
           {inputs.map(([key, value]) => (
-            <div key={key} style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
+            <div key={key} style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
               {key} = {String(value)}
               {calc.input_sources?.[key] && (
                 <span> · 来源 [{calc.input_sources[key].marker}] 行 {calc.input_sources[key].row} 列 {calc.input_sources[key].column}</span>
@@ -124,7 +124,7 @@ const CalcCard: React.FC<CalcCardProps> = ({
       </div>
 
       {calc.result_scale && calc.result_scale !== '1' && (
-        <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
           展示结果 = 公式原始结果 × {calc.result_scale}
         </div>
       )}
@@ -134,7 +134,7 @@ const CalcCard: React.FC<CalcCardProps> = ({
           style={
             compact
               ? { marginTop: 2 }
-              : { marginTop: 6, fontSize: 11, color: 'var(--color-text-tertiary)' }
+              : { marginTop: 6, fontSize: 12, color: 'var(--color-text-tertiary)' }
           }
         >
           {notePrefix}

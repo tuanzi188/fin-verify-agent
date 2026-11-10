@@ -160,6 +160,9 @@ def _numeric_layer(payload: Optional[dict]) -> dict:
         "gold_points": [payload.get("gold_points_covered"), payload.get("gold_points_checked")],
         "hallucination_rate": payload.get("hallucination_rate"),
         "hallucination_events": payload.get("hallucination_events"),
+        "judge_numeric_conflict_rate": payload.get("judge_numeric_conflict_rate", payload.get("hallucination_rate")),
+        "unsupported_number_rate": payload.get("unsupported_number_rate"),
+        "support_audit_complete": payload.get("support_audit_complete"),
         "unsourced_rate": payload.get("unsourced_rate"),
         "pii_hits": payload.get("pii_hits"),
         "tasks_with_events": payload.get("tasks_with_events"),
@@ -315,7 +318,7 @@ def build_report(
             "检索层 first_search 是双臂同尺口径；any_search 是 Agent 诊断口径，不能与一次检索的 RAG 直接比。",
             "答案层的 pass@1 / pass@k / pass^k 只在完整任务上计算；Wilson 区间只反映样本量，不含 run-to-run 方差。",
             "路由层的金标来自任务卡元数据；拒答/澄清/假设类不判更优臂，只报分流分布。",
-            "数值幻觉率只统计 judge 判 pass 但金标数值缺失的要点；未溯源数值是提示项，不直接当红线。",
+            "裁判数值冲突率只审计判分器；数值证据缺口单独按实际读取原文检查，不认证指标语义归属。",
             "缺层的指标写 no_data，不拿 0 顶替；no_data 不等于通过。",
         ],
     }
@@ -463,10 +466,12 @@ def render_markdown(report: dict) -> str:
             f"（{numeric.get('gold_points')}）"
         )
         lines.append(
-            f"- 数值幻觉率 {_pct(numeric.get('hallucination_rate'))} "
+            f"- 裁判数值冲突率 {_pct(numeric.get('judge_numeric_conflict_rate'))} "
             f"（{numeric.get('hallucination_events')} 个事件）"
         )
         lines.append(f"- 未溯源数值率 {_pct(numeric.get('unsourced_rate'))}（提示项）")
+        lines.append(f"- 数值证据缺口率 {_pct(numeric.get('unsupported_number_rate'))}"
+                     f"（审计完整：{numeric.get('support_audit_complete') is True}；不认证语义归属）")
         if numeric.get("pii_hits"):
             lines.append(f"- PII 命中 {numeric.get('pii_hits')} 处（提示项，公开公司联系方式不算个人隐私）")
 

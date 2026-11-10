@@ -80,7 +80,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       <div style={{ marginBottom: 8 }}>
         <Text strong>快捷键</Text>
       </div>
-      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 2 }}>
+      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 2 }}>
         <div>Enter 发送问题</div>
         <div>Shift + Enter 换行</div>
         <div>Esc 停止生成 / 清空输入</div>
@@ -89,7 +89,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       <div style={{ marginTop: 10, marginBottom: 4 }}>
         <Text strong>证据检查器</Text>
       </div>
-      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.8 }}>
+      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.8 }}>
         点击回答里的引用胶囊，右侧会定位到章节、表格行列或计算记录。
         页码是 PDF 解析页码，不提供原版截图高亮。
       </div>
@@ -116,7 +116,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     gap: 6,
     padding: compact ? '4px 6px' : '5px 10px',
     borderRadius: 'var(--radius-md)',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 500,
     transition: 'all var(--transition-fast)',
     cursor: 'default',
@@ -187,7 +187,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             cursor: 'pointer',
           }}
         >
-          <ReloadOutlined style={{ fontSize: 11, flexShrink: 0 }} />
+          <ReloadOutlined style={{ fontSize: 12, flexShrink: 0 }} />
           {!compact && <span>服务重连</span>}
         </div>
       </Tooltip>
@@ -267,7 +267,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           </div>
           <div
             style={{
-              fontSize: 10,
+              fontSize: 11,
               color: 'var(--color-text-tertiary)',
               letterSpacing: 0.4,
               whiteSpace: 'nowrap',

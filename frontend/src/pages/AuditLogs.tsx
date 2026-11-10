@@ -122,7 +122,7 @@ const AuditLogs: React.FC = () => {
         <div>
           <Text strong>{String(value || '-')}</Text>
           {Boolean(record.department) && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
               {String(record.department)}
             </div>
           )}

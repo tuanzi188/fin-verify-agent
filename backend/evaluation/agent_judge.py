@@ -33,6 +33,12 @@ from typing import Any, Optional
 from app.services import model_provider
 from evaluation.agent_metrics import agreement
 from evaluation.equivalence import rubric_text
+from evaluation.judge_context import (
+    JUDGE_CONTEXT_VERSION,
+    JudgeContextError,
+    judge_coordinate_content,
+    validate_judge_context_size,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +163,7 @@ def build_prompt(task: dict, result: dict, chunks: dict[str, dict], *, reverse: 
             source = chunk.get("chunk_id") or ""
             suffix = f"（原文取自所属块 {source}）" if source and source != chunk_id else ""
             evidence_lines.append(
-                f"[chunk_id={chunk_id}] {_truncate(chunk.get('content', ''))}{suffix}"
+                f"[chunk_id={chunk_id}] {judge_coordinate_content(chunk_id, chunks)}{suffix}"
             )
         if reverse:
             evidence_lines.reverse()
@@ -201,16 +207,16 @@ def build_prompt(task: dict, result: dict, chunks: dict[str, dict], *, reverse: 
     clarify_mode = str(task.get("clarify_mode") or "none")
     clarify_instruction = CLARIFY_INSTRUCTIONS.get(clarify_mode, CLARIFY_INSTRUCTIONS["none"])
 
-    return _JUDGE_TEMPLATE.format(
+    return validate_judge_context_size(_JUDGE_TEMPLATE.format(
         question=task.get("question", ""),
         evidence=evidence_block,
-        answer=_truncate(str(result.get("answer") or "（空回答）"), 1200),
+        answer=str(result.get("answer") or "（空回答）"),
         citation_map=citation_map,
         points_block=points_block,
         rubric_block=rubric_text(),
         forbidden_block=forbidden_block,
         clarify_instruction=clarify_instruction,
-    )
+    ))
 
 
 def parse_judge_output(text: str) -> dict:
@@ -391,7 +397,11 @@ async def judge_task(
     for repeat_index in range(max(1, repeats)):
         # 每轮重新决定展示顺序：重复判分时正反各来一次，位置偏差才会落在一致率里
         reverse = _reverse_for(task, result, repeat_index)
-        prompt = build_prompt(task, result, chunks, reverse=reverse)
+        try:
+            prompt = build_prompt(task, result, chunks, reverse=reverse)
+        except JudgeContextError as exc:
+            errors.append(str(exc))
+            break
         for attempt in range(JUDGE_PARSE_ATTEMPTS):
             attempt_prompt = prompt
             if attempt:
@@ -426,6 +436,7 @@ async def judge_task(
     if not judgments:
         return {
             "ok": False,
+            "context_version": JUDGE_CONTEXT_VERSION,
             "judgment": None,
             "error": "; ".join(errors) or "judge 未返回可用结果",
             "repeats": repeats,
@@ -437,6 +448,7 @@ async def judge_task(
     merged, consistency = _merge_judgments(judgments)
     return {
         "ok": True,
+        "context_version": JUDGE_CONTEXT_VERSION,
         "judgment": merged,
         "error": "; ".join(errors) if errors else None,
         "repeats": len(judgments),

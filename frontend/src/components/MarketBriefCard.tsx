@@ -12,7 +12,7 @@ import type { MarketBrief } from '../api/client'
 
 const muted: React.CSSProperties = {
   color: 'var(--color-text-secondary)',
-  fontSize: 12,
+  fontSize: 13,
 }
 
 /** 丢来源的理由要说人话：用户据此判断"是不是被故意挡掉了"。 */
@@ -32,7 +32,7 @@ const SectionTitle: React.FC<{ children: React.ReactNode; color?: string }> = ({
   color,
 }) => (  <div
     style={{
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: 600,
       letterSpacing: 0.2,
       color: color || 'var(--color-text-secondary)',
@@ -82,7 +82,7 @@ const MarketBriefCard: React.FC<{ brief: MarketBrief }> = ({ brief }) => {
         </span>
         <span
           style={{
-            fontSize: 11,
+            fontSize: 12,
             color: '#ad6800',
             border: '1px solid #ffd591',
             background: '#fff7e6',
@@ -143,7 +143,7 @@ const MarketBriefCard: React.FC<{ brief: MarketBrief }> = ({ brief }) => {
             borderRadius: 4,
             background: '#fff1f0',
             border: '1px solid #ffa39e',
-            fontSize: 12,
+            fontSize: 13,
             color: '#a8071a',
             lineHeight: 1.6,
           }}
@@ -159,7 +159,7 @@ const MarketBriefCard: React.FC<{ brief: MarketBrief }> = ({ brief }) => {
           <summary style={{ cursor: 'pointer', ...muted }}>
             参考资料（{sources.length}）
           </summary>
-          <ol style={{ margin: '6px 0 0', paddingLeft: 20, fontSize: 12, lineHeight: 1.7 }}>
+          <ol style={{ margin: '6px 0 0', paddingLeft: 20, fontSize: 13, lineHeight: 1.7 }}>
             {sources.map((source) => (
               <li key={source.url} style={{ marginBottom: 6 }}>
                 <span style={{ color: source.tier === 1 ? '#ad6800' : 'var(--color-text-secondary)' }}>
@@ -195,7 +195,7 @@ const MarketBriefCard: React.FC<{ brief: MarketBrief }> = ({ brief }) => {
           <summary style={{ cursor: 'pointer', ...muted }}>
             发现的官方 PDF（{brief.ingest_candidates.length}，入库后才可作为证据）
           </summary>
-          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, lineHeight: 1.7 }}>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>
             {brief.ingest_candidates.map((item) => (
               <li key={item.url} style={{ marginBottom: 3 }}>
                 <a href={item.url} target="_blank" rel="noopener noreferrer">
@@ -213,7 +213,7 @@ const MarketBriefCard: React.FC<{ brief: MarketBrief }> = ({ brief }) => {
           <summary style={{ cursor: 'pointer', ...muted }}>
             未采用的来源（{brief.skipped_sources.length}）
           </summary>
-          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, lineHeight: 1.7 }}>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>
             {brief.skipped_sources.map((item) => (
               <li key={item.url} style={{ marginBottom: 3 }}>
                 {item.url}

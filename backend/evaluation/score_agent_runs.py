@@ -35,6 +35,7 @@ from evaluation import (
 from evaluation._runner_common import load_tasks
 from evaluation.agent_checks import apply_equivalent_sources, collect_checks
 from evaluation.agent_judge import judge_task
+from evaluation.judge_context import JUDGE_CONTEXT_VERSION
 from evaluation.agent_report import (
     aggregate,
     build_badcases,
@@ -377,6 +378,7 @@ def main() -> int:
         "pass_criteria": PASS_CRITERIA,
         "judge_enabled": not args.no_judge,
         "judge_reused_from": args.reuse_judgments or None,
+        "judge_context_version": None if args.reuse_judgments else JUDGE_CONTEXT_VERSION,
         "judge_repeats": max(1, args.judge_repeats),
         "dimensions": aggregated["dimensions"],
         "cross": aggregated["cross"],

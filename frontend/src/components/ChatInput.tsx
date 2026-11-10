@@ -50,7 +50,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   const shortcutContent = (
     <div style={{ minWidth: 200 }}>
-      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 2.2 }}>
+      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 2.2 }}>
         <div><Text keyboard>Enter</Text> 发送消息</div>
         <div><Text keyboard>Shift</Text> + <Text keyboard>Enter</Text> 换行</div>
         <div><Text keyboard>Ctrl</Text> + <Text keyboard>K</Text> 新建查证</div>
@@ -160,7 +160,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           padding: '0 4px',
         }}
       >
-        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+        <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
           {loading ? '正在检索证据并生成结论' : '金融查证 · 结构检索 / 多步查证'}
         </span>
         <Popover
@@ -172,7 +172,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           <Text
             className="chat-shortcut-hint"
             style={{
-              fontSize: 11,
+              fontSize: 12,
               color: 'var(--color-text-tertiary)',
               cursor: 'help',
               userSelect: 'none',

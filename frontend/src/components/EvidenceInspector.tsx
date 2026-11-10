@@ -95,7 +95,7 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
-        <Text type="secondary" style={{ fontSize: 11 }}>来源文档</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>来源文档</Text>
         <Title level={5} style={{ margin: '3px 0 0', wordBreak: 'break-all', fontSize: 14 }}>
           {evidence.doc_title || evidence.doc_id}
         </Title>
@@ -132,7 +132,7 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
       </div>
 
       {evidence.path.length > 0 && (
-        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>
+        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>
           章节路径：{evidence.path.join(' > ')}
         </div>
       )}
@@ -146,13 +146,13 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <Text type="secondary" style={{ fontSize: 11 }}>证据原文</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>证据原文</Text>
           <Button
             type="text"
             size="small"
             icon={copied ? <CheckOutlined style={{ color: 'var(--color-success)' }} /> : <CopyOutlined />}
             onClick={copy}
-            style={{ fontSize: 11, height: 22, padding: '0 6px' }}
+            style={{ fontSize: 12, height: 22, padding: '0 6px' }}
           >
             {copied ? '已复制' : '复制'}
           </Button>
@@ -167,7 +167,7 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
               borderRadius: 'var(--radius-sm)',
             }}
           >
-            <Text type="secondary" style={{ fontSize: 10 }}>原文摘录（逐字）</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>原文摘录（逐字）</Text>
             <Paragraph
               style={{
                 marginBottom: 0,
@@ -198,7 +198,7 @@ const EvidenceText: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
       </div>
 
       {evidence.note && (
-        <Text type="secondary" style={{ fontSize: 11 }}>{evidence.note}</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>{evidence.note}</Text>
       )}
       {evidence.source_url && /^https?:\/\//i.test(evidence.source_url) && (
         <div style={{ marginTop: 8 }}>
@@ -266,7 +266,7 @@ const EvidenceTable: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
           maxHeight: '52vh',
         }}
       >
-        <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: '100%' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 13, minWidth: '100%' }}>
           <thead>
             <tr>
               {table.column_indices.map((columnIndex) => {
@@ -347,7 +347,7 @@ const EvidenceTable: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
         </table>
       </div>
 
-      <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', lineHeight: 1.6 }}>
         {evidence.row_indices.length || evidence.column_indices.length ? (
           <>
             高亮行：{evidence.row_indices.length ? evidence.row_indices.map((row) => `行${row}`).join('、') : '无'}
@@ -365,7 +365,7 @@ const EvidenceTable: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
       {table.footnote && (
         <div
           style={{
-            fontSize: 11,
+            fontSize: 12,
             color: 'var(--color-text-secondary)',
             background: 'var(--color-bg)',
             border: '1px solid var(--color-border)',
@@ -378,7 +378,7 @@ const EvidenceTable: React.FC<{ evidence: EvidenceRef }> = ({ evidence }) => {
         </div>
       )}
       {table.row_indices.length < table.total_rows && (
-        <Text type="secondary" style={{ fontSize: 11 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>
           {evidence.row_indices.length
             ? `当前展示目标行及相邻上下文，共 ${table.row_indices.length} / ${table.total_rows} 行。`
             : `当前展示前 ${table.row_indices.length} / ${table.total_rows} 行预览。`}
@@ -428,7 +428,7 @@ const EvidenceChain: React.FC<{
 }> = ({ evidence, trace }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 12, lineHeight: 2, color: 'var(--color-text)' }}>
+      <div style={{ fontSize: 13, lineHeight: 2, color: 'var(--color-text)' }}>
         <div><Text type="secondary">证据锚点：</Text><Text code>{evidence.evidence_id}</Text></div>
         <div><Text type="secondary">文档：</Text><Text code>{evidence.doc_id}</Text></div>
         {evidence.section_id && <div><Text type="secondary">章节：</Text><Text code>{evidence.section_id}</Text></div>}
@@ -444,9 +444,9 @@ const EvidenceChain: React.FC<{
 
       {evidence.source_spans.length > 0 && (
         <div>
-          <Text strong style={{ fontSize: 12 }}>原文跨度</Text>
+          <Text strong style={{ fontSize: 13 }}>原文跨度</Text>
           {evidence.source_spans.map((span, index) => (
-            <div key={`${span.source_id}-${index}`} style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+            <div key={`${span.source_id}-${index}`} style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
               {span.kind} · {span.source_id} · P.{span.page ?? '—'} · {span.chars ?? '—'} 字符
             </div>
           ))}
@@ -456,20 +456,20 @@ const EvidenceChain: React.FC<{
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
           <ApartmentOutlined style={{ color: 'var(--color-primary)' }} />
-          <Text strong style={{ fontSize: 12 }}>查证过程</Text>
+          <Text strong style={{ fontSize: 13 }}>查证过程</Text>
         </div>
         {trace.filter((step) => step.tool !== '__final__').length === 0 ? (
-          <Text type="secondary" style={{ fontSize: 11 }}>本次没有工具调用记录。</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>本次没有工具调用记录。</Text>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {trace
               .filter((step) => step.tool !== '__final__')
               .map((step) => (
-                <div key={`${step.step}-${step.tool}`} style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  <Tag color={step.ok ? 'green' : 'red'} style={{ marginRight: 6, fontSize: 10 }}>
+                <div key={`${step.step}-${step.tool}`} style={{ fontSize: 12, lineHeight: 1.6 }}>
+                  <Tag color={step.ok ? 'green' : 'red'} style={{ marginRight: 6, fontSize: 11 }}>
                     {step.step}
                   </Tag>
-                  <Text style={{ fontSize: 11 }}>{traceToolLabel(step.tool)}</Text>
+                  <Text style={{ fontSize: 12 }}>{traceToolLabel(step.tool)}</Text>
                   {traceStepTarget(step) && (
                     <span style={{ color: 'var(--color-text-secondary)', marginLeft: 6 }}>
                       {traceStepTarget(step)}
@@ -507,7 +507,7 @@ const EvidenceSet: React.FC<{
   onSelect?: (evidence: EvidenceRef) => void
 }> = ({ citations, onSelect }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-    <Text type="secondary" style={{ fontSize: 11 }}>
+    <Text type="secondary" style={{ fontSize: 12 }}>
       本轮结论引用的证据（{citations.length}）
     </Text>
     {citations.map(({ marker, evidence }) => (
@@ -537,7 +537,7 @@ const EvidenceSet: React.FC<{
             borderRadius: 10,
             background: 'var(--color-primary-light)',
             color: 'var(--color-primary)',
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 600,
             display: 'inline-flex',
             alignItems: 'center',
@@ -552,7 +552,7 @@ const EvidenceSet: React.FC<{
           <span
             style={{
               display: 'block',
-              fontSize: 12,
+              fontSize: 13,
               color: 'var(--color-text)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -561,13 +561,13 @@ const EvidenceSet: React.FC<{
           >
             {evidence.doc_title || evidence.doc_id}
           </span>
-          <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
             {KIND_LABEL[evidence.kind]} · {citationDescriptor(evidence, { includeDoc: false })}
             {evidence.unit ? ` · ${evidence.unit}` : ''}
           </span>
         </span>
         {evidence.verified && (
-          <Tag color="green" style={{ margin: 0, fontSize: 10, flexShrink: 0 }}>
+          <Tag color="green" style={{ margin: 0, fontSize: 11, flexShrink: 0 }}>
             结构化
           </Tag>
         )}
@@ -662,7 +662,7 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
           <FileTextOutlined style={{ color: 'var(--color-primary)' }} />
           <Text strong style={{ fontSize: 13 }}>证据检查器</Text>
           {activeEvidence && (
-            <Tag color={activeEvidence.verified ? 'green' : 'default'} style={{ margin: 0, fontSize: 10 }}>
+            <Tag color={activeEvidence.verified ? 'green' : 'default'} style={{ margin: 0, fontSize: 11 }}>
               {activeEvidence.verified ? '结构化' : '段落'}
             </Tag>
           )}
@@ -689,7 +689,7 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
               alignItems: 'center',
               gap: 8,
               marginBottom: 10,
-              fontSize: 12,
+              fontSize: 13,
               color: 'var(--color-text-secondary)',
             }}
           >
@@ -732,7 +732,7 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
             <div style={{ padding: '28px 20px 20px' }}>
               <div
                 style={{
-                  fontSize: 12,
+                  fontSize: 13,
                   letterSpacing: 1,
                   color: 'var(--color-text-secondary)',
                   marginBottom: 10,
@@ -789,10 +789,10 @@ const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
                     }}
                   />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
                       {title}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                       {desc}
                     </div>
                   </div>

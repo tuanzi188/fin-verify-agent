@@ -5,7 +5,7 @@ authoritative_for: 哪份文档可信
 read_when: 接手时、引用任何设计/评测结论前
 ---
 
-# 文档索引（14 份 + 导航）
+# 文档索引（16 份 + 导航）
 
 `status: normative` = 当前权威口径，改代码前必读。
 `status: active` = 当前工作记录。
@@ -18,8 +18,10 @@ read_when: 接手时、引用任何设计/评测结论前
 | [CURRENT.md](CURRENT.md) | active | 唯一滚动状态：阶段判定 + 未闭环项 | 接手第一步 |
 | [ANSWER_EQUIVALENCE_RUBRIC.md](ANSWER_EQUIVALENCE_RUBRIC.md) | normative | 数值/单位/方向等价判据 | 改判分容差或 rubric 前 |
 | [ROUTING_POLICY.md](ROUTING_POLICY.md) | normative | 路由判据 v2、证据充分清单、升级白名单 | 改 `routing_policy.py` 前 |
+| [AGENT_TASK_PLAN.md](AGENT_TASK_PLAN.md) | normative | 任务清单、证据覆盖、停止条件与消融口径 | 改工具循环、清单或最终交付前 |
 | [COST_OPTIMIZATION_PLAN_20261104.md](COST_OPTIMIZATION_PLAN_20261104.md) | active | 缓存记账 + 当前待办（§5） | 接手成本优化、引用 token 数字前 |
 | [ASSIST_EVAL.md](ASSIST_EVAL.md) | active | 概念/拒答辅助问答的评测口径、任务卡与命令 | 改概念/拒答行为、引用辅助问答读数前 |
+| [EVAL_HARDENING.md](EVAL_HARDENING.md) | active | 变异测试、人工校准、提示注入、数据污染四项加固 | 引用判分器可信度/注入/污染结论前 |
 | [evidence/INDEX.md](evidence/INDEX.md) | active | 产物清单 + 当前有效基线登记 | 引用任何评测读数前 |
 
 根目录另有 [AGENTS.md](../AGENTS.md)（接手导航）与 [README.md](../README.md)（产品说明）。

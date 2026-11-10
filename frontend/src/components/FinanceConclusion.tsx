@@ -95,7 +95,7 @@ const CitationPill: React.FC<{
       </Space>
       <div
         style={{
-          fontSize: 12,
+          fontSize: 13,
           lineHeight: 1.7,
           color: 'var(--color-text-secondary)',
           whiteSpace: 'pre-wrap',
@@ -109,7 +109,7 @@ const CitationPill: React.FC<{
       >
         {evidence.content || '正文尚未加载：点击引用，在右侧证据检查器里按锚点回查原文与表格。'}
       </div>
-      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+      <div style={{ marginTop: 6, fontSize: 12, color: 'var(--color-text-tertiary)' }}>
         点击打开证据检查器，定位表格行列与计算记录
       </div>
     </div>
@@ -137,7 +137,7 @@ const CitationPill: React.FC<{
           gap: 3,
           padding: '1px 6px',
           height: 20,
-          fontSize: 11,
+          fontSize: 12,
           borderRadius: 10,
           background: 'var(--color-primary-light)',
           color: 'var(--color-primary)',
@@ -149,7 +149,7 @@ const CitationPill: React.FC<{
           userSelect: 'none',
         }}
       >
-        {evidence.table_id ? <TableOutlined style={{ fontSize: 10 }} /> : <FileTextOutlined style={{ fontSize: 10 }} />}
+        {evidence.table_id ? <TableOutlined style={{ fontSize: 11 }} /> : <FileTextOutlined style={{ fontSize: 11 }} />}
         <span style={{ fontWeight: 700 }}>[{citation.marker}]</span>
         <span
           title={citationShortDescriptor(evidence)}
@@ -166,7 +166,7 @@ const CitationPill: React.FC<{
 const ReviewFlag: React.FC<{ reason: string }> = ({ reason }) => (
   <Popover
     content={
-      <div style={{ maxWidth: 300, fontSize: 12, lineHeight: 1.7, color: 'var(--color-text-secondary)' }}>
+      <div style={{ maxWidth: 300, fontSize: 13, lineHeight: 1.7, color: 'var(--color-text-secondary)' }}>
         {reason}
       </div>
     }
@@ -249,7 +249,7 @@ const ReviewAlert: React.FC<{
         ) : (
           <ExclamationCircleOutlined style={{ color: tone.color }} />
         )}
-        <Text strong style={{ fontSize: 12, color: tone.color }}>
+        <Text strong style={{ fontSize: 13, color: tone.color }}>
           {/* 有分级时用「类别 · 级别」代替泛化标题：材料不足和产品边界是两件事 */}
           {refusal ? `${refusal.label} · ${refusal.level_label}` : copy.title}
         </Text>
@@ -343,7 +343,7 @@ const FinanceConclusion: React.FC<FinanceConclusionProps> = ({
                     background: 'var(--color-bg)',
                     border: '1px solid var(--color-border)',
                     color: 'var(--color-text-tertiary)',
-                    fontSize: 10,
+                    fontSize: 11,
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
