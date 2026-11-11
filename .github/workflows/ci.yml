@@ -8,6 +8,11 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
+    # 3.10 是声明的下限，3.12 覆盖本地开发版本：两端都过才说明代码没吃版本方言。
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
     defaults:
       run:
         working-directory: backend
@@ -15,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: backend/requirements.lock
       - name: Install dependencies
@@ -26,10 +31,13 @@ jobs:
       - name: Run tests
         run: pytest --cov=app --cov-report=xml -v
       - name: Verify OpenAPI schema is up to date
+        # 与 Python 版本无关，跑一次即可，避免矩阵里两个 job 出同样的 diff
+        if: matrix.python-version == '3.10'
         run: |
           python scripts/generate_schema.py
           git diff --exit-code -- frontend/openapi.json
       - name: Upload coverage
+        if: matrix.python-version == '3.10'
         uses: codecov/codecov-action@v4
         with:
           files: ./backend/coverage.xml

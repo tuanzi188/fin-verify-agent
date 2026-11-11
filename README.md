@@ -207,8 +207,8 @@ python -m evaluation.render_tasks --tasks evaluation/finance_tasks.jsonl --out d
 
 ### 前置要求
 
-- Python 3.10+
-- Node.js 18+
+- Python 3.10+（CI 覆盖 3.10 / 3.12）
+- Node.js 20+（`react-router-dom@7` 要求 20.0.0 以上）
 - 可用的模型 API（DeepSeek 或阿里云百炼）
 - Redis 7+（可选，仅用于会话持久化）
 
