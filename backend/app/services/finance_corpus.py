@@ -68,8 +68,14 @@ def index_fingerprint() -> str:
     """当前块索引指纹。写会话载荷时记下来，重开时可判断语料是否已变化。
 
     `BlockIndex.stats()` 会对全部块做一次哈希，这里缓存，避免每次提问重算。
+
+    语料尚未入库时返回空串而不是抛错：澄清、越界、拒答这些路径本来就不读语料，
+    不该因为库里没有文档就把整个请求判成 503。
     """
-    return str(get_block_index().stats().get("fingerprint") or "")
+    try:
+        return str(get_block_index().stats().get("fingerprint") or "")
+    except FinanceCorpusError:
+        return ""
 
 
 def stats() -> dict:
