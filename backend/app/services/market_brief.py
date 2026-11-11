@@ -17,7 +17,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from app.agent.prompts import CORE_DISCIPLINE
@@ -421,7 +421,7 @@ async def build_market_brief(
     extra_allowed_numbers: Iterable[str] = (),
 ) -> MarketBrief:
     """检索 + 综述生成。所有外部依赖都可注入，便于离线测试。"""
-    now = datetime.now(UTC).isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     question = (question or "").strip()
 
     if not should_use_web(local_citable_count=local_citable_count, allow_web=allow_web):
